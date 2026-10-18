@@ -12,12 +12,18 @@ import {
   subscribeToFixtureBasket,
   writeFixtureBasket,
 } from "@/lib/fixtureBasket";
+import {
+  compareFixtureCompetitionDisplays,
+  getFixtureCompetitionDisplay,
+  isPinnedCompetition,
+} from "@/lib/competitionPriority";
 import type { Fixture } from "@/lib/fixtures";
 
 export default function LiveFixtures() {
   const { language, text } = useLanguage();
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [collapsedCompetitionGroups, setCollapsedCompetitionGroups] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [liveAvailable, setLiveAvailable] = useState(true);
@@ -113,6 +119,23 @@ export default function LiveFixtures() {
     ...fixture,
     ...refreshedLiveFixtures[fixture.id],
   }));
+  const fixturesByCompetition = new Map<string, {
+    display: ReturnType<typeof getFixtureCompetitionDisplay>;
+    fixtures: Fixture[];
+  }>();
+  for (const fixture of fixturesForDisplay) {
+    const display = getFixtureCompetitionDisplay(fixture, language);
+    const group = fixturesByCompetition.get(display.key) ?? { display, fixtures: [] };
+    group.fixtures.push(fixture);
+    fixturesByCompetition.set(display.key, group);
+  }
+  const sortedCompetitions = Array.from(fixturesByCompetition.values()).sort(
+    (first, second) => compareFixtureCompetitionDisplays(
+      first.display,
+      second.display,
+      locale
+    )
+  );
 
   const toggleFixture = (fixture: Fixture) => {
     try {
@@ -215,8 +238,40 @@ export default function LiveFixtures() {
               {text("Aucun match ne correspond à cette recherche.", "No matches match this search.")}
             </p>
           ) : (
-          <div className="grid gap-4 lg:grid-cols-3">
-            {fixturesForDisplay.map(fixture => (
+          <div className="space-y-7">
+            {sortedCompetitions.map(({ display, fixtures: competitionFixtures }, index) => {
+              const isCollapsed = collapsedCompetitionGroups.has(display.key);
+              const contentId = `live-competition-${index}`;
+              return (
+              <section key={display.key} aria-label={`${display.country}: ${display.competition}`}>
+                <button
+                  type="button"
+                  aria-expanded={!isCollapsed}
+                  aria-controls={contentId}
+                  onClick={() => setCollapsedCompetitionGroups(current => {
+                    const next = new Set(current);
+                    if (next.has(display.key)) next.delete(display.key);
+                    else next.add(display.key);
+                    return next;
+                  })}
+                  className="mb-3 flex w-full items-center gap-2 border-b border-red-900/60 bg-gray-900/60 px-3 py-3 text-left text-lg font-bold text-white transition hover:bg-gray-900"
+                >
+                  <span aria-hidden="true" className="text-xl">{display.flag}</span>
+                  <span className="min-w-0 flex-1 truncate">{display.country.toLocaleUpperCase(language === "fr" ? "fr-FR" : "en-GB")}: {display.competition}</span>
+                  {isPinnedCompetition(display.competition) && (
+                    <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-200">
+                      {text("Épinglée", "Pinned")}
+                    </span>
+                  )}
+                  <span className="rounded-full border border-gray-700 bg-gray-900 px-2 py-0.5 text-xs font-medium text-gray-400">
+                    {competitionFixtures.length}
+                  </span>
+                  <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className={`h-5 w-5 shrink-0 text-red-200 transition-transform ${isCollapsed ? "-rotate-90" : "rotate-0"}`}>
+                    <path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                {!isCollapsed && <div id={contentId} className="grid gap-4 lg:grid-cols-3">
+            {competitionFixtures.map(fixture => (
               <article key={fixture.id} className="rounded-xl border border-red-900 bg-gray-900 p-3">
                 <Link
                   href={`/match/${encodeURIComponent(fixture.id)}`}
@@ -271,6 +326,10 @@ export default function LiveFixtures() {
                 </div>
               </article>
             ))}
+                </div>}
+              </section>
+            );
+            })}
           </div>
           )}
           </>

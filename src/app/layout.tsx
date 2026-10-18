@@ -12,6 +12,7 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "IkProno - Prédictions Sportives par IA",
   description: "Application de prédictions sportives alimentée par l'intelligence artificielle",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://ikprono.onrender.com"),
 };
 
 export default function RootLayout({

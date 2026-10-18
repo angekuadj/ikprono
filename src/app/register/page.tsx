@@ -74,7 +74,8 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    if (loading) return;
+
     if (!validateForm()) {
       return;
     }
@@ -95,6 +96,7 @@ export default function RegisterPage() {
             ? error.message
             : text("Impossible de créer le compte", "Unable to create account")
       });
+    } finally {
       setLoading(false);
     }
   };
@@ -123,7 +125,7 @@ export default function RegisterPage() {
         </div>
 
         <div className="bg-gray-900 border border-gray-800 py-8 px-4 shadow-xl rounded-lg sm:px-10">
-          <form className="space-y-6" onSubmit={handleSubmit}>
+          <form className="space-y-6" noValidate onSubmit={handleSubmit}>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label htmlFor="firstName" className="block text-sm font-medium text-gray-300">

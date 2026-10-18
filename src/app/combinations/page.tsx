@@ -12,7 +12,7 @@ import type { Fixture, FixtureResponse } from "@/lib/fixtures";
 import { generateUUID } from "@/lib/uuid";
 
 const MAX_FIXTURES = 20;
-const GUEST_COMBINATION_LIMIT = 2;
+const GUEST_COMBINATION_LIMIT = 20;
 const GUEST_COMBINATION_COUNT_KEY = "ikprono_guest_combination_count";
 const DEFAULT_LOOKAHEAD_DAYS = 7;
 const PAGE_SIZE = 12;
@@ -175,8 +175,8 @@ export default function CombinationsPage() {
     const remaining = Math.max(0, GUEST_COMBINATION_LIMIT - currentCount);
     if (remaining === 0) {
       setActionError(text(
-        "Vous avez utilisé vos 2 combinaisons gratuites. Connectez-vous pour continuer.",
-        "You have used your 2 free combinations. Sign in to continue."
+        `Vous avez utilisé vos ${GUEST_COMBINATION_LIMIT} combinaisons gratuites. Connectez-vous pour continuer.`,
+        `You have used your ${GUEST_COMBINATION_LIMIT} free combinations. Sign in to continue.`
       ));
     }
     return remaining;
@@ -519,16 +519,27 @@ export default function CombinationsPage() {
         </header>
 
         {!authLoading && !isAuthenticated && (
-          <section className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-green-800 bg-green-950/20 p-4">
+          <section className={`mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4 ${
+            guestCombinationsRemaining === 0
+              ? "border-amber-700 bg-amber-950/30"
+              : "border-green-800 bg-green-950/20"
+          }`}>
             <p className="text-sm text-green-100">
-              {text(
-                `Consultez les matchs sans compte. ${guestCombinationsRemaining} combinaison(s) gratuite(s) restante(s) sur cet appareil (${guestCombinationsUsed}/${GUEST_COMBINATION_LIMIT}).`,
-                `Browse matches without an account. ${guestCombinationsRemaining} free combination(s) left on this device (${guestCombinationsUsed}/${GUEST_COMBINATION_LIMIT}).`
-              )}
+              {guestCombinationsRemaining === 0
+                ? text(
+                  `Vous avez atteint la limite de ${GUEST_COMBINATION_LIMIT} combinaisons gratuites. Connectez-vous pour continuer.`,
+                  `You have reached the limit of ${GUEST_COMBINATION_LIMIT} free combinations. Sign in to continue.`
+                )
+                : text(
+                  `Générez jusqu’à ${GUEST_COMBINATION_LIMIT} combinaisons gratuitement sans compte (${guestCombinationsUsed}/${GUEST_COMBINATION_LIMIT} utilisées).`,
+                  `Generate up to ${GUEST_COMBINATION_LIMIT} combinations for free without an account (${guestCombinationsUsed}/${GUEST_COMBINATION_LIMIT} used).`
+                )}
             </p>
-            <Link href="/login?next=%2Fcombinations" className="rounded-lg border border-green-700 px-3 py-2 text-sm font-semibold text-green-200 hover:bg-green-900/40">
-              {text("Se connecter pour continuer", "Sign in to continue")}
-            </Link>
+            {guestCombinationsRemaining === 0 && (
+              <Link href="/login?next=%2Fcombinations" className="rounded-lg border border-amber-600 px-3 py-2 text-sm font-semibold text-amber-100 hover:bg-amber-900/40">
+                {text("Se connecter pour continuer", "Sign in to continue")}
+              </Link>
+            )}
           </section>
         )}
 
@@ -1177,7 +1188,7 @@ export default function CombinationsPage() {
                 <button
                   type="button"
                   onClick={() => void generateStatisticCombination(riskLevel, statisticCoupon.matches.map(match => match.fixtureId))}
-                  disabled={generating}
+                  disabled={authLoading || !canGenerateCombination || generating}
                   className="mt-5 rounded-lg border border-green-700 px-4 py-2 text-sm font-semibold text-green-200 hover:bg-green-950/50 disabled:cursor-wait disabled:opacity-50"
                 >
                   {generating ? text("Génération…", "Generating…") : text("Proposer une autre", "Suggest another")}

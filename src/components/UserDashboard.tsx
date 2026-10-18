@@ -30,7 +30,7 @@ export default function UserDashboard() {
   const hasLoadedFixtures = useRef(false);
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) router.push("/login");
+    if (!isLoading && !isAuthenticated) router.replace("/login");
   }, [isAuthenticated, isLoading, router]);
 
   useEffect(() => {
@@ -103,7 +103,13 @@ export default function UserDashboard() {
     );
   }
 
-  if (!isAuthenticated) return null;
+  if (!isAuthenticated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-black">
+        <div role="status" aria-label={text("Redirection vers la connexion…", "Redirecting to sign in…")} className="h-12 w-12 animate-spin rounded-full border-t-2 border-b-2 border-green-500" />
+      </div>
+    );
+  }
 
   const locale = language === "fr" ? "fr-FR" : "en-GB";
   const formattedDate = fixturesDate

@@ -27,7 +27,7 @@ export default function Navigation() {
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="site-nav-links hidden md:flex items-center space-x-4">
+          <div className="site-nav-links hidden xl:flex items-center">
             {isAdminPage ? (
               <>
                 <Link href="/" className="text-gray-400 transition hover:text-white">
@@ -83,7 +83,7 @@ export default function Navigation() {
           </div>
 
           {/* Auth Buttons - Desktop */}
-          <div className="site-nav-actions hidden md:flex items-center space-x-4">
+          <div className="site-nav-actions hidden xl:flex items-center space-x-4">
             <button
               type="button"
               onClick={toggleLanguage}
@@ -139,7 +139,7 @@ export default function Navigation() {
               : language === "fr" ? "Ouvrir le menu" : "Open menu"}
             aria-expanded={isOpen}
             aria-controls={isOpen ? "mobile-navigation" : undefined}
-            className="md:hidden text-gray-300 hover:text-white"
+            className="xl:hidden text-gray-300 hover:text-white"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               {isOpen ? (
@@ -153,7 +153,7 @@ export default function Navigation() {
 
         {/* Mobile Navigation */}
         {isOpen && (
-          <div id="mobile-navigation" className="site-mobile-menu md:hidden pb-4 animate-slide-down">
+          <div id="mobile-navigation" className="site-mobile-menu xl:hidden pb-4 animate-slide-down">
             <div className="flex flex-col space-y-3">
               <Link href="/" onClick={() => setIsOpen(false)} className="text-gray-300 hover:text-white transition font-medium py-2">
                 {t("home")}

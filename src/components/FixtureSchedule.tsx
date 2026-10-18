@@ -26,6 +26,12 @@ import {
   subscribeToFixtureBasket,
   writeFixtureBasket,
 } from "@/lib/fixtureBasket";
+import {
+  compareFixtureCompetitionDisplays,
+  getFixtureCompetitionDisplay,
+  getFixtureCompetitionName,
+  isPinnedCompetition,
+} from "@/lib/competitionPriority";
 import type {
   Fixture,
   FixtureResponse,
@@ -36,8 +42,6 @@ type Period = "day" | "week" | "month";
 type SportFilter = "all" | FixtureSport;
 type MatchStatusFilter = "all" | "completed" | "upcoming" | "live";
 type TimeFilter = "all" | "5min" | "10min" | "30min" | "1h" | "2h";
-
-const PAGE_SIZE = 20;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -155,10 +159,12 @@ export default function FixtureSchedule({
   const [sportFilter, setSportFilter] = useState<SportFilter>("all");
   const [locationFilter, setLocationFilter] = useState("");
   const [competitionFilter, setCompetitionFilter] = useState("");
+  const [competitionMenuOpen, setCompetitionMenuOpen] = useState(false);
+  const competitionMenuRef = useRef<HTMLDivElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [matchStatusFilter, setMatchStatusFilter] = useState<MatchStatusFilter>("all");
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("all");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [collapsedCompetitionGroups, setCollapsedCompetitionGroups] = useState<Set<string>>(() => new Set());
   const [selectedFixtures, setSelectedFixtures] = useState<Set<string>>(() => new Set());
   const [marketSelections, setMarketSelections] = useState<MarketSelectionsByFixture>({});
   const [marketPanelFixtureId, setMarketPanelFixtureId] = useState<string | null>(null);
@@ -175,6 +181,24 @@ export default function FixtureSchedule({
   const [refreshKey, refreshNow] = useAutoRefresh();
   const hasLoadedFixtures = useRef(false);
   const marketEstimateRequests = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (!competitionMenuOpen) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (event.target instanceof Node && !competitionMenuRef.current?.contains(event.target)) {
+        setCompetitionMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setCompetitionMenuOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [competitionMenuOpen]);
 
   useEffect(() => {
     const syncBasket = () => {
@@ -271,7 +295,26 @@ export default function FixtureSchedule({
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase(language === "fr" ? "fr-FR" : "en-GB");
   const filteredFixtures = fixtures.filter(fixture => {
     if (groupByLocation && locationFilter && fixture.location !== locationFilter) return false;
-    if (groupByLocation && competitionFilter && fixture.competition !== competitionFilter) return false;
+    if (
+      (groupByLocation || predictionTools) &&
+      competitionFilter &&
+      getFixtureCompetitionName(fixture) !== competitionFilter
+    ) return false;
+
+    if (predictionTools || groupByLocation) {
+      if (normalizedSearch) {
+        const searchableText = [
+          fixture.location,
+          fixture.competition,
+          fixture.league,
+          fixture.homeTeam,
+          fixture.awayTeam,
+          fixture.status,
+          fixture.date,
+        ].join(" ").toLocaleLowerCase(language === "fr" ? "fr-FR" : "en-GB");
+        if (!searchableText.includes(normalizedSearch)) return false;
+      }
+    }
 
     if (predictionTools) {
       const status = fixture.status?.trim().toLocaleLowerCase("fr-FR") ?? "";
@@ -304,27 +347,21 @@ export default function FixtureSchedule({
         return false;
       }
 
-      if (normalizedSearch) {
-        const searchableText = [
-          fixture.location,
-          fixture.competition,
-          fixture.league,
-          fixture.homeTeam,
-          fixture.awayTeam,
-          fixture.status,
-          fixture.date,
-        ].join(" ").toLocaleLowerCase(language === "fr" ? "fr-FR" : "en-GB");
-        if (!searchableText.includes(normalizedSearch)) return false;
-      }
     }
     return true;
   });
-  const totalPages = Math.max(1, Math.ceil(filteredFixtures.length / PAGE_SIZE));
-  const safeCurrentPage = Math.min(currentPage, totalPages);
-  const shouldPaginate = predictionTools || groupByLocation;
-  const visibleFixtures = shouldPaginate
-    ? filteredFixtures.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE)
+  const orderedFixtures = predictionTools
+    ? [...filteredFixtures].sort((first, second) =>
+        compareFixtureCompetitionDisplays(
+          getFixtureCompetitionDisplay(first, language),
+          getFixtureCompetitionDisplay(second, language),
+          language === "fr" ? "fr" : "en"
+        ) ||
+        `${first.date}T${first.time}`.localeCompare(`${second.date}T${second.time}`)
+      )
     : filteredFixtures;
+  const showFixtureFilters = predictionTools || groupByLocation;
+  const visibleFixtures = orderedFixtures;
   const startedFixtureIds = visibleFixtures
     .filter(fixture => fixture.status === "En direct" || fixture.status === "Terminé")
     .map(fixture => fixture.id);
@@ -408,25 +445,46 @@ export default function FixtureSchedule({
 
   const locations = Array.from(new Set(fixtures.map(fixture => fixture.location).filter((value): value is string => Boolean(value))))
     .sort((first, second) => first.localeCompare(second, language === "fr" ? "fr" : "en"));
-  const competitions = Array.from(new Set(
-    fixtures
-      .filter(fixture => !locationFilter || fixture.location === locationFilter)
-      .map(fixture => fixture.competition)
-      .filter((value): value is string => Boolean(value))
-  )).sort((first, second) => first.localeCompare(second, language === "fr" ? "fr" : "en"));
-  const fixturesByLocation = new Map<string, Map<string, Fixture[]>>();
-  for (const fixture of fixturesForDisplay) {
-    const location = fixture.location || text("Lieu non précisé", "Location unspecified");
-    const competition = fixture.competition || fixture.league;
-    let competitions = fixturesByLocation.get(location);
-    if (!competitions) {
-      competitions = new Map();
-      fixturesByLocation.set(location, competitions);
-    }
-    const competitionFixtures = competitions.get(competition) ?? [];
-    competitionFixtures.push(fixture);
-    competitions.set(competition, competitionFixtures);
+  const competitionCounts = new Map<string, number>();
+  for (const fixture of fixtures) {
+    if (locationFilter && fixture.location !== locationFilter) continue;
+    const name = getFixtureCompetitionName(fixture);
+    competitionCounts.set(name, (competitionCounts.get(name) ?? 0) + 1);
   }
+  const competitions = Array.from(competitionCounts.keys())
+    .sort((first, second) => {
+      const firstFixture = fixtures.find(fixture => getFixtureCompetitionName(fixture) === first);
+      const secondFixture = fixtures.find(fixture => getFixtureCompetitionName(fixture) === second);
+      if (!firstFixture || !secondFixture) return first.localeCompare(second, language);
+      return compareFixtureCompetitionDisplays(
+        getFixtureCompetitionDisplay(firstFixture, language),
+        getFixtureCompetitionDisplay(secondFixture, language),
+        language
+      );
+    });
+  const selectedCompetitionFixture = fixtures.find(
+    fixture => getFixtureCompetitionName(fixture) === competitionFilter
+  );
+  const selectedCompetitionDisplay = competitionFilter && selectedCompetitionFixture
+    ? getFixtureCompetitionDisplay(selectedCompetitionFixture, language)
+    : null;
+  const fixturesByCompetition = new Map<string, {
+    display: ReturnType<typeof getFixtureCompetitionDisplay>;
+    fixtures: Fixture[];
+  }>();
+  for (const fixture of fixturesForDisplay) {
+    const display = getFixtureCompetitionDisplay(fixture, language);
+    const group = fixturesByCompetition.get(display.key) ?? { display, fixtures: [] };
+    group.fixtures.push(fixture);
+    fixturesByCompetition.set(display.key, group);
+  }
+  const sortedCompetitionGroups = Array.from(fixturesByCompetition.values()).sort(
+    (first, second) => compareFixtureCompetitionDisplays(
+      first.display,
+      second.display,
+      language === "fr" ? "fr" : "en"
+    )
+  );
   const locale = language === "fr" ? "fr-FR" : "en-GB";
   const firstDate = periodStart ? new Date(`${periodStart}T12:00:00.000Z`) : null;
   const lastDate = periodStart && periodDays > 0
@@ -466,14 +524,6 @@ export default function FixtureSchedule({
     "1h": "1 H",
     "2h": "2 H",
   };
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, matchStatusFilter, timeFilter, period, periodStart, periodDays, sportFilter, locationFilter, competitionFilter, refreshKey]);
-
-  useEffect(() => {
-    setCurrentPage(page => Math.min(page, totalPages));
-  }, [totalPages]);
 
   const movePeriod = (direction: -1 | 1) => {
     manualDateSelection.current = true;
@@ -938,9 +988,9 @@ export default function FixtureSchedule({
           ))}
         </div>
 
-        {groupByLocation && (
+        {(groupByLocation || predictionTools) && (
           <section className="mb-5 grid gap-3 sm:grid-cols-2" aria-label={text("Filtres par lieu et compétition", "Location and competition filters")}>
-            <label className="text-sm text-gray-300">
+            {groupByLocation && <label className="text-sm text-gray-300">
               {text("Lieu", "Location")}
               <select
                 value={locationFilter}
@@ -953,22 +1003,130 @@ export default function FixtureSchedule({
                 <option value="">{text("Tous les lieux", "All locations")}</option>
                 {locations.map(location => <option key={location} value={location}>{location}</option>)}
               </select>
-            </label>
-            <label className="text-sm text-gray-300">
-              {text("Compétition", "Competition")}
-              <select
-                value={competitionFilter}
-                onChange={event => setCompetitionFilter(event.target.value)}
-                className="mt-1 block w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-white"
-              >
-                <option value="">{text("Toutes les compétitions", "All competitions")}</option>
-                {competitions.map(competition => <option key={competition} value={competition}>{competition}</option>)}
-              </select>
+            </label>}
+            <label className={`text-sm text-gray-300 ${predictionTools && !groupByLocation ? "sm:col-span-2" : ""}`}>
+              {groupByLocation
+                ? text("Compétition", "Competition")
+                : text("Compétition · les plus suivies en premier", "Competition · most followed first")}
+              {groupByLocation ? (
+                <div ref={competitionMenuRef} className="relative mt-2">
+                  <button
+                    type="button"
+                    aria-haspopup="listbox"
+                    aria-expanded={competitionMenuOpen}
+                    onClick={() => setCompetitionMenuOpen(open => !open)}
+                    className="flex w-full items-center gap-3 rounded-lg border border-sky-900/70 bg-[#06213a] px-3 py-3 text-left text-sm text-white shadow-lg shadow-sky-950/20 transition hover:border-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+                  >
+                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-5 w-5 shrink-0 text-gray-300">
+                      <path d="M3.5 4.5h17v15h-17zM7 8h10M7 12h10M7 16h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <span className="min-w-0 flex-1 truncate font-semibold">
+                      {competitionFilter
+                        ? <><span className="mr-2">{selectedCompetitionDisplay?.flag}</span>{selectedCompetitionDisplay?.country.toLocaleUpperCase(language === "fr" ? "fr-FR" : "en-GB")}: {competitionFilter}</>
+                        : text(`Toutes les compétitions (${fixtures.length})`, `All competitions (${fixtures.length})`)}
+                    </span>
+                    <span className="shrink-0 rounded-full border border-sky-800 px-2 py-0.5 text-[10px] text-sky-200">
+                      {competitionFilter
+                        ? competitionCounts.get(competitionFilter) ?? 0
+                        : competitions.length}
+                    </span>
+                    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className={`h-5 w-5 shrink-0 text-sky-200 transition-transform ${competitionMenuOpen ? "rotate-180" : ""}`}>
+                      <path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                  {competitionMenuOpen && (
+                    <div
+                      role="listbox"
+                      aria-label={text("Choisir une compétition", "Choose a competition")}
+                      className="absolute left-0 right-0 z-40 mt-2 max-h-80 overflow-y-auto rounded-lg border border-sky-900/80 bg-[#031522] p-2 shadow-2xl shadow-black/60"
+                    >
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={!competitionFilter}
+                        onClick={() => {
+                          setCompetitionFilter("");
+                          setCompetitionMenuOpen(false);
+                        }}
+                        className={`flex w-full items-center gap-3 rounded-md px-2.5 py-3 text-left transition ${!competitionFilter ? "bg-sky-900/50 text-white" : "text-gray-300 hover:bg-sky-950"}`}
+                      >
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center text-gray-400" aria-hidden="true">☆</span>
+                        <span className="min-w-0 flex-1 truncate font-semibold">
+                          {text("Toutes les compétitions", "All competitions")}
+                        </span>
+                        <span className="text-xs text-gray-500">{fixtures.length}</span>
+                      </button>
+                      <div className="my-1 border-t border-sky-900/60" />
+                      {competitions.map(competition => {
+                        const fixture = fixtures.find(item => getFixtureCompetitionName(item) === competition);
+                        const display = fixture ? getFixtureCompetitionDisplay(fixture, language) : null;
+                        const isSelected = competitionFilter === competition;
+                        const isPinned = isPinnedCompetition(competition);
+                        return (
+                          <button
+                            key={competition}
+                            type="button"
+                            role="option"
+                            aria-selected={isSelected}
+                            onClick={() => {
+                              setCompetitionFilter(competition);
+                              setCompetitionMenuOpen(false);
+                            }}
+                            className={`flex w-full items-center gap-3 rounded-md border-b border-sky-950/70 px-2.5 py-3 text-left transition last:border-b-0 ${isSelected ? "bg-sky-900/50 text-white" : "text-gray-300 hover:bg-sky-950/80"}`}
+                          >
+                            <span className={`flex h-6 w-6 shrink-0 items-center justify-center text-xl ${isPinned ? "text-amber-300" : "text-gray-500"}`} aria-hidden="true">
+                              {isPinned ? "★" : "☆"}
+                            </span>
+                            <span className="shrink-0 text-lg leading-none" aria-hidden="true">{display?.flag ?? "🌐"}</span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-[10px] font-semibold uppercase tracking-wider text-sky-300">
+                                {display?.country ?? text("International", "International")}
+                              </span>
+                              <span className="block truncate text-sm font-medium text-white">{competition}</span>
+                            </span>
+                            <span className="shrink-0 text-xs text-gray-500">{competitionCounts.get(competition)}</span>
+                            {isSelected && <span className="shrink-0 text-sky-300" aria-hidden="true">✓</span>}
+                          </button>
+                        );
+                      })}
+                      {competitions.length === 0 && (
+                        <p className="px-3 py-5 text-center text-sm text-gray-500">
+                          {text("Aucune compétition pour cette période.", "No competitions for this period.")}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="relative mt-2">
+                  <select
+                    value={competitionFilter}
+                    onChange={event => setCompetitionFilter(event.target.value)}
+                    className="block w-full appearance-none rounded-xl border border-fuchsia-400/25 bg-gradient-to-r from-gray-900 via-gray-900 to-fuchsia-950/40 px-4 py-3 pr-10 text-sm font-semibold text-white shadow-lg shadow-fuchsia-950/20 outline-none transition hover:border-fuchsia-400/50 focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-500/30"
+                  >
+                    <option value="">{text(`Toutes les compétitions (${fixtures.length})`, `All competitions (${fixtures.length})`)}</option>
+                    {competitions.map(competition => (
+                      <option key={competition} value={competition}>
+                        {isPinnedCompetition(competition) ? "★ " : ""}
+                        {competition} ({competitionCounts.get(competition)})
+                      </option>
+                    ))}
+                  </select>
+                  <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-fuchsia-200">
+                    <path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+              )}
+              {predictionTools && (
+                <span className="mt-2 block text-xs text-gray-500">
+                  {text("Ligue des champions, Europa League et Conference League apparaissent en tête lorsqu'elles ont des rencontres.", "Champions League, Europa League, and Conference League appear first when fixtures are available.")}
+                </span>
+              )}
             </label>
           </section>
         )}
 
-        {shouldPaginate && (
+        {showFixtureFilters && (
           <section className="mb-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
             <label className="text-sm text-gray-300">
               {text("Rechercher un match", "Search fixtures")}
@@ -1011,7 +1169,7 @@ export default function FixtureSchedule({
           {text("Rencontres chargées depuis la base de données.", "Fixtures loaded from the database.")}
           {predictionTools && (
             <span className="ml-2 text-gray-400">
-              {text(`${filteredFixtures.length} match(s) trouvé(s)`, `${filteredFixtures.length} match(es) found`)}
+              {text(`${orderedFixtures.length} match(s) trouvé(s)`, `${orderedFixtures.length} match(es) found`)}
             </span>
           )}
           {selectedFixtures.size > 0 && (
@@ -1045,56 +1203,55 @@ export default function FixtureSchedule({
           {filteredFixtures.length === 0 ? (
             <p className="py-12 text-center text-gray-400">{text("Aucune rencontre réelle pour cette période.", "No real fixtures for this period.")}</p>
           ) : (
-          groupByLocation ? (
-            <div className="space-y-8">
-              {Array.from(fixturesByLocation, ([location, competitions]) => (
-                <section key={location} aria-label={location}>
-                  <h2 className="mb-4 border-b border-gray-800 pb-2 text-xl font-bold text-white">{location}</h2>
-                  <div className="space-y-6 pl-3">
-                    {Array.from(competitions, ([competition, competitionFixtures]) => (
-                      <section key={competition}>
-                        <h3 className="mb-3 text-base font-semibold text-green-400">{competition}</h3>
-                        <div className="grid gap-4 lg:grid-cols-3">
-                          {competitionFixtures.map(renderFixture)}
-                        </div>
-                      </section>
-                    ))}
-                  </div>
-                </section>
-              ))}
-            </div>
+          (groupByLocation || predictionTools) ? (
+              <div className="space-y-3">
+                {sortedCompetitionGroups.map(({ display, fixtures: competitionFixtures }, index) => {
+                  const isCollapsed = collapsedCompetitionGroups.has(display.key);
+                  const contentId = `fixture-competition-${index}`;
+                  return (
+                  <section key={display.key} aria-label={`${display.country}: ${display.competition}`}>
+                    <button
+                      type="button"
+                      aria-expanded={!isCollapsed}
+                      aria-controls={contentId}
+                      onClick={() => setCollapsedCompetitionGroups(current => {
+                        const next = new Set(current);
+                        if (next.has(display.key)) next.delete(display.key);
+                        else next.add(display.key);
+                        return next;
+                      })}
+                      className="mb-3 flex w-full items-center gap-2 border-b border-fuchsia-400/15 bg-gray-900/60 px-3 py-3 text-left text-lg font-bold text-white transition hover:bg-gray-900"
+                    >
+                      <span aria-hidden="true" className="text-xl">{display.flag}</span>
+                      <span className="min-w-0 flex-1 truncate">{display.country.toLocaleUpperCase(language === "fr" ? "fr-FR" : "en-GB")}: {display.competition}</span>
+                      {isPinnedCompetition(display.competition) && (
+                        <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-200">
+                          {text("Épinglée", "Pinned")}
+                        </span>
+                      )}
+                      <span className="rounded-full border border-gray-700 bg-gray-900 px-2 py-0.5 text-xs font-medium text-gray-400">
+                        {competitionFixtures.length}
+                      </span>
+                      <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className={`h-5 w-5 shrink-0 text-fuchsia-200 transition-transform ${isCollapsed ? "-rotate-90" : "rotate-0"}`}>
+                        <path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                    {!isCollapsed && (
+                      <div id={contentId} className="grid gap-4 lg:grid-cols-3">
+                        {competitionFixtures.map(renderFixture)}
+                      </div>
+                    )}
+                  </section>
+                  );
+                })}
+              </div>
           ) : (
-            <>
               <div className="grid gap-4 lg:grid-cols-3">
                 {fixturesForDisplay.map(renderFixture)}
               </div>
-            </>
           )
           )}
           </>
-        )}
-        {!loadError && !loading && dateInitialized && anchorDate && filteredFixtures.length > 0 && shouldPaginate && totalPages > 1 && (
-          <nav className="mt-6 flex items-center justify-center gap-4" aria-label={text("Pagination des matchs", "Fixture pagination")}>
-            <button
-              type="button"
-              onClick={() => setCurrentPage(page => Math.max(1, page - 1))}
-              disabled={safeCurrentPage === 1}
-              className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {text("Précédent", "Previous")}
-            </button>
-            <span className="text-sm text-gray-300">
-              {text(`Page ${safeCurrentPage} sur ${totalPages}`, `Page ${safeCurrentPage} of ${totalPages}`)}
-            </span>
-            <button
-              type="button"
-              onClick={() => setCurrentPage(page => Math.min(totalPages, page + 1))}
-              disabled={safeCurrentPage === totalPages}
-              className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-200 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {text("Suivant", "Next")}
-            </button>
-          </nav>
         )}
         {showBasket && basketCount > 0 && (
           <aside className="fixed inset-x-4 bottom-4 z-40 mx-auto max-w-xl rounded-xl border border-green-600/70 bg-gray-950/95 p-4 shadow-2xl shadow-black/50 backdrop-blur">

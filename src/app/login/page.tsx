@@ -28,6 +28,7 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setError("");
     setIsSubmitting(true);
 
@@ -44,6 +45,7 @@ export default function LoginPage() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : text("Erreur de connexion", "Login failed"));
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -135,9 +137,15 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={isSubmitting}
+                aria-busy={isSubmitting}
                 className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition hover-glow"
               >
-                {isSubmitting ? text("Connexion...", "Logging in...") : text("Se connecter", "Log in")}
+                {isSubmitting ? (
+                  <span role="status" className="inline-flex items-center gap-2">
+                    <span aria-hidden="true" className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                    {text("Vérification de vos identifiants…", "Checking your credentials…")}
+                  </span>
+                ) : text("Se connecter", "Log in")}
               </button>
             </div>
           </form>

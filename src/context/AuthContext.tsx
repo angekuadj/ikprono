@@ -1,11 +1,11 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { signOut, useSession } from "next-auth/react";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   updateProfile as updateFirebaseProfile,
   signOut as firebaseSignOut,
 } from "firebase/auth";
@@ -32,6 +32,7 @@ interface AuthContextType {
   login: (email: string, password: string, rememberMe?: boolean) => Promise<User>;
   loginWithGoogle: () => Promise<User>;
   register: (email: string, password: string, name: string) => Promise<User>;
+  resetPassword: (email: string) => Promise<void>;
   updateProfile: (name: string, email: string) => User;
   logout: () => void;
   proposalCount: number;
@@ -185,7 +186,6 @@ function createSalt(): string {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { data: oauthSession, status: oauthStatus } = useSession();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [proposalCount, setProposalCount] = useState(0);
@@ -244,27 +244,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (oauthStatus === "loading") {
-      setIsLoading(true);
-      return;
-    }
-
-    const email = oauthSession?.user?.email?.trim().toLowerCase();
-    if (email) {
-      const oauthUser: User = {
-        id: `oauth:${email}`,
-        email,
-        name: oauthSession?.user?.name?.trim() || email,
-        role: "user",
-        plan: "standard",
-        createdAt: new Date().toISOString(),
-      };
-      setUser(oauthUser);
-      setProposalCount(readProposalCount(oauthUser.id));
-      setIsLoading(false);
-      return;
-    }
-
     try {
       const storedUser =
         localStorage.getItem(SESSION_STORAGE_KEY) ??
@@ -288,7 +267,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sessionStorage.removeItem(SESSION_STORAGE_KEY);
     }
     setIsLoading(false);
-  }, [oauthSession, oauthStatus, firebaseUser, firebaseReady]);
+  }, [firebaseUser, firebaseReady]);
 
   const saveSession = (account: User, rememberMe: boolean) => {
     const storage = rememberMe ? localStorage : sessionStorage;
@@ -373,6 +352,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       saveSession(profile, true);
       return profile;
     } catch (error) {
+      throw new Error(translateFirebaseError(error));
+    }
+  };
+
+  const resetPassword = async (email: string): Promise<void> => {
+    if (!isFirebaseAuthConfigured()) {
+      throw new Error(
+        "La réinitialisation du mot de passe n'est pas disponible car Firebase n'est pas configuré."
+      );
+    }
+    try {
+      await sendPasswordResetEmail(getFirebaseAuth(), email.trim().toLowerCase());
+    } catch (error) {
+      const code =
+        typeof error === "object" && error !== null && "code" in error
+          ? String((error as { code: unknown }).code)
+          : "";
+      if (code === "auth/user-not-found") return;
       throw new Error(translateFirebaseError(error));
     }
   };
@@ -517,7 +514,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error("Déconnexion Firebase impossible.", error)
       );
     }
-    if (oauthSession) void signOut({ redirect: false });
   };
 
   const remainingProposals =
@@ -549,6 +545,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         loginWithGoogle,
         register,
+        resetPassword,
         updateProfile,
         logout,
         proposalCount,
