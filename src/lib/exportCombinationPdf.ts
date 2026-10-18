@@ -4,7 +4,8 @@ export function exportCombinationPdf(
   title: string,
   content: string,
   language: "fr" | "en" = "fr",
-  matchStatuses: Record<string, ExportMatchStatus> = {}
+  matchStatuses: Record<string, ExportMatchStatus> = {},
+  pickStatuses: Record<string, ExportMatchStatus> = {}
 ): void {
   const printWindow = window.open("", "_blank");
   if (!printWindow) {
@@ -43,8 +44,10 @@ export function exportCombinationPdf(
     .status-lost { border-color: #f2b8b5; background: #fff0ef; color: #a32d29; }
     .status-pending { border-color: #f2d28e; background: #fff8e8; color: #90621a; }
     .status-unavailable { border-color: #d6dde3; background: #f1f4f6; color: #5d6876; }
-    .picks { display: flex; flex-wrap: wrap; gap: 6px; }
+    .picks { display: flex; flex-direction: column; gap: 6px; }
+    .pick-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .pick { padding: 5px 8px; border-radius: 6px; background: #f1f6f4; color: #315348; font-size: 10px; }
+    .pick-status { flex: 0 0 auto; padding: 3px 7px; border: 1px solid; border-radius: 999px; font-size: 9px; font-weight: 700; }
     .empty-pick { color: #718096; font-size: 11px; }
     .footer { display: flex; justify-content: space-between; gap: 16px; margin-top: 24px; padding-top: 13px; border-top: 1px solid #e3e9ed; color: #7b8794; font-size: 10px; }
     @media (max-width: 600px) { .sheet { margin: 0; padding: 22px; } .matches { grid-template-columns: 1fr; } h1 { font-size: 21px; } }
@@ -168,10 +171,17 @@ export function exportCombinationPdf(
     const picks = document.createElement("div");
     picks.className = "picks";
     for (const pick of match.picks) {
+      const row = document.createElement("div");
+      row.className = "pick-row";
       const pickLabel = document.createElement("span");
       pickLabel.className = "pick";
       pickLabel.textContent = pick;
-      picks.append(pickLabel);
+      const pickStatus = document.createElement("span");
+      const outcome = pickStatuses[`${match.teams}::${pick}`] ?? "pending";
+      pickStatus.className = `pick-status status-${outcome}`;
+      pickStatus.textContent = `${statusLabels[outcome].icon} ${statusLabels[outcome].label}`;
+      row.append(pickLabel, pickStatus);
+      picks.append(row);
     }
     if (match.picks.length === 0) {
       const empty = document.createElement("span");

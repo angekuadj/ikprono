@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
+import { useFixtureStatuses } from "@/hooks/useFixtureStatuses";
 import { readFixtureBasket, writeFixtureBasket } from "@/lib/fixtureBasket";
 import { readGeneratedCombinations, writeGeneratedCombinations } from "@/lib/generatedCombinations";
 import { uniqueGeneratedCoupons, type GeneratedCoupon, type GeneratedStatisticCoupon, type CouponPick, type StatisticMarket } from "@/lib/coupons";
@@ -16,6 +17,13 @@ import {
   writeSavedStatisticCombinations,
   type SavedStatisticCombination,
 } from "@/lib/savedStatisticCombinations";
+import {
+  isFixtureFinished,
+  parseFixtureScore,
+  settleCouponMatch,
+  settleCouponPick,
+  type CouponOutcome,
+} from "@/lib/couponSettlement";
 
 const MAX_FIXTURES = 20;
 const GUEST_COMBINATION_LIMIT = 20;
@@ -116,6 +124,14 @@ export default function CombinationsPage() {
   const [refreshKey, refreshNow] = useAutoRefresh();
   const guestCombinationsRemaining = Math.max(0, GUEST_COMBINATION_LIMIT - guestCombinationsUsed);
   const canGenerateCombination = isAuthenticated || guestCombinationsRemaining > 0;
+  const couponFixtureIds = useMemo(
+    () => Array.from(new Set([
+      ...(safeCoupon?.matches.map(match => match.fixtureId) ?? []),
+      ...coupons.flatMap(coupon => coupon.matches.map(match => match.fixtureId)),
+    ])),
+    [safeCoupon, coupons]
+  );
+  const { fixturesById: refreshedCouponFixtures } = useFixtureStatuses(couponFixtureIds);
 
   useEffect(() => {
     const loadGuestCombinationCount = () => {
@@ -578,9 +594,28 @@ export default function CombinationsPage() {
     }),
   ].join("\n");
 
-  const exportCombination = (title: string, content: string) => {
+  const getCouponPickOutcome = (coupon: GeneratedCoupon, fixtureId: string, pick: CouponPick): CouponOutcome => {
+    const fixture = refreshedCouponFixtures[fixtureId] ?? fixtures.find(item => item.id === fixtureId);
+    if (!fixture) return "unavailable";
+    const score = parseFixtureScore(fixture);
+    if (!score) return isFixtureFinished(fixture) ? "unavailable" : "pending";
+    const result = settleCouponPick(pick, score);
+    return result === null ? "unavailable" : result ? "won" : "lost";
+  };
+  const getCouponPickStatuses = (coupon: GeneratedCoupon) => Object.fromEntries(
+    coupon.matches.flatMap(match => match.picks.map(pick => [
+      `${match.homeTeam} — ${match.awayTeam}::${pickLabel(pick)}`,
+      getCouponPickOutcome(coupon, match.fixtureId, pick),
+    ]))
+  );
+  const exportCombination = (
+    title: string,
+    content: string,
+    matchStatuses?: Record<string, CouponOutcome>,
+    pickStatuses?: Record<string, CouponOutcome>
+  ) => {
     try {
-      exportCombinationPdf(title, content, language);
+      exportCombinationPdf(title, content, language, matchStatuses, pickStatuses);
       setActionError("");
       setActionNotice(text(
         "Choisissez « Enregistrer au format PDF » dans la fenêtre d’impression.",
@@ -665,11 +700,16 @@ export default function CombinationsPage() {
     }
   };
 
-  const renderCombinationActions = (title: string, content: string) => (
+  const renderCombinationActions = (
+    title: string,
+    content: string,
+    matchStatuses?: Record<string, CouponOutcome>,
+    pickStatuses?: Record<string, CouponOutcome>
+  ) => (
     <div className="flex flex-wrap gap-2">
       <button
         type="button"
-        onClick={() => exportCombination(title, content)}
+        onClick={() => exportCombination(title, content, matchStatuses, pickStatuses)}
         className="rounded-lg border border-gray-700 px-3 py-2 text-xs font-semibold text-gray-200 transition hover:border-green-600 hover:text-white"
       >
         {text("Exporter en PDF", "Export as PDF")}
@@ -698,6 +738,51 @@ export default function CombinationsPage() {
       "over-2.5": text("Plus de 2,5 buts", "Over 2.5 goals"),
     };
     return labels[pick.selection];
+  };
+
+  const couponMatchOutcome = (coupon: GeneratedCoupon, fixtureId: string): CouponOutcome => {
+    const match = coupon.matches.find(item => item.fixtureId === fixtureId);
+    if (!match) return "unavailable";
+    return settleCouponMatch(
+      match,
+      refreshedCouponFixtures[fixtureId] ?? fixtures.find(fixture => fixture.id === fixtureId)
+    );
+  };
+  const outcomeLabel = (outcome: CouponOutcome) => ({
+    pending: text("En attente", "Pending"),
+    won: text("Gagné", "Won"),
+    lost: text("Perdu", "Lost"),
+    unavailable: text("Résultat indisponible", "Result unavailable"),
+  })[outcome];
+  const outcomeStyle = (outcome: CouponOutcome) => ({
+    pending: "border-amber-700 bg-amber-950/50 text-amber-200",
+    won: "border-green-700 bg-green-950/50 text-green-200",
+    lost: "border-red-800 bg-red-950/50 text-red-200",
+    unavailable: "border-gray-700 bg-gray-800 text-gray-300",
+  })[outcome];
+  const outcomeIcon = (outcome: CouponOutcome) => ({
+    pending: "◷",
+    won: "✓",
+    lost: "✕",
+    unavailable: "?",
+  })[outcome];
+  const renderMatchOutcome = (coupon: GeneratedCoupon, fixtureId: string) => {
+    const outcome = couponMatchOutcome(coupon, fixtureId);
+    return (
+      <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${outcomeStyle(outcome)}`}>
+        <span aria-hidden="true">{outcomeIcon(outcome)}</span>
+        {outcomeLabel(outcome)}
+      </span>
+    );
+  };
+  const renderPickOutcome = (coupon: GeneratedCoupon, fixtureId: string, pick: CouponPick) => {
+    const outcome = getCouponPickOutcome(coupon, fixtureId, pick);
+    return (
+      <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${outcomeStyle(outcome)}`}>
+        <span aria-hidden="true">{outcomeIcon(outcome)}</span>
+        {outcomeLabel(outcome)}
+      </span>
+    );
   };
 
   return (
@@ -1115,7 +1200,10 @@ export default function CombinationsPage() {
               {safeCoupon.matches.map(match => (
                 <article key={match.fixtureId} className="rounded-xl border border-gray-800 bg-black/30 p-3">
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="text-sm font-semibold text-white">{match.homeTeam} — {match.awayTeam}</h3>
+                    <div className="min-w-0">
+                      {renderMatchOutcome(safeCoupon, match.fixtureId)}
+                      <h3 className="mt-1 text-sm font-semibold text-white">{match.homeTeam} — {match.awayTeam}</h3>
+                    </div>
                     <button
                       type="button"
                       onClick={() => removeSafeCouponMatch(match.fixtureId)}
@@ -1130,7 +1218,10 @@ export default function CombinationsPage() {
                   <ul className="mt-2 space-y-1.5">
                     {match.picks.map(pick => (
                       <li key={`${pick.market}-${pick.selection}`} className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs">
-                        <span className="text-gray-300">{pickLabel(pick)}</span>
+                        <span className="flex min-w-0 flex-wrap items-center gap-2">
+                          {renderPickOutcome(safeCoupon, match.fixtureId, pick)}
+                          <span className="text-gray-300">{pickLabel(pick)}</span>
+                        </span>
                         <span className="rounded-full border border-green-900/80 bg-green-950/40 px-2 py-0.5 font-medium text-green-300">
                           {pick.historicalRate === null
                             ? text("Pas de données", "No data")
@@ -1169,7 +1260,12 @@ export default function CombinationsPage() {
                   "Estimate based on available history; outcomes are not guaranteed."
                 )}
               </p>
-              {renderCombinationActions(safeCoupon.title, formatGeneratedCoupon(safeCoupon))}
+              {renderCombinationActions(
+                safeCoupon.title,
+                formatGeneratedCoupon(safeCoupon),
+                Object.fromEntries(safeCoupon.matches.map(match => [ `${match.homeTeam} — ${match.awayTeam}`, couponMatchOutcome(safeCoupon, match.fixtureId) ])),
+                getCouponPickStatuses(safeCoupon)
+              )}
             </footer>
           </section>
         )}
@@ -1193,7 +1289,10 @@ export default function CombinationsPage() {
                     {coupon.matches.map(match => (
                       <li key={match.fixtureId} className="rounded-lg border border-gray-800 bg-black/30 p-3">
                         <div className="flex items-start justify-between gap-2">
-                          <p className="text-sm font-semibold text-white">{match.homeTeam} — {match.awayTeam}</p>
+                          <div className="min-w-0">
+                            {renderMatchOutcome(coupon, match.fixtureId)}
+                            <p className="mt-1 text-sm font-semibold text-white">{match.homeTeam} — {match.awayTeam}</p>
+                          </div>
                           <button
                             type="button"
                             onClick={() => removeCouponMatch(index, match.fixtureId)}
@@ -1208,7 +1307,10 @@ export default function CombinationsPage() {
                         <ul className="mt-2 space-y-2">
                           {match.picks.map(pick => (
                             <li key={`${pick.market}-${pick.selection}`} className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                              <span className="text-gray-300">{pickLabel(pick)}</span>
+                              <span className="flex min-w-0 flex-wrap items-center gap-2">
+                                {renderPickOutcome(coupon, match.fixtureId, pick)}
+                                <span className="text-gray-300">{pickLabel(pick)}</span>
+                              </span>
                               <span className="text-gray-500">
                                 {pick.historicalRate === null
                                   ? text("Pas de données", "No data")
@@ -1239,7 +1341,12 @@ export default function CombinationsPage() {
                   >
                     {text("Enregistrer et suivre", "Save and track")}
                   </button>
-                  {renderCombinationActions(coupon.title, formatGeneratedCoupon(coupon))}
+                  {renderCombinationActions(
+                    coupon.title,
+                    formatGeneratedCoupon(coupon),
+                    Object.fromEntries(coupon.matches.map(match => [ `${match.homeTeam} — ${match.awayTeam}`, couponMatchOutcome(coupon, match.fixtureId) ])),
+                    getCouponPickStatuses(coupon)
+                  )}
                 </article>
               ))}
             </div>

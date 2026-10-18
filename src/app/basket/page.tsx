@@ -281,6 +281,17 @@ export default function BasketPage() {
       const fixture = fixturesById[match.fixtureId] ?? combination.fixtures.find(item => item.id === match.fixtureId);
       return [`${match.homeTeam} — ${match.awayTeam}`, settleCouponMatch(match, fixture)];
     }));
+    const pickStatuses = Object.fromEntries(combination.coupon.matches.flatMap(match => {
+      const fixture = fixturesById[match.fixtureId] ?? combination.fixtures.find(item => item.id === match.fixtureId);
+      const score = fixture ? parseFixtureScore(fixture) : null;
+      return match.picks.map(pick => {
+        const result = score ? settleCouponPick(pick, score) : null;
+        const outcome: CouponOutcome = score
+          ? result === null ? "unavailable" : result ? "won" : "lost"
+          : fixture && isFixtureFinished(fixture) ? "unavailable" : fixture ? "pending" : "unavailable";
+        return [`${match.homeTeam} — ${match.awayTeam}::${getCouponPickLabel(pick)}`, outcome];
+      });
+    }));
     const content = [
       combination.coupon.title,
       combination.coupon.description,
@@ -297,7 +308,7 @@ export default function BasketPage() {
     ].join("\n");
 
     try {
-      exportCombinationPdf(combination.coupon.title, content, language, matchStatuses);
+      exportCombinationPdf(combination.coupon.title, content, language, matchStatuses, pickStatuses);
       setBasketError("");
     } catch (error) {
       console.error("Could not export saved combination as PDF.", error);
