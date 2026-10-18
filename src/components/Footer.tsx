@@ -120,6 +120,9 @@ export default function Footer() {
             <p className="text-gray-400 text-sm">
               {text("© 2026 IkProno - Tous droits réservés", "© 2026 IkProno - All rights reserved")}
             </p>
+            <p className="text-gray-400 text-sm mt-2 md:mt-0">
+              {text("Fait par A.K", "Made by A.K")}
+            </p>
             <p className="text-gray-500 text-xs mt-2 md:mt-0">
               {text("Les rencontres proviennent de fournisseurs de données sportives.", "Fixtures are provided by sports data services.")}
             </p>
