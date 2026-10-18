@@ -277,6 +277,10 @@ export default function BasketPage() {
   };
 
   const exportGeneratedCombinationPdf = (combination: StoredGeneratedCombination) => {
+    const matchStatuses = Object.fromEntries(combination.coupon.matches.map(match => {
+      const fixture = fixturesById[match.fixtureId] ?? combination.fixtures.find(item => item.id === match.fixtureId);
+      return [`${match.homeTeam} — ${match.awayTeam}`, settleCouponMatch(match, fixture)];
+    }));
     const content = [
       combination.coupon.title,
       combination.coupon.description,
@@ -293,7 +297,7 @@ export default function BasketPage() {
     ].join("\n");
 
     try {
-      exportCombinationPdf(combination.coupon.title, content, language);
+      exportCombinationPdf(combination.coupon.title, content, language, matchStatuses);
       setBasketError("");
     } catch (error) {
       console.error("Could not export saved combination as PDF.", error);

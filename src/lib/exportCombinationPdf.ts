@@ -1,4 +1,11 @@
-export function exportCombinationPdf(title: string, content: string, language: "fr" | "en" = "fr"): void {
+type ExportMatchStatus = "won" | "lost" | "pending" | "unavailable";
+
+export function exportCombinationPdf(
+  title: string,
+  content: string,
+  language: "fr" | "en" = "fr",
+  matchStatuses: Record<string, ExportMatchStatus> = {}
+): void {
   const printWindow = window.open("", "_blank");
   if (!printWindow) {
     throw new Error("The PDF export window was blocked.");
@@ -31,6 +38,11 @@ export function exportCombinationPdf(title: string, content: string, language: "
     .match-heading { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
     .match-number { display: grid; width: 24px; height: 24px; flex: 0 0 24px; place-items: center; border-radius: 8px; background: #e9f5ef; color: #16704f; font-size: 11px; font-weight: 800; }
     .teams { margin: 1px 0 0; color: #172033; font-size: 13px; font-weight: 700; line-height: 1.4; }
+    .match-status { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; margin: 0 0 9px; padding: 3px 8px; border: 1px solid; border-radius: 999px; font-size: 10px; font-weight: 700; }
+    .status-won { border-color: #a9dfc7; background: #eaf8f0; color: #126344; }
+    .status-lost { border-color: #f2b8b5; background: #fff0ef; color: #a32d29; }
+    .status-pending { border-color: #f2d28e; background: #fff8e8; color: #90621a; }
+    .status-unavailable { border-color: #d6dde3; background: #f1f4f6; color: #5d6876; }
     .picks { display: flex; flex-wrap: wrap; gap: 6px; }
     .pick { padding: 5px 8px; border-radius: 6px; background: #f1f6f4; color: #315348; font-size: 10px; }
     .empty-pick { color: #718096; font-size: 11px; }
@@ -48,9 +60,9 @@ export function exportCombinationPdf(title: string, content: string, language: "
 
   const lines = content.split(/\r?\n/).map(line => line.trimEnd());
   if (lines[0]?.trim() === title.trim()) lines.shift();
-  const matches: { teams: string; picks: string[] }[] = [];
+  const matches: { teams: string; picks: string[]; status: ExportMatchStatus }[] = [];
   const details: string[] = [];
-  let currentMatch: { teams: string; picks: string[] } | undefined;
+  let currentMatch: { teams: string; picks: string[]; status: ExportMatchStatus } | undefined;
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
@@ -61,7 +73,7 @@ export function exportCombinationPdf(title: string, content: string, language: "
       continue;
     }
     if (line.includes(" — ")) {
-      currentMatch = { teams: line, picks: [] };
+      currentMatch = { teams: line, picks: [], status: matchStatuses[line] ?? "pending" };
       matches.push(currentMatch);
       continue;
     }
@@ -122,12 +134,28 @@ export function exportCombinationPdf(title: string, content: string, language: "
 
   const sectionTitle = document.createElement("h2");
   sectionTitle.className = "section-title";
-  sectionTitle.textContent = language === "fr" ? "Détail des rencontres" : "Fixture details";
+  sectionTitle.textContent = language === "fr" ? "Détail des rencontres · statut" : "Fixture details · status";
   const matchList = document.createElement("section");
   matchList.className = "matches";
   for (const [index, match] of matches.entries()) {
     const card = document.createElement("article");
     card.className = "match";
+    const statusLabels: Record<ExportMatchStatus, { icon: string; label: string }> = language === "fr"
+      ? {
+        won: { icon: "✓", label: "Gagnée" },
+        lost: { icon: "×", label: "Perdue" },
+        pending: { icon: "◷", label: "En attente" },
+        unavailable: { icon: "?", label: "Indisponible" },
+      }
+      : {
+        won: { icon: "✓", label: "Won" },
+        lost: { icon: "×", label: "Lost" },
+        pending: { icon: "◷", label: "Pending" },
+        unavailable: { icon: "?", label: "Unavailable" },
+      };
+    const status = document.createElement("p");
+    status.className = `match-status status-${match.status}`;
+    status.textContent = `${statusLabels[match.status].icon} ${statusLabels[match.status].label}`;
     const matchHeading = document.createElement("div");
     matchHeading.className = "match-heading";
     const number = document.createElement("span");
@@ -151,7 +179,7 @@ export function exportCombinationPdf(title: string, content: string, language: "
       empty.textContent = language === "fr" ? "Aucun choix renseigné" : "No picks provided";
       picks.append(empty);
     }
-    card.append(matchHeading, picks);
+    card.append(status, matchHeading, picks);
     matchList.append(card);
   }
 
