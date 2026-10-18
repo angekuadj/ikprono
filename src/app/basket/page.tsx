@@ -18,6 +18,12 @@ import {
   type StoredGeneratedCombination,
 } from "@/lib/generatedCombinations";
 import {
+  readCouponHistory,
+  subscribeToCouponHistory,
+  writeCouponHistory,
+  type StoredCouponHistory,
+} from "@/lib/couponHistory";
+import {
   readSavedSelections,
   writeSavedSelections,
   type SavedSelection,
@@ -44,7 +50,7 @@ import {
 } from "@/lib/marketSelections";
 
 const MAX_SELECTION_SIZE = 20;
-type BasketTab = "basket" | "generated" | "selections";
+type BasketTab = "basket" | "generated" | "history" | "selections";
 
 export default function BasketPage() {
   const { user, isAuthenticated, isLoading, remainingProposals, recordProposals } = useAuth();
@@ -52,17 +58,22 @@ export default function BasketPage() {
   const router = useRouter();
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
   const [generatedCombinations, setGeneratedCombinations] = useState<StoredGeneratedCombination[]>([]);
+  const [couponHistory, setCouponHistory] = useState<StoredCouponHistory[]>([]);
   const [basketError, setBasketError] = useState("");
   const [saveError, setSaveError] = useState("");
   const [savedSelections, setSavedSelections] = useState<SavedSelection[]>([]);
   const [marketSelections, setMarketSelections] = useState<MarketSelectionsByFixture>({});
   const [couponErrors, setCouponErrors] = useState<Record<string, string>>({});
   const [generatingSelectionId, setGeneratingSelectionId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<BasketTab>("basket");
-  const [expandedCombinations, setExpandedCombinations] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState<BasketTab>("basket");  const [expandedCombinations, setExpandedCombinations] = useState<Set<string>>(new Set());
   const trackedFixtures = useMemo(
-    () => [...fixtures, ...generatedCombinations.flatMap(combination => combination.fixtures), ...savedSelections.flatMap(selection => selection.fixtures)],
-    [fixtures, generatedCombinations, savedSelections]
+    () => [
+      ...fixtures,
+      ...generatedCombinations.flatMap(combination => combination.fixtures),
+      ...couponHistory.flatMap(combination => combination.fixtures),
+      ...savedSelections.flatMap(selection => selection.fixtures),
+    ],
+    [fixtures, generatedCombinations, couponHistory, savedSelections]
   );
   const fixtureIds = useMemo(
     () => Array.from(new Set(
@@ -113,6 +124,27 @@ export default function BasketPage() {
   }, [text]);
 
   useEffect(() => {
+    const syncCouponHistory = () => {
+      try {
+        setCouponHistory(readCouponHistory());
+        setBasketError("");
+      } catch (error) {
+        setBasketError(error instanceof Error ? error.message : text("Impossible de lire l'historique des coupons.", "Unable to read coupon history."));
+      }
+    };
+    syncCouponHistory();
+    return subscribeToCouponHistory(syncCouponHistory);
+  }, [text]);
+
+  // Auto-archivage : quand tous les matchs d'une combinaison sont terminés,
+  // le système détermine automatiquement gagné/perdu et déplace vers l'historique.
+  useEffect(() => {
+    for (const combination of generatedCombinations) {
+      archiveGeneratedCombination(combination);
+    }
+  }, [generatedCombinations, fixturesById]);
+
+  useEffect(() => {
     if (!user) {
       setSavedSelections([]);
       return;
@@ -153,6 +185,42 @@ export default function BasketPage() {
       setBasketError("");
     } catch (error) {
       setBasketError(error instanceof Error ? error.message : text("Impossible de retirer cette combinaison.", "Unable to remove this combination."));
+    }
+  };
+
+  const archiveGeneratedCombination = (combination: StoredGeneratedCombination) => {
+    try {
+      const history = readCouponHistory();
+      const alreadyArchived = history.some(item => item.id === combination.id);
+      if (alreadyArchived) return;
+
+      // Déterminer le résultat automatiquement : tous les matchs doivent être terminés
+      const allFinished = combination.coupon.matches.every(match => {
+        const fixture = combination.fixtures.find(f => f.id === match.fixtureId) ?? fixturesById[match.fixtureId];
+        return fixture ? isFixtureFinished(fixture) : false;
+      });
+      if (!allFinished) return;
+
+      const matchOutcomes = combination.coupon.matches.map(match => {
+        const fixture = combination.fixtures.find(f => f.id === match.fixtureId) ?? fixturesById[match.fixtureId];
+        return settleCouponMatch(match, fixture);
+      });
+      const finalOutcome = settleCoupon(matchOutcomes);
+      if (finalOutcome !== "won" && finalOutcome !== "lost") return;
+
+      const archived: StoredCouponHistory = {
+        id: combination.id,
+        createdAt: combination.createdAt,
+        archivedAt: new Date().toISOString(),
+        coupon: combination.coupon,
+        fixtures: combination.fixtures,
+        finalOutcome,
+      };
+      writeCouponHistory([...history, archived]);
+      writeGeneratedCombinations(generatedCombinations.filter(candidate => candidate.id !== combination.id));
+      setBasketError("");
+    } catch (error) {
+      setBasketError(error instanceof Error ? error.message : text("Impossible d'archiver cette combinaison.", "Unable to archive this combination."));
     }
   };
 
@@ -452,6 +520,15 @@ export default function BasketPage() {
           <button
             type="button"
             role="tab"
+            aria-selected={activeTab === "history"}
+            onClick={() => setActiveTab("history")}
+            className={`rounded-lg px-2 py-2 text-xs font-semibold transition sm:px-3 sm:text-sm ${activeTab === "history" ? "bg-green-600 text-white" : "text-gray-300 hover:bg-gray-800"}`}
+          >
+            {text("Historique des coupons", "Coupon history")} ({couponHistory.length})
+          </button>
+          <button
+            type="button"
+            role="tab"
             aria-selected={activeTab === "selections"}
             onClick={() => setActiveTab("selections")}
             className={`rounded-lg px-2 py-2 text-xs font-semibold transition sm:px-3 sm:text-sm ${activeTab === "selections" ? "bg-green-600 text-white" : "text-gray-300 hover:bg-gray-800"}`}
@@ -611,6 +688,134 @@ export default function BasketPage() {
                     </div>
                   )}
                 </article>
+                );
+              })
+            )}
+          </section>
+        )}
+
+        {activeTab === "history" && (
+          <section className="space-y-4" aria-label={text("Historique des coupons", "Coupon history")}>
+            {couponHistory.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-gray-700 bg-gray-900/70 px-6 py-12 text-center">
+                <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-gray-800 text-gray-400">
+                  <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15.89l-3.62 3.62L7 14l1.42-1.42L11 13.17V15h2v-1.83l4.58-4.58L17 14l-3.75 3.75z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <h2 className="mt-4 text-lg font-semibold text-white">{text("Aucun coupon dans l'historique", "No coupons in history")}</h2>
+                <p className="mx-auto mt-2 max-w-md text-sm text-gray-400">
+                  {text("Les combinaisons terminées (gagnées ou perdues) apparaissent ici une fois archivées.", "Finished combinations (won or lost) appear here once archived.")}
+                </p>
+              </div>
+            ) : (
+              couponHistory.slice().reverse().map(combination => {
+                const outcome = combination.finalOutcome;
+                return (
+                  <article key={combination.id} className="overflow-hidden rounded-2xl border border-gray-800 bg-gradient-to-br from-gray-900 to-gray-950 shadow-lg shadow-black/30">
+                    <header className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-800 p-4 sm:px-5">
+                      <div className="min-w-0 flex-1">
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <h2 className="text-lg font-bold text-white sm:text-xl">{combination.coupon.title}</h2>
+                          <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${outcomeStyle(outcome)}`}>
+                            <span aria-hidden="true">{outcomeIcon(outcome)}</span>
+                            {outcomeLabel(outcome)}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-gray-400">{combination.coupon.description}</p>
+                        <p className="mt-1.5 text-[11px] text-gray-500">
+                          {text("Enregistrée le", "Saved on")} {new Date(combination.createdAt).toLocaleString(locale)} ·
+                          {text("Archivée le", "Archived on")} {new Date(combination.archivedAt).toLocaleString(locale)}
+                        </p>
+                        {typeof combination.coupon.estimatedCombinedRate === "number" && (
+                          <p className="mt-1 text-[11px] text-gray-400">
+                            {text("Estimation indicative", "Indicative estimate")}: {combination.coupon.estimatedCombinedRate}%
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          writeCouponHistory(couponHistory.filter(item => item.id !== combination.id));
+                          setBasketError("");
+                        }}
+                        aria-label={text("Retirer de l'historique", "Remove from history")}
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-gray-700 text-gray-400 transition hover:border-red-700 hover:text-red-300"
+                      >
+                        <span aria-hidden="true">×</span>
+                      </button>
+                    </header>
+                    <div className="grid gap-2.5 p-3 sm:grid-cols-2 sm:p-4">
+                    {combination.coupon.matches.map(match => {
+                      const fixture = combination.fixtures.find(item => item.id === match.fixtureId);
+                      const matchOutcome = settleCouponMatch(match, fixture);
+                      const finished = fixture ? isFixtureFinished(fixture) : false;
+                      const score = fixture && finished ? parseFixtureScore(fixture) : null;
+                      const matchDateLabel = fixture
+                        ? new Date(`${fixture.date}T12:00:00.000Z`).toLocaleDateString(locale, {
+                          day: "numeric",
+                          month: "short",
+                        })
+                        : null;
+                      return (
+                        <article key={match.fixtureId} className="rounded-xl border border-gray-800 bg-black/30 p-3">
+                          <div className="flex items-center justify-between gap-2 border-b border-dashed border-gray-800 pb-2">
+                            <p className="min-w-0 truncate text-[10px] font-medium text-gray-400">
+                              {fixture
+                                ? `${fixture.sport === "football" ? "⚽ " : ""}${fixture.competition ?? fixture.league} · ${matchDateLabel} (${fixture.time})`
+                                : text("Détails de la rencontre", "Fixture details")}
+                            </p>
+                            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${outcomeStyle(matchOutcome)}`}>
+                              <span aria-hidden="true">{outcomeIcon(matchOutcome)}</span>
+                              {outcomeLabel(matchOutcome)}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 py-2.5">
+                            <div className="flex min-w-0 items-center gap-2">
+                              {fixture?.homeImageUrl && (
+                                <Image src={fixture.homeImageUrl} alt="" width={24} height={24} unoptimized className="h-6 w-6 shrink-0 object-contain" />
+                              )}
+                              <h3 className="line-clamp-2 text-xs font-semibold text-white">{match.homeTeam}</h3>
+                            </div>
+                            <span className="text-[9px] font-bold uppercase tracking-wide text-gray-500">
+                              {fixture?.score ?? "VS"}
+                            </span>
+                            <div className="flex min-w-0 items-center justify-end gap-2 text-right">
+                              <h3 className="line-clamp-2 text-xs font-semibold text-white">{match.awayTeam}</h3>
+                              {fixture?.awayImageUrl && (
+                                <Image src={fixture.awayImageUrl} alt="" width={24} height={24} unoptimized className="h-6 w-6 shrink-0 object-contain" />
+                              )}
+                            </div>
+                          </div>
+                          <ul className="mt-2 space-y-1.5">
+                            {match.picks.map(pick => {
+                              const pickOutcomeValue = score ? settleCouponPick(pick, score) : null;
+                              const pickOutcome: CouponOutcome = score
+                                ? pickOutcomeValue === null ? "unavailable" : pickOutcomeValue ? "won" : "lost"
+                                : finished ? "unavailable" : "pending";
+                              return (
+                                <li key={`${pick.market}-${pick.selection}`} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                                  <span className="text-gray-300">{getCouponPickLabel(pick)}</span>
+                                  <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${outcomeStyle(pickOutcome)}`}>
+                                    <span aria-hidden="true">{outcomeIcon(pickOutcome)}</span>
+                                    {score || finished
+                                      ? outcomeLabel(pickOutcome)
+                                      : pick.historicalRate === null
+                                        ? text("Pas de données", "No data")
+                                        : `${pick.historicalRate}% (${pick.sampleSize} ${text("match(s)", "matches")})`}
+                                  </span>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                          <Link href={`/match/${encodeURIComponent(match.fixtureId)}`} className="mt-2 inline-block text-xs font-semibold text-fuchsia-400 hover:text-fuchsia-300">
+                            {text("Voir le match →", "View fixture →")}
+                          </Link>
+                        </article>
+                      );
+                    })}
+                    </div>
+                  </article>
                 );
               })
             )}
