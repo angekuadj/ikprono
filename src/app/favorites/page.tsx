@@ -13,12 +13,21 @@ import {
 } from "@/lib/favoriteFixtures";
 import type { Fixture } from "@/lib/fixtures";
 
+const LIVE_REFRESH_INTERVAL_MS = 20_000;
+const IDLE_REFRESH_INTERVAL_MS = 60_000;
+
+function isLiveFixture(fixture: Fixture): boolean {
+  const liveStatus = `${fixture.status ?? ""} ${fixture.liveDisplay ?? ""}`.toLocaleLowerCase("fr-FR");
+  return /live|direct|mi-temps|half-time|halftime|interrompu/.test(liveStatus);
+}
+
 export default function FavoritesPage() {
   const { text, language } = useLanguage();
   const [favorites, setFavorites] = useState<Fixture[]>([]);
   const [storageError, setStorageError] = useState("");
+  const [refreshInterval, setRefreshInterval] = useState(IDLE_REFRESH_INTERVAL_MS);
   const favoriteIds = useMemo(() => favorites.map(fixture => fixture.id), [favorites]);
-  const { fixturesById, error: refreshError } = useFixtureStatuses(favoriteIds);
+  const { fixturesById, error: refreshError } = useFixtureStatuses(favoriteIds, refreshInterval);
   const locale = language === "fr" ? "fr-FR" : "en";
 
   useEffect(() => {
@@ -33,6 +42,14 @@ export default function FavoritesPage() {
     syncFavorites();
     return subscribeToFavoriteFixtures(syncFavorites);
   }, []);
+
+  useEffect(() => {
+    const hasLiveFavorite = favorites.some(fixture =>
+      isLiveFixture(fixturesById[fixture.id] ?? fixture)
+    );
+    const nextInterval = hasLiveFavorite ? LIVE_REFRESH_INTERVAL_MS : IDLE_REFRESH_INTERVAL_MS;
+    setRefreshInterval(current => current === nextInterval ? current : nextInterval);
+  }, [favorites, fixturesById]);
 
   const removeFavorite = (fixtureId: string) => {
     try {
@@ -54,8 +71,8 @@ export default function FavoritesPage() {
           <h1 className="mt-2 text-3xl font-bold">{text("Matchs favoris", "Favorite matches")}</h1>
           <p className="mt-2 text-sm text-gray-400">
             {text(
-              "Vos favoris sont enregistrés sur cet appareil. Les scores et statuts sont actualisés automatiquement.",
-              "Your favorites are saved on this device. Scores and statuses refresh automatically."
+              "Vos favoris sont enregistrés sur cet appareil. Les scores et statuts sont actualisés toutes les 20 secondes pendant un direct, et toutes les minutes sinon.",
+              "Your favorites are saved on this device. Scores and statuses refresh every 20 seconds during live matches, and every minute otherwise."
             )}
           </p>
         </header>
