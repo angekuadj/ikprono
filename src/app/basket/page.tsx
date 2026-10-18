@@ -361,29 +361,29 @@ export default function BasketPage() {
             ) : (
               generatedCombinations.slice().reverse().map(combination => (
                 <article key={combination.id} className="overflow-hidden rounded-2xl border border-green-900/70 bg-gradient-to-br from-gray-900 to-gray-950 shadow-lg shadow-black/30">
-                  <header className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-800 p-5">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-green-400">
+                  <header className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-800 p-4 sm:px-5">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-fuchsia-400">
                         {text("Combinaison déjà générée", "Already generated combination")}
                       </p>
-                      <div className="mt-1 flex flex-wrap items-center gap-3">
-                        <h2 className="text-xl font-bold text-white">{combination.coupon.title}</h2>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <h2 className="text-lg font-bold text-white sm:text-xl">{combination.coupon.title}</h2>
                         {(() => {
                           const outcome = couponOutcome(combination.coupon, combination.fixtures);
                           return (
-                            <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${outcomeStyle(outcome)}`}>
+                            <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${outcomeStyle(outcome)}`}>
                               <span aria-hidden="true">{outcomeIcon(outcome)}</span>
                               {outcomeLabel(outcome)}
                             </span>
                           );
                         })()}
                       </div>
-                      <p className="mt-1 text-sm text-gray-400">{combination.coupon.description}</p>
-                      <p className="mt-2 text-xs text-gray-500">{new Date(combination.createdAt).toLocaleString(locale)}</p>
+                      <p className="mt-1 text-xs text-gray-400">{combination.coupon.description}</p>
+                      <p className="mt-1.5 text-[11px] text-gray-500">{new Date(combination.createdAt).toLocaleString(locale)}</p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       {typeof combination.coupon.estimatedCombinedRate === "number" && (
-                        <span className="rounded-full border border-green-800 bg-green-950/60 px-3 py-1 text-sm font-semibold text-green-200">
+                        <span className="rounded-full border border-green-800 bg-green-950/60 px-3 py-1 text-xs font-semibold text-green-200">
                           {text("Estimation indicative", "Indicative estimate")} {combination.coupon.estimatedCombinedRate}%
                         </span>
                       )}
@@ -391,38 +391,64 @@ export default function BasketPage() {
                         type="button"
                         onClick={() => removeGeneratedCombination(combination.id)}
                         aria-label={text("Retirer cette combinaison", "Remove this combination")}
-                        className="grid h-9 w-9 place-items-center rounded-lg border border-gray-700 text-gray-400 transition hover:border-red-700 hover:text-red-300"
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-gray-700 text-gray-400 transition hover:border-red-700 hover:text-red-300"
                       >
                         <span aria-hidden="true">×</span>
                       </button>
                     </div>
                   </header>
-                  <div className="grid gap-3 p-4 md:grid-cols-2">
+                  <div className="grid gap-2.5 p-3 sm:grid-cols-2 sm:p-4">
                     {combination.coupon.matches.map(match => {
                       const fixture = fixturesById[match.fixtureId] ?? combination.fixtures.find(item => item.id === match.fixtureId);
                       const matchOutcome = settleCouponMatch(match, fixture);
                       const finished = fixture ? isFixtureFinished(fixture) : false;
                       const score = fixture && finished ? parseFixtureScore(fixture) : null;
+                      const matchDateLabel = fixture
+                        ? new Date(`${fixture.date}T12:00:00.000Z`).toLocaleDateString(locale, {
+                          day: "numeric",
+                          month: "short",
+                        })
+                        : null;
                       return (
-                        <article key={match.fixtureId} className="rounded-xl border border-gray-800 bg-black/30 p-4">
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <h3 className="font-semibold text-white">{match.homeTeam} — {match.awayTeam}</h3>
-                            <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${outcomeStyle(matchOutcome)}`}>
+                        <article key={match.fixtureId} className="rounded-xl border border-gray-800 bg-black/30 p-3">
+                          <div className="flex items-center justify-between gap-2 border-b border-dashed border-gray-800 pb-2">
+                            <p className="min-w-0 truncate text-[10px] font-medium text-gray-400">
+                              {fixture
+                                ? `${fixture.sport === "football" ? "⚽ " : ""}${fixture.competition ?? fixture.league} · ${matchDateLabel} (${fixture.time})`
+                                : text("Détails de la rencontre", "Fixture details")}
+                            </p>
+                            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${outcomeStyle(matchOutcome)}`}>
                               <span aria-hidden="true">{outcomeIcon(matchOutcome)}</span>
                               {outcomeLabel(matchOutcome)}
                             </span>
                           </div>
-                          {fixture?.score && <p className="mt-1 text-xs text-gray-400">{text("Score final :", "Final score:")} {fixture.score}</p>}
-                          <ul className="mt-3 space-y-2">
+                          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 py-2.5">
+                            <div className="flex min-w-0 items-center gap-2">
+                              {fixture?.homeImageUrl && (
+                                <Image src={fixture.homeImageUrl} alt="" width={24} height={24} unoptimized className="h-6 w-6 shrink-0 object-contain" />
+                              )}
+                              <h3 className="line-clamp-2 text-xs font-semibold text-white">{match.homeTeam}</h3>
+                            </div>
+                            <span className="text-[9px] font-bold uppercase tracking-wide text-gray-500">
+                              {fixture?.score ?? "VS"}
+                            </span>
+                            <div className="flex min-w-0 items-center justify-end gap-2 text-right">
+                              <h3 className="line-clamp-2 text-xs font-semibold text-white">{match.awayTeam}</h3>
+                              {fixture?.awayImageUrl && (
+                                <Image src={fixture.awayImageUrl} alt="" width={24} height={24} unoptimized className="h-6 w-6 shrink-0 object-contain" />
+                              )}
+                            </div>
+                          </div>
+                          <ul className="mt-2 space-y-1.5">
                             {match.picks.map(pick => {
                               const pickOutcomeValue = score ? settleCouponPick(pick, score) : null;
                               const pickOutcome: CouponOutcome = score
                                 ? pickOutcomeValue === null ? "unavailable" : pickOutcomeValue ? "won" : "lost"
                                 : finished ? "unavailable" : "pending";
                               return (
-                                <li key={`${pick.market}-${pick.selection}`} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                                <li key={`${pick.market}-${pick.selection}`} className="flex flex-wrap items-center justify-between gap-2 text-xs">
                                   <span className="text-gray-300">{getCouponPickLabel(pick)}</span>
-                                  <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs ${outcomeStyle(pickOutcome)}`}>
+                                  <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${outcomeStyle(pickOutcome)}`}>
                                     <span aria-hidden="true">{outcomeIcon(pickOutcome)}</span>
                                     {score || finished
                                       ? outcomeLabel(pickOutcome)
@@ -434,7 +460,7 @@ export default function BasketPage() {
                               );
                             })}
                           </ul>
-                          <Link href={`/match/${encodeURIComponent(match.fixtureId)}`} className="mt-3 inline-block text-xs font-semibold text-green-400 hover:text-green-300">
+                          <Link href={`/match/${encodeURIComponent(match.fixtureId)}`} className="mt-2 inline-block text-xs font-semibold text-fuchsia-400 hover:text-fuchsia-300">
                             {text("Voir le match →", "View fixture →")}
                           </Link>
                         </article>
