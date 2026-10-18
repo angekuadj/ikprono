@@ -359,24 +359,28 @@ export default function LiveFixtures() {
                       <span aria-hidden="true">
                         {incident.type === "goal"
                           ? "⚽"
-                          : incident.type === "penalty"
-                            ? "🥅"
-                            : incident.type === "red-card"
-                              ? "🟥"
-                              : incident.type === "var"
-                                ? "📺"
-                                : "⚡"}
+                          : incident.type === "goal-disallowed-offside"
+                            ? "📺"
+                            : incident.type === "penalty"
+                              ? "🥅"
+                              : incident.type === "red-card"
+                                ? "🟥"
+                                : incident.type === "var"
+                                  ? "📺"
+                                  : "⚡"}
                       </span>
                       <span className="font-bold uppercase tracking-wide">
                         {incident.type === "goal"
                           ? text("But", "Goal")
-                          : incident.type === "penalty"
-                            ? text("Pénalty", "Penalty")
-                            : incident.type === "red-card"
-                              ? text("Carton rouge", "Red card")
-                              : incident.type === "var"
-                                ? text("Vérification VAR", "VAR review")
-                                : text("Grosse occasion", "Big chance")}
+                          : incident.type === "goal-disallowed-offside"
+                            ? text("But annulé · hors-jeu (VAR)", "Goal disallowed · offside (VAR)")
+                            : incident.type === "penalty"
+                              ? text("Pénalty", "Penalty")
+                              : incident.type === "red-card"
+                                ? text("Carton rouge", "Red card")
+                                : incident.type === "var"
+                                  ? text("Vérification VAR", "VAR review")
+                                  : text("Grosse occasion", "Big chance")}
                       </span>
                       {incident.minute && <span>{incident.minute}′</span>}
                       {incident.player && <span className="truncate">{incident.player}</span>}

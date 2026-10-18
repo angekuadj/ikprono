@@ -44,7 +44,7 @@ export interface Fixture {
   status?: string;
   liveDisplay?: string;
   liveIncident?: {
-    type: "goal" | "penalty" | "red-card" | "var" | "big-chance";
+    type: "goal" | "goal-disallowed-offside" | "penalty" | "red-card" | "var" | "big-chance";
     minute: string;
     player?: string;
     side?: "home" | "away";

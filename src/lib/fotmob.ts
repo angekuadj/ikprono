@@ -657,7 +657,28 @@ function parseFotMobDetails(payload: unknown, matchId: string, source: "fotmob" 
       ...(type === "Half" && halfLabel === "FT" ? { period: "fulltime" as const } : {}),
     };
   });
+  const cancelledOffsideGoals = rawEvents.filter(isRecord).flatMap(event => {
+    if (!/\bvar\b/i.test(text(event.type))) return [];
+    const varData = isRecord(event.VAR) ? event.VAR : {};
+    const decision = isRecord(varData.decision) ? varData.decision : {};
+    const decisionParts = [decision.key, decision.value]
+      .flatMap(value => Array.isArray(value) ? value : [value])
+      .map(value => text(value).toLocaleLowerCase("en"));
+    const goalCancelled = decisionParts.some(value =>
+      /(?:^|_)goal_(?:cancelled|canceled|disallowed)(?:_|$)/.test(value)
+      || /goal ruled out|goal disallowed|but annul/.test(value)
+    );
+    if (!goalCancelled || !decisionParts.some(value => /^(offside|hors[- ]jeu)$/.test(value))) return [];
+    const player = isRecord(event.player) ? text(event.player.name) : text(event.player);
+    return [{
+      type: "goal-disallowed-offside" as const,
+      minute: text(event.timeStr) || text(event.time),
+      player,
+      ...(typeof event.isHome === "boolean" ? { side: event.isHome ? "home" as const : "away" as const } : {}),
+    }];
+  });
   const incidents = [
+    ...cancelledOffsideGoals,
     ...events.flatMap(event => {
       const normalizedType = event.type.toLocaleLowerCase("en");
       const normalizedDetail = (event.detail ?? "").toLocaleLowerCase("en");
