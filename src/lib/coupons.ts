@@ -8,13 +8,32 @@ export type CouponSelection =
   | "either-win"
   | "over-0.5"
   | "over-1.5"
-  | "over-2.5";
+  | "over-2.5"
+  | "over-3.5"
+  | "over-5.5"
+  | "over-8.5"
+  | "over-10.5"
+  | "under-0.5"
+  | "under-1.5"
+  | "under-2.5"
+  | "under-3.5"
+  | "home-1.5"
+  | "away-1.5"
+  | "home-2.5"
+  | "away-2.5"
+  | "scorer"
+  | "assist"
+  | "home-scorer"
+  | "away-scorer"
+  | "home-assist"
+  | "away-assist";
 
 export interface CouponPick {
-  market: "result" | "goals";
+  market: "result" | "goals" | "corners" | "handicap" | "scorer" | "assist";
   selection: CouponSelection | null;
   historicalRate: number | null;
   sampleSize: number;
+  team?: "home" | "away";
 }
 
 export interface CouponFixturePrediction {
@@ -53,7 +72,7 @@ export function uniqueGeneratedCoupons(coupons: GeneratedCoupon[]): GeneratedCou
   });
 }
 
-export type StatisticMarket = "shots" | "cards" | "corners" | "shots-on-target";
+export type StatisticMarket = "shots" | "cards" | "corners" | "shots-on-target" | "scorers";
 
 export interface StatisticMatchPrediction {
   fixtureId: string;
@@ -72,4 +91,19 @@ export interface GeneratedStatisticCoupon {
   description: string;
   matches: StatisticMatchPrediction[];
   estimatedCombinedRate: number;
+}
+
+export interface ScorerMatchPrediction {
+  fixtureId: string;
+  homeTeam: string;
+  awayTeam: string;
+  homeScorer: { name: string; position?: string; imageUrl?: string } | null;
+  awayScorer: { name: string; position?: string; imageUrl?: string } | null;
+  lineupType: string;
+}
+
+export interface GeneratedScorerCoupon {
+  title: string;
+  description: string;
+  matches: ScorerMatchPrediction[];
 }

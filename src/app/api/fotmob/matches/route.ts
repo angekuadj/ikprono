@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
     const day = await loadFotMobDay(isoDate);
     const payload: unknown = day.response;
     if (!isRecord(payload) || !Array.isArray(payload.leagues)) {
-      throw new Error("FotMob returned an invalid matches response.");
+      throw new Error("API returned an invalid matches response.");
     }
 
     const leagues: FotMobLeague[] = payload.leagues.map(value => {
@@ -116,11 +116,11 @@ export async function GET(request: NextRequest) {
         typeof value.name !== "string" ||
         !Array.isArray(value.matches)
       ) {
-        throw new Error("FotMob returned an invalid league in the matches response.");
+        throw new Error("API returned an invalid league in the matches response.");
       }
       const matches = value.matches.map(parseMatch);
       if (matches.some(match => match === null)) {
-        throw new Error(`FotMob returned invalid match data for ${value.name}.`);
+        throw new Error(`API returned invalid match data for ${value.name}.`);
       }
       return { id: value.id, name: value.name, matches: matches as FotMobMatch[] };
     });
@@ -132,12 +132,12 @@ export async function GET(request: NextRequest) {
       liveAvailable: day.source === "fotmob",
       ...(day.cachedAt ? { cachedAt: day.cachedAt } : {}),
       ...(day.source === "cache"
-        ? { warning: "Le flux live FotMob est indisponible. Ces données en cache peuvent être obsolètes ; veuillez réessayer plus tard." }
+        ? { warning: "Le flux live est indisponible. Ces données en cache peuvent être obsolètes ; veuillez réessayer plus tard." }
         : {}),
     });
   } catch (error) {
-    console.error("FotMob matches request failed.", error);
-    const message = error instanceof Error ? error.message : "Unable to load matches from FotMob.";
+    console.error("Matches request failed.", error);
+    const message = error instanceof Error ? error.message : "Unable to load matches.";
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

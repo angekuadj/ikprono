@@ -267,7 +267,7 @@ export default function LiveFixtures() {
             <p className="text-sm text-gray-300">
               {liveFilter === "watchable"
                 ? text("Matchs en direct disponibles sur Matchora", "Live matches available on Matchora")
-                : text("Matchs en direct depuis FotMob", "Live matches from FotMob")}
+                : text("Matchs en direct", "Live matches")}
               {liveFilter === "watchable" ? (
                 <span className="ml-2 text-green-400">
                   {text(`${filteredMatchoraMatches.length}/${matchoraMatches.length} match(s) regardable(s)`, `${filteredMatchoraMatches.length}/${matchoraMatches.length} watchable match(es)`)}

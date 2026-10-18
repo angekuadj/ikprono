@@ -8,7 +8,7 @@ import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { useFixtureStatuses } from "@/hooks/useFixtureStatuses";
 import { readFixtureBasket, writeFixtureBasket } from "@/lib/fixtureBasket";
 import { readGeneratedCombinations, writeGeneratedCombinations } from "@/lib/generatedCombinations";
-import { uniqueGeneratedCoupons, type GeneratedCoupon, type GeneratedStatisticCoupon, type CouponPick, type StatisticMarket } from "@/lib/coupons";
+import { uniqueGeneratedCoupons, type GeneratedCoupon, type GeneratedStatisticCoupon, type GeneratedScorerCoupon, type CouponPick, type StatisticMarket } from "@/lib/coupons";
 import type { Fixture, FixtureResponse } from "@/lib/fixtures";
 import { generateUUID } from "@/lib/uuid";
 import { exportCombinationPdf } from "@/lib/exportCombinationPdf";
@@ -39,6 +39,7 @@ const STATISTIC_MARKETS: { id: StatisticMarket; label: string; labelEn: string; 
   { id: "cards", label: "Cartons dans le match", labelEn: "Match cards", description: "Total des cartons jaunes et rouges", descriptionEn: "Combined yellow and red cards" },
   { id: "corners", label: "Corners dans le match", labelEn: "Match corners", description: "Total des corners des deux équipes", descriptionEn: "Combined corners from both teams" },
   { id: "shots-on-target", label: "Tirs cadrés dans le match", labelEn: "Shots on target", description: "Total des tirs cadrés des deux équipes", descriptionEn: "Combined shots on target from both teams" },
+  { id: "scorers", label: "Buteurs", labelEn: "Scorers", description: "Prédiction des buteurs probables dans les matchs", descriptionEn: "Prediction of likely scorers in matches" },
 ];
 const STATISTIC_RISK_TARGETS: Record<RiskLevel, number> = {
   "very-safe": 80,
@@ -113,6 +114,7 @@ export default function CombinationsPage() {
   const [statisticCount, setStatisticCount] = useState(3);
   const [aiSetupStep, setAiSetupStep] = useState<1 | 2>(1);
   const [statisticCoupon, setStatisticCoupon] = useState<GeneratedStatisticCoupon | null>(null);
+  const [scorerCoupon, setScorerCoupon] = useState<GeneratedScorerCoupon | null>(null);
   const [savedStatisticCombinations, setSavedStatisticCombinations] = useState<SavedStatisticCombination[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -415,6 +417,11 @@ export default function CombinationsPage() {
     setGenerating(true);
     setActionError("");
     try {
+      if (statisticMarket === "scorers") {
+        await generateScorerCombination(excludeFixtureIds);
+        return;
+      }
+
       const response = await fetch("/api/coupons/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -444,6 +451,45 @@ export default function CombinationsPage() {
       setActionError(error instanceof Error
         ? error.message
         : text("Impossible de générer cette combinaison statistique.", "Unable to generate this statistics combination."));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const generateScorerCombination = async (
+    excludeFixtureIds: string[] = []
+  ) => {
+    const remaining = requireGuestCombinationQuota();
+    if (remaining === 0) return;
+    setGenerating(true);
+    setActionError("");
+    try {
+      const response = await fetch("/api/coupons/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "scorer",
+          from: startDate,
+          to: endDate,
+          count: statisticCount,
+          excludeFixtureIds,
+          includeLive: liveOnly,
+          randomSelection,
+        }),
+      });
+      const payload = await response.json() as { coupon?: GeneratedScorerCoupon; error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error || text("Impossible de générer cette combinaison de buteurs.", "Unable to generate this scorer combination."));
+      }
+      if (!payload.coupon || !Array.isArray(payload.coupon.matches) || payload.coupon.matches.length === 0) {
+        throw new Error(text("Le service a renvoyé une combinaison invalide.", "The service returned an invalid combination."));
+      }
+      setScorerCoupon(payload.coupon);
+      recordGuestCombinations(1);
+    } catch (error) {
+      setActionError(error instanceof Error
+        ? error.message
+        : text("Impossible de générer cette combinaison de buteurs.", "Unable to generate this scorer combination."));
     } finally {
       setGenerating(false);
     }
@@ -736,6 +782,24 @@ export default function CombinationsPage() {
       "over-0.5": text("Plus de 0,5 but", "Over 0.5 goals"),
       "over-1.5": text("Plus de 1,5 buts", "Over 1.5 goals"),
       "over-2.5": text("Plus de 2,5 buts", "Over 2.5 goals"),
+      "over-3.5": text("Plus de 3,5 buts", "Over 3.5 goals"),
+      "under-0.5": text("Moins de 0,5 but", "Under 0.5 goals"),
+      "under-1.5": text("Moins de 1,5 buts", "Under 1.5 goals"),
+      "under-2.5": text("Moins de 2,5 buts", "Under 2.5 goals"),
+      "under-3.5": text("Moins de 3,5 buts", "Under 3.5 goals"),
+      "home-1.5": text("Domicile -1.5", "Home -1.5"),
+      "away-1.5": text("Extérieur -1.5", "Away -1.5"),
+      "home-2.5": text("Domicile -2.5", "Home -2.5"),
+      "away-2.5": text("Extérieur -2.5", "Away -2.5"),
+      scorer: text("Buteur (n'importe quand)", "Anytime scorer"),
+      assist: text("Passeur décisif (n'importe quand)", "Anytime assist"),
+      "home-scorer": text("Buteur domicile (n'importe quand)", "Home scorer (anytime)"),
+      "away-scorer": text("Buteur extérieur (n'importe quand)", "Away scorer (anytime)"),
+      "home-assist": text("Passeur décisif domicile (n'importe quand)", "Home assist (anytime)"),
+      "away-assist": text("Passeur décisif extérieur (n'importe quand)", "Away assist (anytime)"),
+      "over-5.5": text("Plus de 5,5 corners", "Over 5.5 corners"),
+      "over-8.5": text("Plus de 8,5 corners", "Over 8.5 corners"),
+      "over-10.5": text("Plus de 10,5 corners", "Over 10.5 corners"),
     };
     return labels[pick.selection];
   };
@@ -1514,6 +1578,111 @@ export default function CombinationsPage() {
                   {generating ? text("Génération…", "Generating…") : text("Générer ma combinaison", "Generate my combination")}
                 </button>
               </>
+            )}
+
+            {scorerCoupon && (
+              <section className="mt-8 border-t border-gray-800 pt-6" aria-label={text("Combinaison de buteurs générée", "Generated scorer combination")}>
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">{scorerCoupon.title}</h3>
+                    <p className="mt-1 text-sm text-gray-400">{scorerCoupon.description}</p>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {scorerCoupon.matches.map(match => (
+                    <article key={match.fixtureId} className="rounded-lg border border-gray-800 bg-black/30 p-4">
+                      <div className="flex items-start justify-between gap-2">
+                        <h4 className="font-semibold text-white">{match.homeTeam} — {match.awayTeam}</h4>
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-4">
+                        {match.homeScorer ? (
+                          <div className="flex items-center gap-3">
+                            {match.homeScorer.imageUrl && (
+                              <img src={match.homeScorer.imageUrl} alt={match.homeScorer.name} className="h-12 w-12 rounded-full object-cover" />
+                            )}
+                            <div>
+                              <p className="text-sm font-semibold text-white">{match.homeScorer.name}</p>
+                              <p className="text-xs text-gray-400">{match.homeTeam} · {match.homeScorer.position ?? ""}</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-3 text-xs text-gray-500">
+                            <span>{text("Aucun buteur", "No scorer")}</span>
+                            <span>{match.homeTeam}</span>
+                          </div>
+                        )}
+                        {match.awayScorer ? (
+                          <div className="flex items-center gap-3">
+                            {match.awayScorer.imageUrl && (
+                              <img src={match.awayScorer.imageUrl} alt={match.awayScorer.name} className="h-12 w-12 rounded-full object-cover" />
+                            )}
+                            <div>
+                              <p className="text-sm font-semibold text-white">{match.awayScorer.name}</p>
+                              <p className="text-xs text-gray-400">{match.awayTeam} · {match.awayScorer.position ?? ""}</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-3 text-xs text-gray-500">
+                            <span>{text("Aucun buteur", "No scorer")}</span>
+                            <span>{match.awayTeam}</span>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500">{match.lineupType}</p>
+                      <Link href={`/match/${encodeURIComponent(match.fixtureId)}`} className="mt-3 inline-block text-xs font-semibold text-green-400 hover:text-green-300">
+                        {text("Voir le match →", "View fixture →")}
+                      </Link>
+                    </article>
+                  ))}
+                </div>
+                <div className="mt-4 space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActionError("");
+                      setActionNotice("");
+                      try {
+                        const saved = readSavedStatisticCombinations();
+                        const newSaved: SavedStatisticCombination = {
+                          id: generateUUID(),
+                          createdAt: new Date().toISOString(),
+                          coupon: {
+                            ...scorerCoupon,
+                            matches: scorerCoupon.matches.map(match => ({
+                              fixtureId: match.fixtureId,
+                              homeTeam: match.homeTeam,
+                              awayTeam: match.awayTeam,
+                              market: "scorers" as StatisticMarket,
+                              selection: "over" as const,
+                              line: 0.5,
+                              historicalRate: 70,
+                              sampleSize: 100,
+                            })),
+                            estimatedCombinedRate: 70,
+                            riskLevel: "medium",
+                          },
+                        };
+                        writeSavedStatisticCombinations([...saved, newSaved]);
+                        setSavedStatisticCombinations([...saved, newSaved]);
+                        setActionNotice(text("La combinaison a été enregistrée.", "Combination saved."));
+                      } catch (error) {
+                        setActionError(error instanceof Error ? error.message : text("Impossible d'enregistrer la combinaison.", "Unable to save combination."));
+                      }
+                    }}
+                    className="rounded-lg border border-green-700 bg-green-950/40 px-3 py-2 text-xs font-semibold text-green-200 transition hover:bg-green-900/50"
+                  >
+                    {text("Enregistrer", "Save")}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void generateScorerCombination(scorerCoupon.matches.map(match => match.fixtureId))}
+                  disabled={authLoading || !canGenerateCombination || generating}
+                  className="mt-5 rounded-lg border border-green-700 px-4 py-2 text-sm font-semibold text-green-200 hover:bg-green-950/50 disabled:cursor-wait disabled:opacity-50"
+                >
+                  {generating ? text("Génération…", "Generating…") : text("Proposer une autre", "Suggest another")}
+                </button>
+              </section>
             )}
 
             {statisticCoupon && (

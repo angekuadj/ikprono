@@ -47,8 +47,28 @@ export function settleCouponPick(pick: CouponPick, score: [number, number]): boo
       case "over-0.5": return homeGoals + awayGoals >= 1;
       case "over-1.5": return homeGoals + awayGoals >= 2;
       case "over-2.5": return homeGoals + awayGoals >= 3;
+      case "over-3.5": return homeGoals + awayGoals >= 4;
+      case "under-0.5": return homeGoals + awayGoals === 0;
+      case "under-1.5": return homeGoals + awayGoals <= 1;
+      case "under-2.5": return homeGoals + awayGoals <= 2;
+      case "under-3.5": return homeGoals + awayGoals <= 3;
       default: return null;
     }
+  }
+
+  if (pick.market === "handicap") {
+    const goalDiff = homeGoals - awayGoals;
+    switch (pick.selection) {
+      case "home-1.5": return goalDiff >= 2;
+      case "away-1.5": return goalDiff <= -2;
+      case "home-2.5": return goalDiff >= 3;
+      case "away-2.5": return goalDiff <= -3;
+      default: return null;
+    }
+  }
+
+  if (pick.market === "corners" || pick.market === "scorer") {
+    return null;
   }
 
   return null;

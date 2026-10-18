@@ -36,6 +36,14 @@ export interface FotMobPlayer {
   y?: number;
 }
 
+export interface FixtureTopScorer {
+  name: string;
+  team: string;
+  goals: number;
+  position?: string;
+  imageUrl?: string;
+}
+
 export interface FotMobUnavailablePlayer {
   name: string;
   type: string;
@@ -99,6 +107,8 @@ export interface FotMobDetails {
     home: Array<{ number?: number; name: string; position: string; rating?: string; imageUrl?: string }>;
     away: Array<{ number?: number; name: string; position: string; rating?: string; imageUrl?: string }>;
   };
+  leagueId?: string;
+  topScorers?: FixtureTopScorer[];
   stats: Map<string, { home: string; away: string }>;
   history: FixtureHistory;
   historyMatchIds: string[];
@@ -213,7 +223,7 @@ async function fetchFotMob<T>(url: string): Promise<T> {
   });
   const contentType = response.headers.get("content-type") ?? "";
   if (!response.ok || !contentType.includes("application/json")) {
-    throw new Error(`FotMob returned an invalid response (HTTP ${response.status}).`);
+    throw new Error(`API returned an invalid response (HTTP ${response.status}).`);
   }
   return response.json() as Promise<T>;
 }
@@ -227,17 +237,17 @@ export function isIsoDate(value: string): boolean {
 function fixturesFromFotMobResponse(response: unknown, date: string): Fixture[] {
   const payload = response;
   if (!isRecord(payload) || !Array.isArray(payload.leagues)) {
-    throw new Error("FotMob returned an invalid matches response.");
+    throw new Error("API returned an invalid matches response.");
   }
   const fixtures: Fixture[] = [];
   for (const league of payload.leagues) {
     if (!isRecord(league) || typeof league.name !== "string" || !Array.isArray(league.matches)) {
-      throw new Error("FotMob returned an invalid league in the matches response.");
+      throw new Error("API returned an invalid league in the matches response.");
     }
     for (const match of league.matches) {
-      if (!isRecord(match)) throw new Error(`FotMob returned invalid match data for ${league.name}.`);
+      if (!isRecord(match)) throw new Error(`API returned invalid match data for ${league.name}.`);
       const fixture = mapMatch(match, league.name, date);
-      if (!fixture) throw new Error(`FotMob returned invalid match data for ${league.name}.`);
+      if (!fixture) throw new Error(`API returned invalid match data for ${league.name}.`);
       fixtures.push(fixture);
     }
   }
@@ -259,7 +269,7 @@ export async function loadFotMobDay(date: string): Promise<{
     try {
       await saveFotMobDailyResponse(date, payload, fixtures);
     } catch (cacheError) {
-      console.error(`Could not save FotMob matches for ${date} to PostgreSQL cache.`, cacheError);
+      console.error(`Could not save matches for ${date} to PostgreSQL cache.`, cacheError);
     }
     return { response: payload, fixtures, source: "fotmob" };
   } catch (apiError) {
@@ -274,10 +284,10 @@ export async function loadFotMobDay(date: string): Promise<{
         };
       }
     } catch (cacheError) {
-      console.error(`Could not read FotMob matches cache for ${date}.`, cacheError);
+      console.error(`Could not read matches cache for ${date}.`, cacheError);
       throw new AggregateError(
         [apiError, cacheError],
-        "FotMob is unavailable and the PostgreSQL match cache could not be read."
+        "Data source is unavailable and the PostgreSQL match cache could not be read."
       );
     }
     throw apiError;
@@ -523,7 +533,7 @@ async function loadFotMobRecapSummary(details: FotMobDetails, payload: unknown):
     }
   } catch (error) {
     const matchId = isRecord(payload) && isRecord(payload.general) ? text(payload.general.matchId) : "unknown";
-    console.error(`Could not load FotMob recap article for match ${matchId}.`, error);
+    console.error(`Could not load recap article for match ${matchId}.`, error);
   }
 }
 
@@ -546,18 +556,21 @@ function mapFotMobMomentum(payload: UnknownRecord, facts: UnknownRecord): FotMob
 }
 
 function parseFotMobDetails(payload: unknown, matchId: string, source: "fotmob" | "cache", cachedAt?: string): FotMobDetails {
-  if (!/^\d{1,20}$/.test(matchId)) throw new Error("Provide a valid FotMob match ID.");
+  if (!/^\d{1,20}$/.test(matchId)) throw new Error("Provide a valid match ID.");
   if (!isRecord(payload) || !isRecord(payload.general) || !isRecord(payload.header)) {
-    throw new Error("FotMob returned an invalid match details response.");
+    throw new Error("API returned an invalid match details response.");
   }
   const general = payload.general;
   const header = payload.header;
   const content = isRecord(payload.content) ? payload.content : {};
+  const table = isRecord(content.table) ? content.table : {};
+  const tableUrl = text(table.url);
+  const leagueId = tableUrl.match(/tables\.ext\.(\d+)\.fot\.gz$/)?.[1] ?? text(table.leagueId).match(/^\d+$/)?.[0];
   const facts = isRecord(content.matchFacts) ? content.matchFacts : {};
   const teams = Array.isArray(header.teams) ? header.teams : [];
   const home = teams[0];
   const away = teams[1];
-  if (!isRecord(home) || !isRecord(away)) throw new Error("FotMob returned incomplete team data.");
+  if (!isRecord(home) || !isRecord(away)) throw new Error("API returned incomplete team data.");
   const status = isRecord(header.status) ? header.status : {};
   const date = isoDate(general.matchTimeUTCDate) || isoDate(general.matchTimeUTC);
   const time = isRecord(status.liveTime) ? text(status.liveTime.short) : "";
@@ -818,6 +831,7 @@ function parseFotMobDetails(payload: unknown, matchId: string, source: "fotmob" 
     comments,
     ...(recap ? { recap } : {}),
     momentum,
+    ...(leagueId ? { leagueId } : {}),
     topPlayers,
     stats,
     history: { confrontations, recentMatches },
@@ -885,7 +899,7 @@ async function loadFotMobStandingsFromApi(payload: unknown): Promise<{ leagueId:
     throw new Error(`FotMob standings request failed (HTTP ${response.status}).`);
   }
   const standings = parseFotMobStandings(await response.text());
-  if (standings.length === 0) throw new Error("FotMob returned no standings rows.");
+  if (standings.length === 0) throw new Error("API returned no standings rows.");
   return { leagueId, standings };
 }
 
@@ -897,7 +911,7 @@ async function loadFotMobStandings(payload: unknown): Promise<FixtureStanding[]>
     try {
       await saveFotMobStandings(result.leagueId, result.standings);
     } catch (cacheError) {
-      console.error(`Could not save FotMob standings for league ${result.leagueId} to PostgreSQL cache.`, cacheError);
+      console.error(`Could not save standings for league ${result.leagueId} to PostgreSQL cache.`, cacheError);
     }
     return result.standings;
   } catch (apiError) {
@@ -907,26 +921,93 @@ async function loadFotMobStandings(payload: unknown): Promise<FixtureStanding[]>
     leagueId = tableUrl.match(/tables\.ext\.(\d+)\.fot\.gz$/)?.[1]
       ?? text(table.leagueId).match(/^\d+$/)?.[0];
     if (!leagueId) {
-      console.error("Could not load FotMob standings.", apiError);
+      console.error("Could not load standings.", apiError);
       return [];
     }
     try {
       const cached = await loadCachedFotMobStandings(leagueId);
       if (cached) return cached.standings;
     } catch (cacheError) {
-      console.error(`Could not read FotMob standings cache for league ${leagueId}.`, cacheError);
+      console.error(`Could not read standings cache for league ${leagueId}.`, cacheError);
       throw new AggregateError(
         [apiError, cacheError],
-        `FotMob standings are unavailable and the PostgreSQL cache for league ${leagueId} could not be read.`
+        `Standings are unavailable and the PostgreSQL cache for league ${leagueId} could not be read.`
       );
     }
-    console.error(`FotMob standings are unavailable for league ${leagueId}; no cached table was found.`, apiError);
+    console.error(`Standings are unavailable for league ${leagueId}; no cached table was found.`, apiError);
+    return [];
+  }
+}
+
+function isTopScorer(value: unknown): value is FixtureTopScorer {
+  return (
+    typeof value === "object"
+    && value !== null
+    && "name" in value && typeof (value as Record<string, unknown>).name === "string"
+    && "team" in value && typeof (value as Record<string, unknown>).team === "string"
+    && "goals" in value && Number.isFinite(Number((value as Record<string, unknown>).goals))
+  );
+}
+
+function parseFotMobTopScorers(data: unknown): FixtureTopScorer[] {
+  if (!isRecord(data)) return [];
+  const candidates: unknown[] = [];
+  for (const key of ["topscorers", "topScorers", "players", "list", "items", "data"]) {
+    const value = (data as Record<string, unknown>)[key];
+    if (Array.isArray(value)) {
+      candidates.push(...value);
+      break;
+    }
+  }
+  if (candidates.length === 0 && Array.isArray(data)) {
+    candidates.push(...data);
+  }
+  return candidates
+    .filter(isTopScorer)
+    .map(value => {
+      const record = value as unknown as Record<string, unknown>;
+      return {
+        name: String(record.name),
+        team: String(record.team),
+        goals: Number(record.goals),
+        ...(typeof record.position === "string" ? { position: String(record.position) } : {}),
+        ...(typeof record.imageUrl === "string" ? { imageUrl: String(record.imageUrl) } : {}),
+      };
+    });
+}
+
+async function loadFotMobTopScorersFromApi(leagueId: string): Promise<FixtureTopScorer[]> {
+  try {
+    const response = await fetch(`https://data.fotmob.com/topscorers.ext.${leagueId}.fot.gz`, {
+      headers: { Accept: "application/json, text/plain, */*", "User-Agent": "IkProno/1.0 (FotMob data)" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!response.ok) return [];
+    const payload = await response.text();
+    let data: unknown;
+    try {
+      data = JSON.parse(payload);
+    } catch {
+      return [];
+    }
+    return parseFotMobTopScorers(data);
+  } catch {
+    return [];
+  }
+}
+
+export async function loadFotMobTopScorers(leagueId: string): Promise<FixtureTopScorer[]> {
+  if (!leagueId) return [];
+  try {
+    return await loadFotMobTopScorersFromApi(leagueId);
+  } catch {
     return [];
   }
 }
 
 export async function loadFotMobDetails(matchId: string): Promise<FotMobDetails> {
-  if (!/^\d{1,20}$/.test(matchId)) throw new Error("Provide a valid FotMob match ID.");
+  if (!/^\d{1,20}$/.test(matchId)) throw new Error("Provide a valid match ID.");
   try {
     const payload: unknown = await fetchFotMob(
       `https://www.fotmob.com/api/data/matchDetails?matchId=${encodeURIComponent(matchId)}`
@@ -934,10 +1015,18 @@ export async function loadFotMobDetails(matchId: string): Promise<FotMobDetails>
     const details = parseFotMobDetails(payload, matchId, "fotmob");
     await loadFotMobRecapSummary(details, payload);
     details.standings = await loadFotMobStandings(payload);
+    if (details.leagueId) {
+      try {
+        details.topScorers = await loadFotMobTopScorers(details.leagueId);
+      } catch (error) {
+        console.error(`Could not load top scorers for league ${details.leagueId}.`, error);
+        details.topScorers = [];
+      }
+    }
     try {
       await saveFotMobMatchDetails(matchId, payload);
     } catch (cacheError) {
-      console.error(`Could not save FotMob details for ${matchId} to PostgreSQL cache.`, cacheError);
+      console.error(`Could not save details for ${matchId} to PostgreSQL cache.`, cacheError);
     }
     return details;
   } catch (apiError) {
@@ -950,10 +1039,10 @@ export async function loadFotMobDetails(matchId: string): Promise<FotMobDetails>
         return details;
       }
     } catch (cacheError) {
-      console.error(`Could not read FotMob details cache for ${matchId}.`, cacheError);
+      console.error(`Could not read details cache for ${matchId}.`, cacheError);
       throw new AggregateError(
         [apiError, cacheError],
-        "FotMob is unavailable and the PostgreSQL match-details cache could not be read."
+        "Data source is unavailable and the PostgreSQL match-details cache could not be read."
       );
     }
     throw apiError;
@@ -968,7 +1057,7 @@ export async function loadFixturesFromFotMobByIds(ids: string[]): Promise<Fixtur
       try {
         return (await loadFotMobDetails(id)).fixture;
       } catch (apiError) {
-        console.error(`Could not load current FotMob match ${id}; checking the PostgreSQL fixture cache.`, apiError);
+        console.error(`Could not load current match ${id}; checking the PostgreSQL fixture cache.`, apiError);
         const cached = await loadCachedFotMobFixturesByIds([id]);
         if (cached.length > 0) return cached[0];
         throw apiError;

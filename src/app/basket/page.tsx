@@ -59,6 +59,7 @@ export default function BasketPage() {
   const [couponErrors, setCouponErrors] = useState<Record<string, string>>({});
   const [generatingSelectionId, setGeneratingSelectionId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<BasketTab>("basket");
+  const [expandedCombinations, setExpandedCombinations] = useState<Set<string>>(new Set());
   const trackedFixtures = useMemo(
     () => [...fixtures, ...generatedCombinations.flatMap(combination => combination.fixtures), ...savedSelections.flatMap(selection => selection.fixtures)],
     [fixtures, generatedCombinations, savedSelections]
@@ -272,6 +273,24 @@ export default function BasketPage() {
       "over-0.5": text("Plus de 0,5 but", "Over 0.5 goals"),
       "over-1.5": text("Plus de 1,5 buts", "Over 1.5 goals"),
       "over-2.5": text("Plus de 2,5 buts", "Over 2.5 goals"),
+      "over-3.5": text("Plus de 3,5 buts", "Over 3.5 goals"),
+      "under-0.5": text("Moins de 0,5 but", "Under 0.5 goals"),
+      "under-1.5": text("Moins de 1,5 buts", "Under 1.5 goals"),
+      "under-2.5": text("Moins de 2,5 buts", "Under 2.5 goals"),
+      "under-3.5": text("Moins de 3,5 buts", "Under 3.5 goals"),
+      "home-1.5": text("Domicile -1.5", "Home -1.5"),
+      "away-1.5": text("Extérieur -1.5", "Away -1.5"),
+      "home-2.5": text("Domicile -2.5", "Home -2.5"),
+      "away-2.5": text("Extérieur -2.5", "Away -2.5"),
+      scorer: text("Buteur (n'importe quand)", "Anytime scorer"),
+      assist: text("Passeur décisif (n'importe quand)", "Anytime assist"),
+      "home-scorer": text("Buteur domicile (n'importe quand)", "Home scorer (anytime)"),
+      "away-scorer": text("Buteur extérieur (n'importe quand)", "Away scorer (anytime)"),
+      "home-assist": text("Passeur décisif domicile (n'importe quand)", "Home assist (anytime)"),
+      "away-assist": text("Passeur décisif extérieur (n'importe quand)", "Away assist (anytime)"),
+      "over-5.5": text("Plus de 5,5 corners", "Over 5.5 corners"),
+      "over-8.5": text("Plus de 8,5 corners", "Over 8.5 corners"),
+      "over-10.5": text("Plus de 10,5 corners", "Over 10.5 corners"),
     };
     return labels[pick.selection];
   };
@@ -358,6 +377,18 @@ export default function BasketPage() {
       probabilityPercent: estimatedProbability * 100,
       estimatedOdds: estimatedProbability > 0 ? 1 / estimatedProbability : null,
     };
+  };
+
+  const toggleCombinationExpansion = (combinationId: string) => {
+    setExpandedCombinations(prev => {
+      const next = new Set(prev);
+      if (next.has(combinationId)) {
+        next.delete(combinationId);
+      } else {
+        next.add(combinationId);
+      }
+      return next;
+    });
   };
   const basketMarketPicks = fixtures.flatMap(fixture => marketSelections[fixture.id] ?? []);
   const basketEstimate = combinationMarketEstimate(basketMarketPicks);
@@ -447,53 +478,68 @@ export default function BasketPage() {
                 </Link>
               </div>
             ) : (
-              generatedCombinations.slice().reverse().map(combination => (
-                <article key={combination.id} className="overflow-hidden rounded-2xl border border-green-900/70 bg-gradient-to-br from-gray-900 to-gray-950 shadow-lg shadow-black/30">
-                  <header className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-800 p-4 sm:px-5">
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-fuchsia-400">
-                        {text("Combinaison déjà générée", "Already generated combination")}
-                      </p>
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <h2 className="text-lg font-bold text-white sm:text-xl">{combination.coupon.title}</h2>
-                        {(() => {
-                          const outcome = couponOutcome(combination.coupon, combination.fixtures);
-                          return (
-                            <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${outcomeStyle(outcome)}`}>
-                              <span aria-hidden="true">{outcomeIcon(outcome)}</span>
-                              {outcomeLabel(outcome)}
-                            </span>
-                          );
-                        })()}
+              generatedCombinations.slice().reverse().map(combination => {
+                const isExpanded = expandedCombinations.has(combination.id);
+                const outcome = couponOutcome(combination.coupon, combination.fixtures);
+                return (
+                  <article key={combination.id} className="overflow-hidden rounded-2xl border border-green-900/70 bg-gradient-to-br from-gray-900 to-gray-950 shadow-lg shadow-black/30">
+                    <header className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-800 p-4 sm:px-5">
+                      <div className="min-w-0 flex-1">
+                        <button
+                          type="button"
+                          onClick={() => toggleCombinationExpansion(combination.id)}
+                          className="flex w-full items-start gap-2 text-left"
+                        >
+                          <svg
+                            className={`h-5 w-5 shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-semibold uppercase tracking-wider text-fuchsia-400">
+                              {text("Combinaison déjà générée", "Already generated combination")}
+                            </p>
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              <h2 className="text-lg font-bold text-white sm:text-xl">{combination.coupon.title}</h2>
+                              <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${outcomeStyle(outcome)}`}>
+                                <span aria-hidden="true">{outcomeIcon(outcome)}</span>
+                                {outcomeLabel(outcome)}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs text-gray-400">{combination.coupon.description}</p>
+                            <p className="mt-1.5 text-[11px] text-gray-500">{new Date(combination.createdAt).toLocaleString(locale)}</p>
+                          </div>
+                        </button>
                       </div>
-                      <p className="mt-1 text-xs text-gray-400">{combination.coupon.description}</p>
-                      <p className="mt-1.5 text-[11px] text-gray-500">{new Date(combination.createdAt).toLocaleString(locale)}</p>
-                    </div>
-                    <div className="flex flex-wrap items-center justify-end gap-2">
-                      {typeof combination.coupon.estimatedCombinedRate === "number" && (
-                        <span className="rounded-full border border-green-800 bg-green-950/60 px-3 py-1 text-xs font-semibold text-green-200">
-                          {text("Estimation indicative", "Indicative estimate")} {combination.coupon.estimatedCombinedRate}%
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => exportGeneratedCombinationPdf(combination)}
-                        title={text("Ouvrir l’impression et choisir « Enregistrer au format PDF »", "Open print and choose “Save as PDF”")}
-                        className="rounded-lg border border-green-700 px-3 py-1.5 text-xs font-semibold text-green-200 transition hover:bg-green-950/50"
-                      >
-                        {text("Exporter PDF", "Export PDF")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeGeneratedCombination(combination.id)}
-                        aria-label={text("Retirer cette combinaison", "Remove this combination")}
-                        className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-gray-700 text-gray-400 transition hover:border-red-700 hover:text-red-300"
-                      >
-                        <span aria-hidden="true">×</span>
-                      </button>
-                    </div>
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        {typeof combination.coupon.estimatedCombinedRate === "number" && (
+                          <span className="rounded-full border border-green-800 bg-green-950/60 px-3 py-1 text-xs font-semibold text-green-200">
+                            {text("Estimation indicative", "Indicative estimate")} {combination.coupon.estimatedCombinedRate}%
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => exportGeneratedCombinationPdf(combination)}
+                          title={text("Ouvrir l’impression et choisir « Enregistrer au format PDF »", "Open print and choose “Save as PDF”")}
+                          className="rounded-lg border border-green-700 px-3 py-1.5 text-xs font-semibold text-green-200 transition hover:bg-green-950/50"
+                        >
+                          {text("Exporter PDF", "Export PDF")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeGeneratedCombination(combination.id)}
+                          aria-label={text("Retirer cette combinaison", "Remove this combination")}
+                          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-gray-700 text-gray-400 transition hover:border-red-700 hover:text-red-300"
+                        >
+                          <span aria-hidden="true">×</span>
+                        </button>
+                      </div>
                   </header>
-                  <div className="grid gap-2.5 p-3 sm:grid-cols-2 sm:p-4">
+                  {isExpanded && (
+                    <div className="grid gap-2.5 p-3 sm:grid-cols-2 sm:p-4">
                     {combination.coupon.matches.map(match => {
                       const fixture = fixturesById[match.fixtureId] ?? combination.fixtures.find(item => item.id === match.fixtureId);
                       const matchOutcome = settleCouponMatch(match, fixture);
@@ -562,9 +608,11 @@ export default function BasketPage() {
                         </article>
                       );
                     })}
-                  </div>
+                    </div>
+                  )}
                 </article>
-              ))
+                );
+              })
             )}
           </section>
         )}
@@ -797,7 +845,7 @@ export default function BasketPage() {
                         type="button"
                         onClick={() => removeFixture(fixture.id)}
                         aria-label={text(`Retirer ${fixture.homeTeam} — ${fixture.awayTeam}`, `Remove ${fixture.homeTeam} — ${fixture.awayTeam}`)}
-                        className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-gray-700 text-gray-400 transition hover:border-red-700 hover:bg-red-950/40 hover:text-red-300"
+                          className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-gray-700 text-gray-400 transition hover:border-red-700 hover:bg-red-950/40 hover:text-red-300"
                       >
                         <span aria-hidden="true">×</span>
                       </button>

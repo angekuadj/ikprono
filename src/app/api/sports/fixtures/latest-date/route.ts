@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   } catch (error) {
     const message = error instanceof Error
       ? error.message
-      : "Unable to load the current fixture date from FotMob.";
+      : "Unable to load the current fixture date.";
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

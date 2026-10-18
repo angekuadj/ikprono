@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
         marketEstimates[result.value.fixtureId] = result.value;
       } else {
         errors.push(batch[index]);
-        console.error(`Could not estimate markets for FotMob fixture ${batch[index]}.`, result.reason);
+        console.error(`Could not estimate markets for fixture ${batch[index]}.`, result.reason);
       }
     });
   }

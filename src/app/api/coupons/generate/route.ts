@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
   try {
     const fixtures = await loadFixturesFromFotMobByIds(fixtureIds);
     if (fixtures.length !== fixtureIds.length) {
-      return NextResponse.json({ error: "One or more FotMob fixtures were not found." }, { status: 404 });
+      return NextResponse.json({ error: "One or more fixtures were not found." }, { status: 404 });
     }
     const coupons = await generateFotMobCoupons(fixtures, riskLevel, 3);
     const scriptPath = path.join(process.cwd(), "scripts", "generate_coupons.py");
@@ -74,8 +74,8 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json(result);
   } catch (error) {
-    console.error("FotMob coupon generation failed.", error);
-    const message = error instanceof Error ? error.message : "Unable to generate coupons from FotMob.";
+    console.error("Coupon generation failed.", error);
+    const message = error instanceof Error ? error.message : "Unable to generate coupons.";
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

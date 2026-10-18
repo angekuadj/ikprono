@@ -10,7 +10,7 @@ function cachedResponse(fixtures: Awaited<ReturnType<typeof loadFotMobLiveFixtur
     liveAvailable: false,
     source: "cache",
     ...(fixtures?.cachedAt ? { cachedAt: fixtures.cachedAt } : {}),
-    warning: "Le flux live FotMob est indisponible. Les dernières données enregistrées peuvent être obsolètes ; veuillez réessayer plus tard.",
+    warning: "Le flux live est indisponible. Les dernières données enregistrées peuvent être obsolètes ; veuillez réessayer plus tard.",
   });
 }
 
@@ -26,7 +26,7 @@ export async function GET() {
         liveAvailable: false,
         source: "cache",
         cachedAt: day.cachedAt,
-        warning: "Le flux live FotMob est indisponible. Les dernières données enregistrées peuvent être obsolètes ; veuillez réessayer plus tard.",
+        warning: "Le flux live est indisponible. Les dernières données enregistrées peuvent être obsolètes ; veuillez réessayer plus tard.",
       });
     }
     const fixtures = day.fixtures.filter(fixture => fixture.status === "En direct");
@@ -36,16 +36,16 @@ export async function GET() {
     try {
       await saveFotMobLiveFixtures(fixtures);
     } catch (cacheError) {
-      console.error("Could not save current FotMob live fixtures to PostgreSQL cache.", cacheError);
+      console.error("Could not save current live fixtures to PostgreSQL cache.", cacheError);
     }
     return NextResponse.json({ fixtures, liveAvailable: true, source: "fotmob" });
   } catch (error) {
-    console.error("FotMob live fixture request failed.", error);
+    console.error("Live fixture request failed.", error);
     let cachedLive: Awaited<ReturnType<typeof loadFotMobLiveFixtures>> = null;
     try {
       cachedLive = await loadFotMobLiveFixtures();
     } catch (cacheError) {
-      console.error("Could not read cached FotMob live fixtures.", cacheError);
+      console.error("Could not read cached live fixtures.", cacheError);
     }
     return NextResponse.json({
       fixtures: cachedLive?.fixtures ?? [],

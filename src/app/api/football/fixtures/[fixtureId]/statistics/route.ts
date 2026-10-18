@@ -136,8 +136,8 @@ export async function GET(
     };
     return NextResponse.json(matchStats);
   } catch (error) {
-    console.error("FotMob match statistics request failed.", error);
-    const message = error instanceof Error ? error.message : "Unable to load match statistics from FotMob.";
+    console.error("Match statistics request failed.", error);
+    const message = error instanceof Error ? error.message : "Unable to load match statistics.";
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

@@ -8,7 +8,7 @@ export async function GET(
   { params }: { params: { matchId: string } }
 ) {
   if (!/^\d{1,20}$/.test(params.matchId)) {
-    return NextResponse.json({ error: "Provide a valid FotMob match ID." }, { status: 400 });
+    return NextResponse.json({ error: "Provide a valid match ID." }, { status: 400 });
   }
 
   try {
@@ -92,8 +92,8 @@ export async function GET(
       },
     });
   } catch (error) {
-    console.error(`FotMob match details request failed for ${params.matchId}.`, error);
-    const message = error instanceof Error ? error.message : "Unable to load FotMob match details.";
+    console.error(`Match details request failed for ${params.matchId}.`, error);
+    const message = error instanceof Error ? error.message : "Unable to load match details.";
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

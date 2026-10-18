@@ -766,7 +766,7 @@ export default function MatchStatisticsClient({ fixtureId }: { fixtureId: string
     <div className="mt-6">
       {stats.source === "cache" && (
         <p role="status" className="mb-5 rounded-lg border border-amber-700/60 bg-amber-950/40 p-4 text-sm text-amber-200">
-          Le flux live FotMob est indisponible. Les dernières données PostgreSQL sont affichées et peuvent être obsolètes ; veuillez réessayer plus tard.
+          Le flux live est indisponible. Les dernières données sont affichées et peuvent être obsolètes ; veuillez réessayer plus tard.
           {stats.cachedAt && <span className="ml-1">{new Date(stats.cachedAt).toLocaleString("fr-FR")}</span>}
         </p>
       )}
@@ -1172,8 +1172,8 @@ export default function MatchStatisticsClient({ fixtureId }: { fixtureId: string
                 </h2>
                 <p className="mt-1 text-sm text-gray-400">
                   {isLiveMatch
-                    ? text('Composition publiée par FotMob pour ce match en direct.', 'Lineup published by FotMob for this live match.')
-                    : text('Estimations fournies par FotMob, susceptibles de changer avant le coup d’envoi.', 'Estimates provided by FotMob; they may change before kick-off.')}
+                    ? text('Composition publiée pour ce match en direct.', 'Lineup published for this live match.')
+                    : text('Estimations fournies, susceptibles de changer avant le coup d’envoi.', 'Estimates provided; they may change before kick-off.')}
                 </p>
               </div>
               <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${
@@ -1232,7 +1232,7 @@ export default function MatchStatisticsClient({ fixtureId }: { fixtureId: string
                   {text('Joueurs blessés ou indisponibles', 'Injured or unavailable players')}
                 </h2>
                 <p className="text-sm text-gray-400">
-                  {text('Informations signalées dans la fiche FotMob.', 'Information reported in the FotMob match details.')}
+                  {text('Informations signalées dans la fiche du match.', 'Information reported in the match details.')}
                 </p>
               </div>
             </div>

@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (selectedSport !== "all" && selectedSport !== "football") {
-    return NextResponse.json({ error: "Unsupported sport. FotMob match data is available for football only." }, { status: 400 });
+    return NextResponse.json({ error: "Unsupported sport. Match data is available for football only." }, { status: 400 });
   }
 
   try {
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
     const last = new Date(`${to}T00:00:00.000Z`);
     const dayCount = Math.round((last.getTime() - first.getTime()) / 86_400_000) + 1;
     if (dayCount > 31) {
-      return NextResponse.json({ error: "FotMob date ranges are limited to 31 days." }, { status: 422 });
+      return NextResponse.json({ error: "Date ranges are limited to 31 days." }, { status: 422 });
     }
     const days = [];
     for (let offset = 0; offset < dayCount; offset += 4) {
@@ -88,12 +88,12 @@ export async function GET(request: NextRequest) {
             .filter((timestamp): timestamp is string => timestamp !== undefined)
             .sort()
             .at(-1),
-          warning: "FotMob est indisponible. Les dernières données sauvegardées dans PostgreSQL sont affichées et peuvent être obsolètes.",
+          warning: "Le service est indisponible. Les dernières données sauvegardées dans PostgreSQL sont affichées et peuvent être obsolètes.",
         }
         : {}),
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to load fixtures from FotMob.";
+    const message = error instanceof Error ? error.message : "Unable to load fixtures.";
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

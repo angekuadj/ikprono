@@ -22,6 +22,12 @@ const couponSelections = [
   "over-0.5",
   "over-1.5",
   "over-2.5",
+  "scorer",
+  "assist",
+  "home-scorer",
+  "away-scorer",
+  "home-assist",
+  "away-assist",
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -57,7 +63,7 @@ export function isGeneratedCoupon(value: unknown): value is GeneratedCoupon {
     Array.isArray(match.picks) &&
     match.picks.every(pick =>
       isRecord(pick) &&
-      (pick.market === "result" || pick.market === "goals") &&
+      (pick.market === "result" || pick.market === "goals" || pick.market === "corners" || pick.market === "handicap" || pick.market === "scorer" || pick.market === "assist") &&
       (pick.selection === null || (typeof pick.selection === "string" && couponSelections.includes(pick.selection))) &&
       (pick.historicalRate === null || typeof pick.historicalRate === "number") &&
       typeof pick.sampleSize === "number"

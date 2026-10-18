@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
         fixtures.push(result.value);
       } else {
         unavailableCount += 1;
-        console.error(`Could not refresh FotMob fixture ${batch[index]}.`, result.reason);
+        console.error(`Could not refresh fixture ${batch[index]}.`, result.reason);
       }
     });
   }

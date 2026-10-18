@@ -4,6 +4,7 @@ import { loadFixturesFromFotMobByDateRange, loadFixturesFromFotMobByDate, loadFi
 import {
   generateFotMobCoupons,
   generateFotMobStatisticCoupon,
+  generateFotMobScorerCoupon,
   isRiskLevel,
   suggestFotMobCoupon,
   suggestFotMobSafeCoupon,
@@ -12,7 +13,7 @@ import type { StatisticMarket } from "@/lib/coupons";
 
 export const dynamic = "force-dynamic";
 
-const STATISTIC_MARKETS: StatisticMarket[] = ["shots", "cards", "corners", "shots-on-target"];
+const STATISTIC_MARKETS: StatisticMarket[] = ["shots", "cards", "corners", "shots-on-target", "scorers"];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
   }
 
   const mode = payload.mode;
-  if (mode === "safe" || mode === "auto" || mode === "statistic") {
+  if (mode === "safe" || mode === "auto" || mode === "statistic" || mode === "scorer") {
     if (typeof payload.from !== "string" || !isIsoDate(payload.from)
       || typeof payload.count !== "number" || !Number.isInteger(payload.count)
       || payload.count < 1 || payload.count > 20) {
@@ -91,10 +92,28 @@ export async function POST(request: NextRequest) {
         );
       }
       if (mode === "statistic") {
+        if (market === "scorers") {
+          const coupon = await generateFotMobScorerCoupon(
+            uniqueFixtures,
+            payload.count,
+            excludeFixtureIds,
+            payload.randomSelection === true
+          );
+          return NextResponse.json({ coupon });
+        }
         const coupon = await generateFotMobStatisticCoupon(
           uniqueFixtures,
           riskLevel,
           market as StatisticMarket,
+          payload.count,
+          excludeFixtureIds,
+          payload.randomSelection === true
+        );
+        return NextResponse.json({ coupon });
+      }
+      if (mode === "scorer") {
+        const coupon = await generateFotMobScorerCoupon(
+          uniqueFixtures,
           payload.count,
           excludeFixtureIds,
           payload.randomSelection === true
@@ -117,8 +136,8 @@ export async function POST(request: NextRequest) {
         payload.randomSelection === true
       ));
     } catch (error) {
-      console.error("FotMob coupon suggestion failed.", error);
-      const message = error instanceof Error ? error.message : "Unable to suggest a coupon from FotMob.";
+      console.error("Coupon suggestion failed.", error);
+      const message = error instanceof Error ? error.message : "Unable to suggest a coupon.";
       return NextResponse.json({ error: message }, { status: errorStatus(error) });
     }
   }
@@ -145,7 +164,7 @@ export async function POST(request: NextRequest) {
   try {
     const fixtures: Fixture[] = await loadFixturesFromFotMobByIds(fixtureIds);
     if (fixtures.length !== fixtureIds.length) {
-      return NextResponse.json({ error: "One or more FotMob fixtures were not found." }, { status: 404 });
+      return NextResponse.json({ error: "One or more fixtures were not found." }, { status: 404 });
     }
     const today = new Date().toISOString().slice(0, 10);
     if (fixtures.some(fixture => fixture.date < today || fixture.status !== "Prévu")) {
@@ -157,8 +176,8 @@ export async function POST(request: NextRequest) {
     const coupons = await generateFotMobCoupons(fixtures, riskLevel, couponCount, regenerate);
     return NextResponse.json({ coupons });
   } catch (error) {
-    console.error("FotMob combination suggestion failed.", error);
-    const message = error instanceof Error ? error.message : "Unable to suggest combinations from FotMob.";
+    console.error("Combination suggestion failed.", error);
+    const message = error instanceof Error ? error.message : "Unable to suggest combinations.";
     return NextResponse.json({ error: message }, { status: errorStatus(error) });
   }
 }

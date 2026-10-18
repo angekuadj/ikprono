@@ -16,7 +16,9 @@ export default function RegisterPage() {
     password: "",
     confirmPassword: "",
     agreeTerms: false,
+    referralCode: "",
   });
+  const [showReferralDropdown, setShowReferralDropdown] = useState(false);
   const [loading, setLoading] = useState(false);
   const [returnToBasket, setReturnToBasket] = useState(false);
   const [socialCallbackUrl, setSocialCallbackUrl] = useState("/onboarding");
@@ -234,6 +236,40 @@ export default function RegisterPage() {
               />
               {errors.confirmPassword && (
                 <p className="mt-1 text-sm text-red-500">{errors.confirmPassword}</p>
+              )}
+            </div>
+
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowReferralDropdown(!showReferralDropdown)}
+                className="w-full text-left flex items-center justify-between px-3 py-2 border border-gray-700 rounded-md shadow-sm bg-gray-800 text-gray-300 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500 sm:text-sm"
+              >
+                <span className="text-sm font-medium">
+                  {text("Code de parrainage (optionnel)", "Referral code (optional)")}
+                </span>
+                <svg
+                  className={`h-4 w-4 transition-transform ${showReferralDropdown ? "rotate-180" : ""}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showReferralDropdown && (
+                <div className="mt-2">
+                  <input
+                    id="referralCode"
+                    name="referralCode"
+                    type="text"
+                    value={formData.referralCode}
+                    onChange={handleChange}
+                    className="block w-full px-3 py-2 border border-gray-700 rounded-md shadow-sm placeholder-gray-500 focus:outline-none focus:ring-green-500 focus:border-green-500 bg-gray-800 text-white sm:text-sm"
+                    placeholder={text("Entrez votre code de parrainage", "Enter your referral code")}
+                  />
+                </div>
               )}
             </div>
 
