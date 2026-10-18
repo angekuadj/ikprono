@@ -23,10 +23,10 @@ export async function POST(request: NextRequest) {
   if (!isRecord(payload)
     || typeof payload.userId !== "string" || payload.userId.length < 1 || payload.userId.length > 128
     || typeof payload.selectionId !== "string" || payload.selectionId.length < 1 || payload.selectionId.length > 128
-    || !Array.isArray(payload.fixtureIds) || payload.fixtureIds.length < 1 || payload.fixtureIds.length > 5
+    || !Array.isArray(payload.fixtureIds) || payload.fixtureIds.length < 1 || payload.fixtureIds.length > 20
     || !payload.fixtureIds.every(id => typeof id === "string" && id.length > 0 && id.length <= 128)) {
     return NextResponse.json(
-      { error: "Provide valid user and selection IDs and between 1 and 5 fixture IDs." },
+      { error: "Provide valid user and selection IDs and between 1 and 20 fixture IDs." },
       { status: 400 }
     );
   }

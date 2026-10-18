@@ -42,11 +42,14 @@ export async function POST(request: NextRequest) {
   if (mode === "safe" || mode === "auto" || mode === "statistic") {
     if (typeof payload.from !== "string" || !isIsoDate(payload.from)
       || typeof payload.count !== "number" || !Number.isInteger(payload.count)
-      || payload.count < 1 || payload.count > 5) {
+      || payload.count < 1 || payload.count > 20) {
       return NextResponse.json(
-        { error: "Provide a valid start date and an event count between 1 and 5." },
+        { error: "Provide a valid start date and an event count between 1 and 20." },
         { status: 400 }
       );
+    }
+    if (payload.randomSelection !== undefined && typeof payload.randomSelection !== "boolean") {
+      return NextResponse.json({ error: "Provide a valid random selection option." }, { status: 400 });
     }
     const riskLevel = mode === "safe" ? "very-safe" : payload.riskLevel ?? "very-safe";
     if (!isRiskLevel(riskLevel)) {
@@ -93,14 +96,26 @@ export async function POST(request: NextRequest) {
           riskLevel,
           market as StatisticMarket,
           payload.count,
-          excludeFixtureIds
+          excludeFixtureIds,
+          payload.randomSelection === true
         );
         return NextResponse.json({ coupon });
       }
       if (mode === "safe") {
-        return NextResponse.json(await suggestFotMobSafeCoupon(uniqueFixtures, payload.count));
+        return NextResponse.json(await suggestFotMobSafeCoupon(
+          uniqueFixtures,
+          payload.count,
+          [],
+          payload.randomSelection === true
+        ));
       }
-      return NextResponse.json(await suggestFotMobCoupon(uniqueFixtures, payload.count, riskLevel, excludeFixtureIds));
+      return NextResponse.json(await suggestFotMobCoupon(
+        uniqueFixtures,
+        payload.count,
+        riskLevel,
+        excludeFixtureIds,
+        payload.randomSelection === true
+      ));
     } catch (error) {
       console.error("FotMob coupon suggestion failed.", error);
       const message = error instanceof Error ? error.message : "Unable to suggest a coupon from FotMob.";
@@ -108,9 +123,9 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  if (!Array.isArray(payload.fixtureIds) || payload.fixtureIds.length < 1 || payload.fixtureIds.length > 5
+  if (!Array.isArray(payload.fixtureIds) || payload.fixtureIds.length < 1 || payload.fixtureIds.length > 20
     || !payload.fixtureIds.every(id => typeof id === "string" && id.length > 0 && id.length <= 128)) {
-    return NextResponse.json({ error: "Choose between 1 and 5 upcoming fixtures." }, { status: 400 });
+    return NextResponse.json({ error: "Choose between 1 and 20 upcoming fixtures." }, { status: 400 });
   }
   const fixtureIds = payload.fixtureIds as string[];
   if (new Set(fixtureIds).size !== fixtureIds.length) {

@@ -366,8 +366,8 @@ export default function FixtureSchedule({
       const alreadySelected = basket.some(item => item.id === fixture.id);
       if (alreadySelected) {
         writeFixtureBasket(basket.filter(item => item.id !== fixture.id));
-      } else if (basket.length >= 5) {
-        addNotification(text("Le panier est limité à 5 matchs.", "The basket is limited to 5 matches."), "warning");
+      } else if (basket.length >= 20) {
+        addNotification(text("Le panier est limité à 20 matchs.", "The basket is limited to 20 matches."), "warning");
       } else {
         writeFixtureBasket([...basket, fixture]);
         addNotification(text("Match ajouté au panier.", "Fixture added to basket."), "success");
@@ -794,7 +794,7 @@ export default function FixtureSchedule({
                   {text(`${basketCount} match(s) dans le panier`, `${basketCount} fixture(s) in basket`)}
                 </p>
                 <p className="mt-1 text-xs text-gray-400">
-                  {text("Maximum 5 matchs par sélection", "Up to 5 fixtures per selection")}
+                  {text("Maximum 20 matchs par sélection", "Up to 20 fixtures per selection")}
                 </p>
               </div>
               <Link

@@ -11,7 +11,7 @@ import { uniqueGeneratedCoupons, type GeneratedCoupon, type GeneratedStatisticCo
 import type { Fixture, FixtureResponse } from "@/lib/fixtures";
 import { generateUUID } from "@/lib/uuid";
 
-const MAX_FIXTURES = 5;
+const MAX_FIXTURES = 20;
 const GUEST_COMBINATION_LIMIT = 2;
 const GUEST_COMBINATION_COUNT_KEY = "ikprono_guest_combination_count";
 const DEFAULT_LOOKAHEAD_DAYS = 7;
@@ -94,6 +94,7 @@ export default function CombinationsPage() {
   const [showAutoRiskOptions, setShowAutoRiskOptions] = useState(false);
   const [requestedCount, setRequestedCount] = useState(3);
   const [liveOnly, setLiveOnly] = useState(false);
+  const [randomSelection, setRandomSelection] = useState(false);
   const [statisticMarket, setStatisticMarket] = useState<StatisticMarket>("shots");
   const [statisticCount, setStatisticCount] = useState(3);
   const [aiSetupStep, setAiSetupStep] = useState<1 | 2>(1);
@@ -343,6 +344,7 @@ export default function CombinationsPage() {
           riskLevel: selectedRiskLevel,
           excludeFixtureIds,
           includeLive: liveOnly,
+          randomSelection,
         }),
       });
       const payload = await response.json() as { coupon?: GeneratedCoupon; error?: string };
@@ -390,6 +392,7 @@ export default function CombinationsPage() {
           market: statisticMarket,
           excludeFixtureIds,
           includeLive: liveOnly,
+          randomSelection,
         }),
       });
       const payload = await response.json() as { coupon?: GeneratedStatisticCoupon; error?: string };
@@ -714,16 +717,33 @@ export default function CombinationsPage() {
             </select>
             <span className="mt-1 block text-xs font-normal text-gray-400">
               {text(
-                liveOnly
-                  ? "L’IA choisira les meilleurs matchs actuellement en direct."
-                  : `L’IA choisira les événements les mieux notés entre le ${startDate} et le ${endDate}.`,
-                liveOnly
-                  ? "AI will select the highest-rated matches currently live."
-                  : `AI will select the highest-rated events between ${startDate} and ${endDate}.`
+                randomSelection
+                  ? liveOnly
+                    ? "L’IA choisira au hasard parmi les matchs actuellement en direct."
+                    : `L’IA choisira au hasard parmi les matchs du ${startDate} au ${endDate}.`
+                  : liveOnly
+                    ? "L’IA choisira les matchs en direct les mieux notés."
+                    : `L’IA choisira les événements les mieux notés entre le ${startDate} et le ${endDate}.`,
+                randomSelection
+                  ? liveOnly
+                    ? "AI will choose randomly from currently live matches."
+                    : `AI will choose randomly from matches between ${startDate} and ${endDate}.`
+                  : liveOnly
+                    ? "AI will select the highest-rated live matches."
+                    : `AI will select the highest-rated events between ${startDate} and ${endDate}.`
               )}
             </span>
           </label>
-          <div className="flex flex-col gap-2 sm:items-end">
+          <div className="flex flex-col gap-3 sm:items-end">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-300">
+              <input
+                type="checkbox"
+                checked={randomSelection}
+                onChange={event => setRandomSelection(event.target.checked)}
+                className="h-4 w-4 accent-green-500"
+              />
+              {text("Sélection aléatoire", "Random selection")}
+            </label>
             <button
               type="button"
               onClick={() => setLiveOnly(current => !current)}
@@ -749,12 +769,20 @@ export default function CombinationsPage() {
             <h2 className="text-sm font-semibold text-white">{text("Choisissez le risque de votre combinaison", "Choose your combination's risk level")}</h2>
             <p className="mt-1 text-xs text-gray-400">
               {text(
-                liveOnly
-                  ? `L’IA sélectionnera ${requestedCount} rencontre(s) parmi les matchs actuellement en direct.`
-                  : `L’IA sélectionnera ${requestedCount} rencontre(s) parmi les matchs du ${startDate} au ${endDate}.`,
-                liveOnly
-                  ? `AI will select ${requestedCount} fixture(s) from currently live matches.`
-                  : `AI will select ${requestedCount} fixture(s) from matches between ${startDate} and ${endDate}.`
+                randomSelection
+                  ? liveOnly
+                    ? `L’IA choisira au hasard ${requestedCount} rencontre(s) parmi les matchs en direct.`
+                    : `L’IA choisira au hasard ${requestedCount} rencontre(s) entre le ${startDate} et le ${endDate}.`
+                  : liveOnly
+                    ? `L’IA choisira les ${requestedCount} rencontre(s) les mieux notées parmi les matchs en direct.`
+                    : `L’IA choisira les ${requestedCount} rencontre(s) les mieux notées entre le ${startDate} et le ${endDate}.`,
+                randomSelection
+                  ? liveOnly
+                    ? `AI will randomly choose ${requestedCount} fixture(s) from live matches.`
+                    : `AI will randomly choose ${requestedCount} fixture(s) between ${startDate} and ${endDate}.`
+                  : liveOnly
+                    ? `AI will choose the ${requestedCount} highest-rated fixtures from live matches.`
+                    : `AI will choose the ${requestedCount} highest-rated fixtures between ${startDate} and ${endDate}.`
               )}
             </p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1007,6 +1035,51 @@ export default function CombinationsPage() {
                       <option key={count} value={count}>{count}</option>
                     ))}
                   </select>
+                </label>
+                <fieldset className="mt-6">
+                  <legend className="mb-3 text-sm font-semibold text-gray-200">
+                    {text("Type de rencontres", "Fixture type")}
+                  </legend>
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      aria-pressed={!liveOnly}
+                      onClick={() => {
+                        setLiveOnly(false);
+                        setStatisticCoupon(null);
+                      }}
+                      className={`rounded-lg border px-4 py-2 text-sm font-semibold ${
+                        !liveOnly ? "border-green-600 bg-green-950/30 text-green-200" : "border-gray-700 text-gray-400"
+                      }`}
+                    >
+                      {text("Matchs à venir", "Upcoming matches")}
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={liveOnly}
+                      onClick={() => {
+                        setLiveOnly(true);
+                        setStatisticCoupon(null);
+                      }}
+                      className={`rounded-lg border px-4 py-2 text-sm font-semibold ${
+                        liveOnly ? "border-green-600 bg-green-950/30 text-green-200" : "border-gray-700 text-gray-400"
+                      }`}
+                    >
+                      {text("Matchs en direct", "Live matches")}
+                    </button>
+                  </div>
+                </fieldset>
+                <label className="mt-5 flex cursor-pointer items-center gap-2 text-sm text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={randomSelection}
+                    onChange={event => {
+                      setRandomSelection(event.target.checked);
+                      setStatisticCoupon(null);
+                    }}
+                    className="h-4 w-4 accent-green-500"
+                  />
+                  {text("Sélection aléatoire", "Random selection")}
                 </label>
                 <p className="mt-4 text-xs text-gray-500">
                   {text("Les matchs sans historique sont exclus. Le taux affiché est lissé selon le nombre d’observations et reste indicatif.", "Fixtures without history are excluded. Displayed rates are adjusted for sample size and remain indicative.")}

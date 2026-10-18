@@ -178,6 +178,15 @@ function estimateCombinedRate(matches: CouponFixturePrediction[]): number {
   }, 100).toFixed(2));
 }
 
+function shuffled<T>(items: T[]): T[] {
+  const result = [...items];
+  for (let index = result.length - 1; index > 0; index--) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+  }
+  return result;
+}
+
 export function isRiskLevel(value: unknown): value is RiskLevel {
   return typeof value === "string" && RISK_LEVELS.includes(value as RiskLevel);
 }
@@ -261,9 +270,10 @@ export async function generateFotMobStatisticCoupon(
   riskLevel: RiskLevel,
   market: StatisticMarket,
   count: number,
-  excludeFixtureIds: string[] = []
+  excludeFixtureIds: string[] = [],
+  randomSelection = false
 ): Promise<GeneratedStatisticCoupon> {
-  const evaluated = await mapInBatches(fixtures.slice(0, 10), 5, async fixture => {
+  const evaluated = await mapInBatches(fixtures.slice(0, 20), 5, async fixture => {
     const details = await loadFotMobDetails(fixture.id);
     const samples = await statisticSamples(details, market);
     const pick = chooseStatisticPick(samples, riskLevel);
@@ -276,7 +286,8 @@ export async function generateFotMobStatisticCoupon(
       || second.pick.sampleSize - first.pick.sampleSize
     );
   const excluded = new Set(excludeFixtureIds);
-  const selected = candidates.filter(candidate => !excluded.has(candidate.fixture.id));
+  const eligible = candidates.filter(candidate => !excluded.has(candidate.fixture.id));
+  const selected = randomSelection ? shuffled(eligible) : eligible;
   if (selected.length === 0) {
     throw new Error(`FotMob has no historical ${LABELS[market]} statistics available for these matches.`);
   }
@@ -307,7 +318,8 @@ export async function suggestFotMobCoupon(
   fixtures: Fixture[],
   count: number,
   riskLevel: RiskLevel,
-  excludeFixtureIds: string[] = []
+  excludeFixtureIds: string[] = [],
+  randomSelection = false
 ): Promise<{ coupon: GeneratedCoupon }> {
   const candidates = await mapInBatches(fixtures.slice(0, 20), 5, async fixture => {
     try {
@@ -329,7 +341,8 @@ export async function suggestFotMobCoupon(
   if (available.length < count) {
     throw new Error(`FotMob does not provide enough completed match history to suggest ${count} fixtures.`);
   }
-  const matches = available.slice(0, count).map(candidate => candidate.prediction);
+  const selected = randomSelection ? shuffled(available) : available;
+  const matches = selected.slice(0, count).map(candidate => candidate.prediction);
   const metadata = riskMetadata(riskLevel);
   return {
     coupon: {
@@ -345,7 +358,8 @@ export async function suggestFotMobCoupon(
 export async function suggestFotMobSafeCoupon(
   fixtures: Fixture[],
   count: number,
-  excludeFixtureIds: string[] = []
+  excludeFixtureIds: string[] = [],
+  randomSelection = false
 ): Promise<{ coupon: GeneratedCoupon }> {
-  return suggestFotMobCoupon(fixtures, count, "very-safe", excludeFixtureIds);
+  return suggestFotMobCoupon(fixtures, count, "very-safe", excludeFixtureIds, randomSelection);
 }

@@ -27,11 +27,11 @@ def save_once(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Provide a user ID and selection ID.")
     if (
         not isinstance(fixture_ids, list)
-        or not 1 <= len(fixture_ids) <= 5
+        or not 1 <= len(fixture_ids) <= 20
         or not all(isinstance(fixture_id, str) and fixture_id for fixture_id in fixture_ids)
         or len(set(fixture_ids)) != len(fixture_ids)
     ):
-        raise ValueError("Provide between 1 and 5 unique fixture IDs.")
+        raise ValueError("Provide between 1 and 20 unique fixture IDs.")
     if not isinstance(coupons, list) or not coupons:
         raise ValueError("Provide generated coupons to save.")
 

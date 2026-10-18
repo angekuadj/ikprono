@@ -34,7 +34,7 @@ import {
 } from "@/lib/couponSettlement";
 import { generateUUID } from "@/lib/uuid";
 
-const MAX_SELECTION_SIZE = 5;
+const MAX_SELECTION_SIZE = 20;
 type BasketTab = "basket" | "generated" | "selections";
 
 export default function BasketPage() {
