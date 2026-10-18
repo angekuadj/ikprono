@@ -66,6 +66,7 @@ export default function BasketPage() {
   const [marketSelections, setMarketSelections] = useState<MarketSelectionsByFixture>({});
   const [couponErrors, setCouponErrors] = useState<Record<string, string>>({});
   const [generatingSelectionId, setGeneratingSelectionId] = useState<string | null>(null);
+  const [verificationEnabled, setVerificationEnabled] = useState(false);
   const [activeTab, setActiveTab] = useState<BasketTab>("basket");  const [expandedCombinations, setExpandedCombinations] = useState<Set<string>>(new Set());
   const trackedFixtures = useMemo(
     () => [
@@ -137,13 +138,21 @@ export default function BasketPage() {
     return subscribeToCouponHistory(syncCouponHistory);
   }, [text]);
 
-  // Auto-archivage : quand tous les matchs d'une combinaison sont terminés,
-  // le système détermine automatiquement gagné/perdu et déplace vers l'historique.
+  // Auto-archivage : la vérification ne démarre qu'après 20 secondes
+  // suivant l'ouverture de la page /basket.
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setVerificationEnabled(true);
+    }, 6_000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!verificationEnabled) return;
     for (const combination of generatedCombinations) {
       archiveGeneratedCombination(combination);
     }
-  }, [generatedCombinations, fixturesById]);
+  }, [generatedCombinations, fixturesById, verificationEnabled]);
 
   useEffect(() => {
     if (!user) {
