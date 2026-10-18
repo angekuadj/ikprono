@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 280" fill="none">
+  <defs>
+    <linearGradient id="shield" x1="35" y1="30" x2="230" y2="245" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E879F9"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="ball" x1="64" y1="55" x2="207" y2="203" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#D9F7F2"/>
+    </linearGradient>
+    <linearGradient id="trend" x1="84" y1="178" x2="207" y2="93" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#27D6C3"/>
+      <stop offset="1" stop-color="#B8F26B"/>
+    </linearGradient>
+  </defs>
+  <path d="M137 17 241 57v73c0 65-42 105-104 133C75 235 33 195 33 130V57l104-40Z" fill="#171A36" stroke="url(#shield)" stroke-width="9" stroke-linejoin="round"/>
+  <circle cx="137" cy="112" r="55" fill="url(#ball)" stroke="#B9C7E3" stroke-width="4"/>
+  <path d="m137 83 20 15-8 23h-24l-8-23 20-15Zm0-14v14m20 1 18-14m-26 51 11 20m-31-20-17 17m5-55-16-17" stroke="#34416E" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m137 83 20 15-8 23h-24l-8-23 20-15Z" fill="#34416E"/>
+  <path d="m77 204 30-23 22 14 47-49" stroke="url(#trend)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m158 146 22-2-2 22" stroke="#B8F26B" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="294" y="177" fill="#A947C8" font-family="Arial,sans-serif" font-size="92" font-weight="800" letter-spacing="4">IKPRONO</text>
+  <text x="300" y="219" fill="#72809D" font-family="Arial,sans-serif" font-size="24" font-weight="700" letter-spacing="8">FOOTBALL · PRONOSTICS</text>
+</svg>

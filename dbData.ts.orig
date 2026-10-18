@@ -1,0 +1,667 @@
+import type { Fixture } from "@/lib/fixtures";
+import Database from "better-sqlite3";
+
+const DB_PATH = "/home/angek/Documents/base/data/fotmob_organized.sqlite";
+
+type FixtureRow = {
+  match_id: string;
+  match_date: string;
+  match_time: string | null;
+  status: string | null;
+  competition_name: string;
+  home_team: string;
+  away_team: string;
+  home_score: string | null;
+  away_score: string | null;
+  score: string | null;
+  home_win_odd?: string;
+  draw_odd?: string;
+  away_win_odd?: string;
+};
+
+export interface HistoricalMatch {
+  date: string;
+  competition: string;
+  homeTeam: string;
+  awayTeam: string;
+  score: string;
+}
+
+export interface FixtureHistory {
+  confrontations: HistoricalMatch[];
+  recentMatches: Array<{
+    team: string;
+    matches: HistoricalMatch[];
+  }>;
+}
+
+function normalizeTeamName(team: string): string {
+  return team.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr-FR").trim();
+}
+
+function mapFixtureRow(row: FixtureRow): Fixture {
+  const { location, competition } = parseCompetition(row.competition_name);
+  let odds = undefined;
+  if (row.home_win_odd && row.draw_odd && row.away_win_odd) {
+    odds = {
+      homeWin: parseFloat(row.home_win_odd) || 0,
+      draw: parseFloat(row.draw_odd.replace('x', '')) || 0,
+      awayWin: parseFloat(row.away_win_odd) || 0
+    };
+  }
+  return {
+    id: row.match_id,
+    sport: "football",
+    date: parseDate(row.match_date),
+    time: parseTime(row.match_time || ""),
+    league: row.competition_name,
+    location,
+    competition,
+    homeTeam: row.home_team,
+    awayTeam: row.away_team,
+    matchId: row.match_id,
+    homeScore: row.home_score || undefined,
+    awayScore: row.away_score || undefined,
+    score: row.score || undefined,
+    status: row.status || undefined,
+    odds
+  };
+}
+
+function parseCompetition(value: string): { location: string; competition: string } {
+  const separatorIndex = value.indexOf(":");
+  if (separatorIndex === -1) {
+    return { location: "", competition: value.trim() };
+  }
+  return {
+    location: value.slice(0, separatorIndex).trim(),
+    competition: value.slice(separatorIndex + 1).trim(),
+  };
+}
+
+function parseDate(dateStr: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return dateStr;
+  }
+  // Convert "15-10-2026" to "2026-10-15"
+  const parts = dateStr.split("-");
+  if (parts.length === 3) {
+    const [day, month, year] = parts;
+    return `${year}-${month}-${day}`;
+  }
+  return dateStr;
+}
+
+function parseTime(timeStr: string): string {
+  const trimmed = timeStr.trim();
+  // Keep live match times as-is (e.g., "1'", "21'", "76'")
+  // Keep special statuses (ANL, PEN, REP, TER) as-is
+  // Keep regular times as-is (e.g., "00:00", "03:30", "21:00")
+  return trimmed;
+}
+
+export async function loadFixturesFromDb(): Promise<Fixture[]> {
+  const db = new Database(DB_PATH, { readonly: true });
+  try {
+    const rows = db.prepare(`
+      SELECT
+        m.match_id,
+        m.match_date,
+        m.match_time,
+        m.status,
+        m.competition_name,
+        m.home_team,
+        m.away_team,
+        m.home_score,
+        m.away_score,
+        m.score,
+        o.home_win_odd,
+        o.draw_odd,
+        o.away_win_odd
+      FROM matches m
+      LEFT JOIN match_odds o ON m.match_id = o.match_id
+    `).all() as FixtureRow[];
+    return rows.map(mapFixtureRow);
+  } finally {
+    db.close();
+  }
+}
+
+export async function loadFixtureFromDbById(id: string): Promise<Fixture | null> {
+  const db = new Database(DB_PATH, { readonly: true });
+  try {
+    const row = db.prepare(`
+      SELECT
+        m.match_id,
+        m.match_date,
+        m.match_time,
+        m.status,
+        m.competition_name,
+        m.home_team,
+        m.away_team,
+        m.home_score,
+        m.away_score,
+        m.score,
+        o.home_win_odd,
+        o.draw_odd,
+        o.away_win_odd
+      FROM matches m
+      LEFT JOIN match_odds o ON m.match_id = o.match_id
+      WHERE m.match_id = ?
+      LIMIT 1
+    `).get(id) as FixtureRow | undefined;
+    return row ? mapFixtureRow(row) : null;
+  } finally {
+    db.close();
+  }
+}
+
+export async function loadFixturesFromDbByIds(ids: string[]): Promise<Fixture[]> {
+  if (ids.length === 0) return [];
+
+  const db = new Database(DB_PATH, { readonly: true });
+  try {
+    const placeholders = ids.map(() => "?").join(", ");
+    const rows = db.prepare(`
+      SELECT
+        m.match_id,
+        m.match_date,
+        m.match_time,
+        m.status,
+        m.competition_name,
+        m.home_team,
+        m.away_team,
+        m.home_score,
+        m.away_score,
+        m.score,
+        o.home_win_odd,
+        o.draw_odd,
+        o.away_win_odd
+      FROM matches m
+      LEFT JOIN match_odds o ON m.match_id = o.match_id
+      WHERE m.match_id IN (${placeholders})
+    `).all(...ids) as FixtureRow[];
+    return rows.map(mapFixtureRow);
+  } finally {
+    db.close();
+  }
+}
+
+export async function loadFixtureHistoryFromDb(fixture: Fixture): Promise<FixtureHistory> {
+  const db = new Database(DB_PATH, { readonly: true });
+  try {
+    const sourceMatchId = fixture.matchId || fixture.id;
+
+    const confrontations = db.prepare(`
+      SELECT
+        match_date AS date,
+        competition,
+        home_team AS homeTeam,
+        away_team AS awayTeam,
+        score
+      FROM head_to_head
+      WHERE match_id = ?
+      ORDER BY id
+    `).all(sourceMatchId) as HistoricalMatch[];
+
+    const teamForms = db.prepare(`
+      SELECT
+        team_name AS team,
+        form_results
+      FROM team_forms
+      WHERE match_id = ?
+    `).all(sourceMatchId) as Array<{ team: string; form_results: string }>;
+
+    const recentMatches = teamForms.map(({ team, form_results }) => {
+      const matches: HistoricalMatch[] = [];
+      if (form_results) {
+        const results = form_results.split('·');
+        results.forEach(result => {
+          const parts = result.trim().split(' ');
+          if (parts.length >= 2) {
+            const outcome = parts[0];
+            const score = parts.slice(1).join(' ');
+            matches.push({
+              date: '',
+              competition: '',
+              homeTeam: team,
+              awayTeam: '',
+              score: `${outcome} ${score}`,
+            });
+          }
+        });
+      }
+      return { team, matches };
+    });
+
+    return {
+      confrontations,
+      recentMatches,
+    };
+  } finally {
+    db.close();
+  }
+}
+
+export async function loadFixturesFromDbByDateRange(from: string, to: string): Promise<Fixture[]> {
+  const allFixtures = await loadFixturesFromDb();
+  return allFixtures.filter(fixture => fixture.date >= from && fixture.date <= to);
+}
+
+export async function loadDefaultFixtureDateFromDb(preferredDate?: string): Promise<string | null> {
+  const fixtures = await loadFixturesFromDb();
+  if (preferredDate && fixtures.some(fixture => fixture.date === preferredDate)) {
+    return preferredDate;
+  }
+  return fixtures.reduce<string | null>(
+    (latestDate, fixture) => latestDate === null || fixture.date > latestDate ? fixture.date : latestDate,
+    null
+  );
+}
+
+export async function loadLiveFixturesFromDb(): Promise<Fixture[]> {
+  const allFixtures = await loadFixturesFromDb();
+  const liveStatuses = new Set(["en live", "mi-temps"]);
+  return allFixtures.filter(fixture =>
+    fixture.status !== undefined
+    && liveStatuses.has(fixture.status.trim().toLocaleLowerCase("fr-FR"))
+  );
+}
+
+// Parser la forme des équipes depuis le summary
+function parseTeamForm(summary: string, homeTeam: string, awayTeam: string): { homeForm: string; awayForm: string } {
+  const homeFormMatch = summary.match(new RegExp(`Forme ${homeTeam.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}: (.+?) \\|`, 'i'));
+  const awayFormMatch = summary.match(new RegExp(`Forme ${awayTeam.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}: (.+)$`, 'i'));
+  
+  return {
+    homeForm: homeFormMatch ? homeFormMatch[1] : '',
+    awayForm: awayFormMatch ? awayFormMatch[1] : ''
+  };
+}
+
+// Parser les confrontations directes depuis tables_formatted
+function parseHeadToHead(tablesFormatted: string): Array<{
+  date: string;
+  homeTeam: string;
+  awayTeam: string;
+  homeScore?: number | null;
+  awayScore?: number | null;
+  competition: string;
+}> {
+  const h2h: Array<{
+    date: string;
+    homeTeam: string;
+    awayTeam: string;
+    homeScore?: number | null;
+    awayScore?: number | null;
+    competition: string;
+  }> = [];
+  
+  // Chercher le tableau de H2H (généralement Tableau 2)
+  const h2hMatch = tablesFormatted.match(/\[Tableau 2\]([\s\S]+?)(?=\[Tableau|$)/);
+  if (h2hMatch) {
+    const lines = h2hMatch[1].trim().split('\n').filter(line => line.trim());
+    lines.forEach(line => {
+      const parts = line.split('|').map(p => p.trim());
+      if (parts.length >= 5) {
+        const [date, homeTeam, score, awayTeam, competition] = parts;
+        const scoreParts = score.split('-').map(s => parseInt(s.trim()));
+        h2h.push({
+          date,
+          homeTeam,
+          awayTeam,
+          homeScore: !isNaN(scoreParts[0]) ? scoreParts[0] : null,
+          awayScore: !isNaN(scoreParts[1]) ? scoreParts[1] : null,
+          competition
+        });
+      }
+    });
+  }
+  
+  return h2h;
+}
+
+// Parser le classement depuis tables_formatted
+function parseStandings(tablesFormatted: string, homeTeam: string, awayTeam: string): Array<{
+  position: number;
+  team: string;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;
+  points: number;
+}> {
+  const standings: Array<{
+    position: number;
+    team: string;
+    played: number;
+    won: number;
+    drawn: number;
+    lost: number;
+    goalsFor: number;
+    goalsAgainst: number;
+    goalDifference: number;
+    points: number;
+  }> = [];
+
+  // Chercher le tableau de classement (généralement Tableau 3)
+  const standingsMatch = tablesFormatted.match(/\[Tableau 3\]([\s\S]+?)(?=\[Tableau|$)/);
+  if (standingsMatch) {
+    const lines = standingsMatch[1].trim().split('\n').filter(line => line.trim());
+    lines.forEach(line => {
+      const parts = line.split('|').map(p => p.trim());
+      if (parts.length >= 9) {
+        const [pos, team, played, won, drawn, lost, goalsDiff, goalDiffStr, points] = parts;
+        const gdParts = goalsDiff.split('-').map(s => parseInt(s.trim()));
+        standings.push({
+          position: parseInt(pos),
+          team,
+          played: parseInt(played),
+          won: parseInt(won),
+          drawn: parseInt(drawn),
+          lost: parseInt(lost),
+          goalsFor: !isNaN(gdParts[0]) ? gdParts[0] : 0,
+          goalsAgainst: !isNaN(gdParts[1]) ? gdParts[1] : 0,
+          goalDifference: parseInt(goalDiffStr) || 0,
+          points: parseInt(points)
+        });
+      }
+    });
+  }
+
+  return standings;
+}
+
+// Parser les statistiques depuis la section aperçu (tables_json)
+function parseApercuStats(tablesData: any[][], homeTeam: string, awayTeam: string): any {
+  const stats: any = {};
+
+  // Le tableau 5 contient les statistiques du match
+  if (tablesData[5]) {
+    tablesData[5].forEach((row: string[]) => {
+      if (row.length >= 3) {
+        const [homeValue, label, awayValue] = row;
+        const cleanLabel = label.toLowerCase();
+
+        switch (cleanLabel) {
+          case 'ball possession':
+            stats.possession = {
+              home: parseInt(homeValue) || 0,
+              away: parseInt(awayValue) || 0
+            };
+            break;
+          case 'total shots':
+            stats.shots = {
+              home: parseInt(homeValue) || 0,
+              away: parseInt(awayValue) || 0
+            };
+            break;
+          case 'shots on target':
+            stats.shotsOnTarget = {
+              home: parseInt(homeValue) || 0,
+              away: parseInt(awayValue) || 0
+            };
+            break;
+          case 'corners':
+            stats.corners = {
+              home: parseInt(homeValue) || 0,
+              away: parseInt(awayValue) || 0
+            };
+            break;
+        }
+      }
+    });
+  }
+
+  // Le tableau 6 contient la forme des équipes
+  if (tablesData[6]) {
+    tablesData[6].forEach((row: string[]) => {
+      if (row.length >= 2) {
+        const [team, form] = row;
+        if (team.includes(homeTeam)) {
+          stats.homeForm = form;
+        } else if (team.includes(awayTeam)) {
+          stats.awayForm = form;
+        }
+      }
+    });
+  }
+
+  // Le tableau 7 contient les confrontations directes
+  if (tablesData[7]) {
+    stats.headToHead = tablesData[7].map((row: string[]) => ({
+      date: row[0] || '',
+      homeTeam: row[1] || '',
+      homeScore: row[2] ? parseInt(row[2].split('-')[0]) || null : null,
+      awayScore: row[2] ? parseInt(row[2].split('-')[1]) || null : null,
+      awayTeam: row[3] || '',
+      competition: row[4] || ''
+    }));
+  }
+
+  // Le tableau 8 contient le classement
+  if (tablesData[8]) {
+    stats.standings = tablesData[8].slice(1).map((row: string[]) => ({
+      position: parseInt(row[0]) || 0,
+      team: row[1] || '',
+      played: parseInt(row[2]) || 0,
+      won: parseInt(row[3]) || 0,
+      drawn: parseInt(row[4]) || 0,
+      lost: parseInt(row[5]) || 0,
+      goalsFor: parseInt(row[6]?.split('-')[0]) || 0,
+      goalsAgainst: parseInt(row[6]?.split('-')[1]) || 0,
+      goalDifference: parseInt(row[7]) || 0,
+      points: parseInt(row[8]) || 0
+    }));
+  }
+
+  return stats;
+}
+
+// Charger les statistiques détaillées d'un match
+export async function loadMatchStatisticsFromDb(matchId: string, homeTeam: string, awayTeam: string) {
+  const db = new Database(DB_PATH, { readonly: true });
+  try {
+    // Charger les sections
+    const sections = db.prepare(`
+      SELECT
+        section,
+        section_label,
+        summary,
+        tables_formatted,
+        tables_json
+      FROM raw_match_sections
+      WHERE match_id = ?
+    `).all(matchId) as Array<{
+      section: string;
+      section_label: string;
+      summary: string;
+      tables_formatted: string;
+      tables_json: string;
+    }>;
+    
+    // Trouver la section avec les données
+    const avantMatchSection = sections.find(s => s.section === 'avant_match');
+    const apercuSection = sections.find(s => s.section === 'apercu');
+    const statsSection = sections.find(s => s.section === 'statistiques');
+    const lineupsSection = sections.find(s => s.section === 'compositions');
+    const eventsSection = sections.find(s => s.section === 'evenements');
+    const standingsSection = sections.find(s => s.section === 'classement');
+    const h2hSection = sections.find(s => s.section === 'face_a_face');
+    
+    let homeForm = '';
+    let awayForm = '';
+    let headToHead: any[] = [];
+    let standings: any[] = [];
+    let apercuStats: any = {};
+
+    if (avantMatchSection) {
+      homeForm = parseTeamForm(avantMatchSection.summary, homeTeam, awayTeam).homeForm;
+      awayForm = parseTeamForm(avantMatchSection.summary, homeTeam, awayTeam).awayForm;
+      headToHead = parseHeadToHead(avantMatchSection.tables_formatted);
+      standings = parseStandings(avantMatchSection.tables_formatted, homeTeam, awayTeam);
+    }
+
+    // Parser les statistiques depuis la section aperçu
+    if (apercuSection && apercuSection.tables_json) {
+      try {
+        const tablesData = JSON.parse(apercuSection.tables_json);
+        apercuStats = parseApercuStats(tablesData, homeTeam, awayTeam);
+      } catch (e) {
+        console.error('Error parsing apercu tables_json:', e);
+      }
+    }
+    
+    // Charger le classement depuis la table standings si disponible
+    if (standingsSection || !standings.length) {
+      const standingsRows = db.prepare(`
+        SELECT rank, team_name, played, won, drawn, lost, goals, goal_diff, points
+        FROM standings
+        WHERE match_id = ?
+        ORDER BY rank
+      `).all(matchId) as Array<{
+        rank: number;
+        team_name: string;
+        played: number;
+        won: number;
+        drawn: number;
+        lost: number;
+        goals: string;
+        goal_diff: string;
+        points: number;
+      }>;
+      
+      if (standingsRows.length > 0) {
+        standings = standingsRows.map(row => {
+          const goalsParts = row.goals.split('-').map(s => parseInt(s.trim()));
+          return {
+            position: row.rank,
+            team: row.team_name,
+            played: row.played,
+            won: row.won,
+            drawn: row.drawn,
+            lost: row.lost,
+            goalsFor: !isNaN(goalsParts[0]) ? goalsParts[0] : 0,
+            goalsAgainst: !isNaN(goalsParts[1]) ? goalsParts[1] : 0,
+            goalDifference: parseInt(row.goal_diff) || 0,
+            points: row.points
+          };
+        });
+      }
+    }
+    
+    // Charger les confrontations directes depuis la table head_to_head si disponible
+    if (h2hSection || !headToHead.length) {
+      const h2hRows = db.prepare(`
+        SELECT match_date, home_team, away_team, score, competition
+        FROM head_to_head
+        WHERE match_id = ?
+        ORDER BY id
+      `).all(matchId) as Array<{
+        match_date: string;
+        home_team: string;
+        away_team: string;
+        score: string;
+        competition: string;
+      }>;
+      
+      if (h2hRows.length > 0) {
+        headToHead = h2hRows.map(row => {
+          const scoreParts = row.score.split('-').map(s => s.trim());
+          return {
+            date: row.match_date,
+            homeTeam: row.home_team,
+            awayTeam: row.away_team,
+            homeScore: !isNaN(parseInt(scoreParts[0])) ? parseInt(scoreParts[0]) : null,
+            awayScore: !isNaN(parseInt(scoreParts[1])) ? parseInt(scoreParts[1]) : null,
+            competition: row.competition
+          };
+        });
+      }
+    }
+    
+    // Charger les cotes depuis la table match_odds
+    const oddsRow = db.prepare(`
+      SELECT home_win_odd, draw_odd, away_win_odd
+      FROM match_odds
+      WHERE match_id = ?
+    `).get(matchId) as {
+      home_win_odd: string;
+      draw_odd: string;
+      away_win_odd: string;
+    } | undefined;
+    
+    let odds = null;
+    if (oddsRow) {
+      odds = {
+        homeWin: parseFloat(oddsRow.home_win_odd) || 0,
+        draw: parseFloat(oddsRow.draw_odd.replace('x', '')) || 0,
+        awayWin: parseFloat(oddsRow.away_win_odd) || 0
+      };
+    }
+    
+    // Statistiques basiques (à enrichir avec les vraies données de la section statistiques)
+    const stats = {
+      date: '',
+      competition: '',
+      fixtureId: matchId,
+      homeTeam,
+      awayTeam,
+      status: 'scheduled',
+      homeScore: undefined as number | undefined,
+      awayScore: undefined as number | undefined,
+      homeForm: apercuStats.homeForm || homeForm,
+      awayForm: apercuStats.awayForm || awayForm,
+      events: [],
+      homeLineup: [],
+      awayLineup: [],
+      homeSubstitutes: [],
+      awaySubstitutes: [],
+      possession: apercuStats.possession || { home: 0, away: 0 },
+      expectedGoals: { home: 0, away: 0 },
+      shots: apercuStats.shots || { home: 0, away: 0 },
+      shotsOnTarget: apercuStats.shotsOnTarget || { home: 0, away: 0 },
+      touchesInBox: { home: 0, away: 0 },
+      bigChances: { home: 0, away: 0 },
+      bigChancesMissed: { home: 0, away: 0 },
+      accuratePasses: { home: '0 (0%)', away: '0 (0%)' },
+      yellowCards: { home: 0, away: 0 },
+      corners: apercuStats.corners || { home: 0, away: 0 },
+      shotsOffTarget: { home: 0, away: 0 },
+      blockedShots: { home: 0, away: 0 },
+      hitWoodwork: { home: 0, away: 0 },
+      shotsInsideBox: { home: 0, away: 0 },
+      shotsOutsideBox: { home: 0, away: 0 },
+      xgOpenPlay: { home: 0, away: 0 },
+      xgSetPlay: { home: 0, away: 0 },
+      xgNonPenalty: { home: 0, away: 0 },
+      xgOnTarget: { home: 0, away: 0 },
+      passes: { home: 0, away: 0 },
+      accurateLongBalls: { home: '0 (0%)', away: '0 (0%)' },
+      accurateCrosses: { home: '0 (0%)', away: '0 (0%)' },
+      throws: { home: 0, away: 0 },
+      offsides: { home: 0, away: 0 },
+      tackles: { home: 0, away: 0 },
+      interceptions: { home: 0, away: 0 },
+      blocks: { home: 0, away: 0 },
+      clearances: { home: 0, away: 0 },
+      keeperSaves: { home: 0, away: 0 },
+      duelsWon: { home: 0, away: 0 },
+      groundDuelsWon: { home: '0 (0%)', away: '0 (0%)' },
+      aerialDuelsWon: { home: '0 (0%)', away: '0 (0%)' },
+      successfulDribbles: { home: '0 (0%)', away: '0 (0%)' },
+      redCards: { home: 0, away: 0 },
+      foulsCommitted: { home: 0, away: 0 },
+      headToHead: apercuStats.headToHead || headToHead,
+      standings: apercuStats.standings || standings,
+      odds
+    };
+    
+    return stats;
+  } finally {
+    db.close();
+  }
+}
