@@ -29,7 +29,7 @@ import {
   type SavedSelection,
 } from "@/lib/savedSelections";
 import { useFixtureStatuses } from "@/hooks/useFixtureStatuses";
-import { uniqueGeneratedCoupons, type GeneratedCoupon, type CouponPick } from "@/lib/coupons";
+import { uniqueGeneratedCoupons, type GeneratedCoupon, type CouponPick, type CouponFixturePrediction } from "@/lib/coupons";
 import type { Fixture } from "@/lib/fixtures";
 import {
   isFixtureFinished,
@@ -195,6 +195,30 @@ export default function BasketPage() {
       setBasketError("");
     } catch (error) {
       setBasketError(error instanceof Error ? error.message : text("Impossible de retirer cette combinaison.", "Unable to remove this combination."));
+    }
+  };
+
+  const removeMatchFromCombination = (combinationId: string, matchId: string) => {
+    try {
+      const combination = generatedCombinations.find(c => c.id === combinationId);
+      if (!combination) return;
+      const nextMatches = combination.coupon.matches.filter(match => match.fixtureId !== matchId);
+      const nextFixtures = combination.fixtures.filter(fixture => fixture.id !== matchId);
+      if (nextMatches.length === 0) {
+        writeGeneratedCombinations(generatedCombinations.filter(c => c.id !== combinationId));
+      } else {
+        const updated: StoredGeneratedCombination = {
+          ...combination,
+          coupon: { ...combination.coupon, matches: nextMatches },
+          fixtures: nextFixtures,
+        };
+        writeGeneratedCombinations(
+          generatedCombinations.map(c => (c.id === combinationId ? updated : c))
+        );
+      }
+      setBasketError("");
+    } catch (error) {
+      setBasketError(error instanceof Error ? error.message : text("Impossible de retirer ce match.", "Unable to remove this match."));
     }
   };
 
@@ -371,6 +395,31 @@ export default function BasketPage() {
       "over-10.5": text("Plus de 10,5 corners", "Over 10.5 corners"),
     };
     return labels[pick.selection];
+  };
+
+  const fixtureStatusLabel = (fixture: Fixture | undefined) => {
+    if (!fixture) return text("Prévu", "Scheduled");
+    if (isFixtureFinished(fixture)) return text("Terminé", "Finished");
+    const status = (fixture.status ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("fr-FR");
+    if (/direct|live|en direct/.test(status)) return text("En direct", "Live");
+    return text("Prévu", "Scheduled");
+  };
+
+  const combinationStatusLabel = (matches: CouponFixturePrediction[], fixtures: Fixture[], fixturesById?: Record<string, Fixture | undefined>) => {
+    const getFixture = (matchId: string) => fixturesById?.[matchId] ?? fixtures.find(fx => fx.id === matchId);
+    const anyLive = matches.some(match => {
+      const f = getFixture(match.fixtureId);
+      if (!f) return false;
+      return !isFixtureFinished(f) && /direct|live|en direct/.test((f.status ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("fr-FR"));
+    });
+    if (anyLive) return text("En direct", "Live");
+    const anyScheduled = matches.some(match => {
+      const f = getFixture(match.fixtureId);
+      if (!f) return false;
+      return !isFixtureFinished(f);
+    });
+    if (anyScheduled) return text("En attente", "Pending");
+    return text("Terminé", "Finished");
   };
 
   const exportGeneratedCombinationPdf = (combination: StoredGeneratedCombination) => {
@@ -603,6 +652,10 @@ export default function BasketPage() {
                                 <span aria-hidden="true">{outcomeIcon(outcome)}</span>
                                 {outcomeLabel(outcome)}
                               </span>
+                              <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${outcome === "pending" ? "border-gray-600 bg-gray-900/50 text-gray-300" : outcome === "lost" ? "border-red-700 bg-red-950/40 text-red-200" : "border-green-600 bg-green-950/40 text-green-200"}`}>
+                                <span aria-hidden="true">{outcome === "pending" ? "⏳" : outcome === "lost" ? "✕" : "✓"}</span>
+                                {combinationStatusLabel(combination.coupon.matches, combination.fixtures, fixturesById)}
+                              </span>
                               {showProgressBadge && completion.total > 0 && (
                                 <span
                                   className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
@@ -665,15 +718,30 @@ export default function BasketPage() {
                       return (
                         <article key={match.fixtureId} className="rounded-xl border border-gray-800 bg-black/30 p-3">
                           <div className="flex items-center justify-between gap-2 border-b border-dashed border-gray-800 pb-2">
-                            <p className="min-w-0 truncate text-[10px] font-medium text-gray-400">
-                              {fixture
-                                ? `${fixture.sport === "football" ? "⚽ " : ""}${fixture.competition ?? fixture.league} · ${matchDateLabel} (${fixture.time})`
-                                : text("Détails de la rencontre", "Fixture details")}
-                            </p>
-                            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${outcomeStyle(matchOutcome)}`}>
-                              <span aria-hidden="true">{outcomeIcon(matchOutcome)}</span>
-                              {outcomeLabel(matchOutcome)}
-                            </span>
+                            <div className="min-w-0 flex items-center gap-2">
+                              <p className="min-w-0 truncate text-[10px] font-medium text-gray-400">
+                                {fixture
+                                  ? `${fixture.sport === "football" ? "⚽ " : ""}${fixture.competition ?? fixture.league} · ${matchDateLabel} (${fixture.time})`
+                                  : text("Détails de la rencontre", "Fixture details")}
+                              </p>
+                              <span className={`text-[10px] font-semibold ${fixture && isFixtureFinished(fixture) ? "text-gray-300" : fixture && /direct|live|en direct/.test((fixture.status ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("fr-FR")) ? "text-green-300" : "text-amber-300"}`}>
+                                {fixtureStatusLabel(fixture)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${outcomeStyle(matchOutcome)}`}>
+                                <span aria-hidden="true">{outcomeIcon(matchOutcome)}</span>
+                                {outcomeLabel(matchOutcome)}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => removeMatchFromCombination(combination.id, match.fixtureId)}
+                                aria-label={text(`Retirer ${match.homeTeam} — ${match.awayTeam}`, `Remove ${match.homeTeam} — ${match.awayTeam}`)}
+                                className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-gray-700 text-gray-400 transition hover:border-red-700 hover:bg-red-950/40 hover:text-red-300"
+                              >
+                                <span aria-hidden="true">×</span>
+                              </button>
+                            </div>
                           </div>
                           <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 py-2.5">
                             <div className="flex min-w-0 items-center gap-2">
@@ -794,15 +862,30 @@ export default function BasketPage() {
                       return (
                         <article key={match.fixtureId} className="rounded-xl border border-gray-800 bg-black/30 p-3">
                           <div className="flex items-center justify-between gap-2 border-b border-dashed border-gray-800 pb-2">
-                            <p className="min-w-0 truncate text-[10px] font-medium text-gray-400">
-                              {fixture
-                                ? `${fixture.sport === "football" ? "⚽ " : ""}${fixture.competition ?? fixture.league} · ${matchDateLabel} (${fixture.time})`
-                                : text("Détails de la rencontre", "Fixture details")}
-                            </p>
-                            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${outcomeStyle(matchOutcome)}`}>
-                              <span aria-hidden="true">{outcomeIcon(matchOutcome)}</span>
-                              {outcomeLabel(matchOutcome)}
-                            </span>
+                            <div className="min-w-0 flex items-center gap-2">
+                              <p className="min-w-0 truncate text-[10px] font-medium text-gray-400">
+                                {fixture
+                                  ? `${fixture.sport === "football" ? "⚽ " : ""}${fixture.competition ?? fixture.league} · ${matchDateLabel} (${fixture.time})`
+                                  : text("Détails de la rencontre", "Fixture details")}
+                              </p>
+                              <span className={`text-[10px] font-semibold ${fixture && isFixtureFinished(fixture) ? "text-gray-300" : fixture && /direct|live|en direct/.test((fixture.status ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("fr-FR")) ? "text-green-300" : "text-amber-300"}`}>
+                                {fixtureStatusLabel(fixture)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${outcomeStyle(matchOutcome)}`}>
+                                <span aria-hidden="true">{outcomeIcon(matchOutcome)}</span>
+                                {outcomeLabel(matchOutcome)}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => removeMatchFromCombination(combination.id, match.fixtureId)}
+                                aria-label={text(`Retirer ${match.homeTeam} — ${match.awayTeam}`, `Remove ${match.homeTeam} — ${match.awayTeam}`)}
+                                className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-gray-700 text-gray-400 transition hover:border-red-700 hover:bg-red-950/40 hover:text-red-300"
+                              >
+                                <span aria-hidden="true">×</span>
+                              </button>
+                            </div>
                           </div>
                           <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 py-2.5">
                             <div className="flex min-w-0 items-center gap-2">
