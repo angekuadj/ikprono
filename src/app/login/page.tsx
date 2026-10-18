@@ -69,21 +69,6 @@ export default function LoginPage() {
         </div>
 
         <div className="bg-gray-900 border border-gray-800 py-8 px-4 shadow-xl rounded-lg sm:px-10">
-          <div className="mb-4 p-3 bg-blue-900/30 border border-blue-700 rounded-md text-blue-300 text-xs">
-            <p className="font-semibold mb-1">{text("Comptes de test :", "Demo accounts:")}</p>
-            <p>User: user@ikprono.com / user123</p>
-            <p>Admin: admin@ikprono.com / admin123</p>
-            <button
-              type="button"
-              onClick={() => {
-                setEmail("user@ikprono.com");
-                setPassword("user123");
-              }}
-              className="mt-2 w-full bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs"
-            >
-              {text("Remplir automatiquement (User)", "Autofill (User)")}
-            </button>
-          </div>
           {error && (
             <div className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-md text-red-300 text-sm">
               {error}
