@@ -870,12 +870,12 @@ export default function CombinationsPage() {
         )}
 
         {safeCoupon && (
-          <section className="mt-8 rounded-xl border border-green-800 bg-green-950/20 p-5" aria-label={text("Combinaison proposée par l’IA", "AI suggested combination")}>
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-bold text-white">{safeCoupon.title}</h2>
-                <p className="mt-1 text-sm text-gray-300">{safeCoupon.description}</p>
-                <p className="mt-1 text-xs text-gray-400">
+          <section className="mt-8 overflow-hidden rounded-2xl border border-green-900/70 bg-gradient-to-br from-gray-900 to-gray-950 shadow-lg shadow-black/20" aria-label={text("Combinaison proposée par l’IA", "AI suggested combination")}>
+            <header className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-800 px-4 py-3 sm:px-5">
+              <div className="min-w-0">
+                <h2 className="text-lg font-bold text-white">{safeCoupon.title}</h2>
+                <p className="mt-1 text-sm text-gray-400">{safeCoupon.description}</p>
+                <p className="mt-1 text-xs text-gray-500">
                   {text(
                     `${safeCoupon.matches.length} événement(s) choisi(s) automatiquement parmi ${fixtures.length} rencontre(s) à venir selon le niveau de risque ${text(RISK_LEVELS[riskLevel].label.toLocaleLowerCase("fr-FR"), RISK_LEVELS[riskLevel].labelEn.toLowerCase())}.`,
                     `${safeCoupon.matches.length} event(s) automatically chosen from ${fixtures.length} upcoming fixtures at the ${RISK_LEVELS[riskLevel].labelEn.toLowerCase()} risk level.`
@@ -883,20 +883,20 @@ export default function CombinationsPage() {
                 </p>
               </div>
               {typeof safeCoupon.estimatedCombinedRate === "number" && (
-                <span className="rounded-full border border-green-700 bg-green-950 px-3 py-1 text-sm font-semibold text-green-200">
+                <span className="shrink-0 rounded-full border border-green-800 bg-green-950/60 px-3 py-1 text-xs font-semibold text-green-200">
                   {text("Estimation combinée indicative", "Indicative combined estimate")}: {safeCoupon.estimatedCombinedRate}%
                 </span>
               )}
-            </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
+            </header>
+            <div className="grid gap-2.5 p-3 sm:grid-cols-2 sm:p-4">
               {safeCoupon.matches.map(match => (
-                <article key={match.fixtureId} className="rounded-lg border border-gray-800 bg-black/30 p-4">
-                  <h3 className="font-semibold text-white">{match.homeTeam} — {match.awayTeam}</h3>
-                  <ul className="mt-3 space-y-2">
+                <article key={match.fixtureId} className="rounded-xl border border-gray-800 bg-black/30 p-3">
+                  <h3 className="text-sm font-semibold text-white">{match.homeTeam} — {match.awayTeam}</h3>
+                  <ul className="mt-2 space-y-1.5">
                     {match.picks.map(pick => (
-                      <li key={`${pick.market}-${pick.selection}`} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                      <li key={`${pick.market}-${pick.selection}`} className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs">
                         <span className="text-gray-300">{pickLabel(pick)}</span>
-                        <span className="text-green-300">
+                        <span className="rounded-full border border-green-900/80 bg-green-950/40 px-2 py-0.5 font-medium text-green-300">
                           {pick.historicalRate === null
                             ? text("Pas de données", "No data")
                             : `${pick.historicalRate}% (${pick.sampleSize} ${text("match(s)", "matches")})`}
@@ -904,35 +904,37 @@ export default function CombinationsPage() {
                       </li>
                     ))}
                   </ul>
-                  <Link href={`/match/${encodeURIComponent(match.fixtureId)}`} className="mt-3 inline-block text-xs font-semibold text-green-400 hover:text-green-300">
+                  <Link href={`/match/${encodeURIComponent(match.fixtureId)}`} className="mt-2 inline-block text-xs font-semibold text-fuchsia-400 hover:text-fuchsia-300">
                     {text("Voir le match →", "View fixture →")}
                   </Link>
                 </article>
               ))}
             </div>
-            <button
-              type="button"
-              onClick={() => addGeneratedCombinationToBasket(safeCoupon)}
-              className="mt-5 rounded-lg border border-green-600 bg-green-950/40 px-4 py-2 text-sm font-semibold text-green-200 transition hover:bg-green-900/50"
-            >
-              {text("Enregistrer et suivre cette combinaison", "Save and track this combination")}
-            </button>
-            <button
-              type="button"
-              onClick={() => void generateAutoCombination(riskLevel, safeCoupon.matches.map(match => match.fixtureId))}
-              disabled={authLoading || !canGenerateCombination || generating}
-              className="ml-3 mt-5 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500 disabled:cursor-wait disabled:opacity-50"
-            >
-              {generating
-                ? text("Recherche…", "Generating…")
-                : text("Proposer une autre", "Suggest another")}
-            </button>
-            <p className="mt-4 text-xs text-amber-300">
-              {text(
-                "La combinaison est classée selon les taux observés dans l’historique disponible. Ces estimations ne garantissent pas le résultat des matchs.",
-                "The combination is ranked using rates from available match history. These estimates do not guarantee match outcomes."
-              )}
-            </p>
+            <footer className="flex flex-wrap items-center gap-2 border-t border-gray-800 px-3 py-3 sm:px-4">
+              <button
+                type="button"
+                onClick={() => addGeneratedCombinationToBasket(safeCoupon)}
+                className="rounded-lg border border-green-700 bg-green-950/40 px-3 py-2 text-xs font-semibold text-green-200 transition hover:bg-green-900/50"
+              >
+                {text("Enregistrer et suivre", "Save and track")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void generateAutoCombination(riskLevel, safeCoupon.matches.map(match => match.fixtureId))}
+                disabled={authLoading || !canGenerateCombination || generating}
+                className="rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-500 disabled:cursor-wait disabled:opacity-50"
+              >
+                {generating
+                  ? text("Recherche…", "Generating…")
+                  : text("Proposer une autre", "Suggest another")}
+              </button>
+              <p className="basis-full text-[11px] text-amber-300">
+                {text(
+                  "Estimation basée sur l’historique disponible, sans garantie de résultat.",
+                  "Estimate based on available history; outcomes are not guaranteed."
+                )}
+              </p>
+            </footer>
           </section>
         )}
 
