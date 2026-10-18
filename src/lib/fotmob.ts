@@ -26,11 +26,48 @@ export interface FixtureHistory {
   recentMatches: Array<{ team: string; matches: HistoricalMatch[] }>;
 }
 
+export interface FotMobPlayer {
+  number: number;
+  name: string;
+  position: string;
+  rating?: string;
+  imageUrl?: string;
+  x?: number;
+  y?: number;
+}
+
+export interface FotMobUnavailablePlayer {
+  name: string;
+  type: string;
+  expectedReturn?: string;
+  imageUrl?: string;
+}
+
+export interface FotMobComment {
+  minute: string;
+  text: string;
+  side?: "home" | "away";
+}
+
+export interface FotMobRecap {
+  title: string;
+  description: string;
+  summary?: string;
+  url?: string;
+  articleId?: string;
+}
+
+export interface FotMobMomentumPoint {
+  minute: number;
+  value: number;
+}
+
 export interface FotMobDetails {
   fixture: Fixture;
   source: "fotmob" | "cache";
   cachedAt?: string;
   coverageLevel?: string;
+  lineupType: string;
   homeImageUrl?: string;
   awayImageUrl?: string;
   homeFormation: string;
@@ -49,10 +86,15 @@ export interface FotMobDetails {
     period?: "halftime" | "fulltime";
   }>;
   standings: FixtureStanding[];
-  homeLineup: Array<{ number: number; name: string; position: string; rating?: string; imageUrl?: string }>;
-  awayLineup: Array<{ number: number; name: string; position: string; rating?: string; imageUrl?: string }>;
-  homeSubstitutes: Array<{ number: number; name: string; position: string; rating?: string; imageUrl?: string }>;
-  awaySubstitutes: Array<{ number: number; name: string; position: string; rating?: string; imageUrl?: string }>;
+  homeLineup: FotMobPlayer[];
+  awayLineup: FotMobPlayer[];
+  homeSubstitutes: FotMobPlayer[];
+  awaySubstitutes: FotMobPlayer[];
+  homeUnavailablePlayers: FotMobUnavailablePlayer[];
+  awayUnavailablePlayers: FotMobUnavailablePlayer[];
+  comments: FotMobComment[];
+  recap?: FotMobRecap;
+  momentum: FotMobMomentumPoint[];
   topPlayers: {
     home: Array<{ number?: number; name: string; position: string; rating?: string; imageUrl?: string }>;
     away: Array<{ number?: number; name: string; position: string; rating?: string; imageUrl?: string }>;
@@ -292,19 +334,24 @@ function mapHistoricalMatch(value: unknown, competition = ""): HistoricalMatch |
   };
 }
 
-function mapPlayer(value: unknown) {
+function mapPlayer(value: unknown): FotMobPlayer | null {
   if (!isRecord(value)) return null;
   const player = isRecord(value.name) ? text(value.name.fullName) || text(value.name.firstName) : text(value.name);
   if (!player) return null;
   const position = isRecord(value.position) ? text(value.position.label) : text(value.positionName);
   const performance = isRecord(value.performance) ? value.performance : {};
   const playerImageUrl = typeof value.imageUrl === "string" ? value.imageUrl : fotMobPlayerImageUrl(value.id);
+  const layout = isRecord(value.horizontalLayout) ? value.horizontalLayout : {};
+  const x = typeof layout.x === "number" && Number.isFinite(layout.x) ? layout.x : undefined;
+  const y = typeof layout.y === "number" && Number.isFinite(layout.y) ? layout.y : undefined;
   return {
     number: Number(value.shirtNumber) || 0,
     name: player,
     position,
     ...(performance.rating === undefined ? {} : { rating: text(performance.rating) }),
     ...(playerImageUrl ? { imageUrl: playerImageUrl } : {}),
+    ...(x === undefined ? {} : { x }),
+    ...(y === undefined ? {} : { y }),
   };
 }
 
@@ -342,7 +389,159 @@ function mapLineup(payload: unknown, key: "homeTeam" | "awayTeam") {
     (Array.isArray(team[key]) ? team[key] : [])
       .map(mapPlayer)
       .filter((player): player is NonNullable<ReturnType<typeof mapPlayer>> => player !== null);
-  return { formation: text(team.formation), starters: map("starters"), subs: map("subs") };
+  const unavailable = (Array.isArray(team.unavailable) ? team.unavailable : [])
+    .flatMap(value => {
+      if (!isRecord(value)) return [];
+      const name = text(value.name);
+      if (!name) return [];
+      const unavailability = isRecord(value.unavailability) ? value.unavailability : {};
+      const imageUrl = fotMobPlayerImageUrl(value.id);
+      return [{
+        name,
+        type: text(unavailability.type),
+        ...(text(unavailability.expectedReturn)
+          ? { expectedReturn: text(unavailability.expectedReturn) }
+          : {}),
+        ...(imageUrl ? { imageUrl } : {}),
+      }];
+    });
+  return {
+    formation: text(team.formation),
+    starters: map("starters"),
+    subs: map("subs"),
+    unavailable,
+  };
+}
+
+function mapFotMobComments(events: UnknownRecord[], commentValues: unknown[]): FotMobComment[] {
+  const toComment = (event: UnknownRecord): FotMobComment[] => {
+    const content = [
+      event.text,
+      event.textStr,
+      event.comment,
+      event.commentary,
+      event.description,
+      event.eventText,
+      event.message,
+    ].map(text).find(value => value.trim()) ?? "";
+    if (!content) return [];
+    return [{
+      minute: text(event.timeStr) || text(event.time) || text(event.minute),
+      text: content.trim(),
+      ...(typeof event.isHome === "boolean"
+        ? { side: event.isHome ? "home" as const : "away" as const }
+        : {}),
+    }];
+  };
+  const typedComments = events.filter(event =>
+    text(event.type).toLowerCase().includes("comment")
+    || event.commentary === true
+    || (typeof event.commentary === "string" && Boolean(event.commentary.trim()))
+    || event.isComment === true
+  );
+  const mapped = [
+    ...typedComments.flatMap(toComment),
+    ...commentValues.flatMap(value => {
+      if (typeof value === "string" && value.trim()) {
+        return [{ minute: "", text: value.trim() }];
+      }
+      return isRecord(value) ? toComment(value) : [];
+    }),
+  ];
+  return Array.from(
+    new Map(mapped.map(comment => [`${comment.minute}\0${comment.text}`, comment])).values()
+  )
+    .sort((a, b) => {
+      const minuteA = Number.parseFloat(a.minute);
+      const minuteB = Number.parseFloat(b.minute);
+      return (Number.isFinite(minuteA) ? minuteA : Number.MAX_SAFE_INTEGER)
+        - (Number.isFinite(minuteB) ? minuteB : Number.MAX_SAFE_INTEGER);
+    });
+}
+
+function mapFotMobRecap(facts: UnknownRecord): FotMobRecap | undefined {
+  const reviews = Array.isArray(facts.postReview) ? facts.postReview.filter(isRecord) : [];
+  const review = reviews.find(item => text(item.lang).toLowerCase() === "fr")
+    ?? reviews.find(item => text(item.lang).toLowerCase().startsWith("en"))
+    ?? reviews[0];
+  if (!review) return undefined;
+
+  const title = text(review.title).trim();
+  const description = text(review.description).trim();
+  if (!title && !description) return undefined;
+
+  const url = text(review.shareUrl).trim();
+  return {
+    title,
+    description,
+    ...(text(review.id) ? { articleId: text(review.id) } : {}),
+    ...(url.startsWith("https://") ? { url } : {}),
+  };
+}
+
+function htmlToPlainText(value: string): string {
+  return value
+    .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/\s*(p|div|li|h[1-6])\s*>/gi, "\n\n")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&(#x[\da-f]+|#\d+|nbsp|amp|lt|gt|quot|apos);/gi, (entity, code: string) => {
+      if (code.toLowerCase() === "nbsp") return " ";
+      if (code.startsWith("#x")) {
+        const point = Number.parseInt(code.slice(2), 16);
+        return Number.isInteger(point) && point >= 0 && point <= 0x10ffff
+          ? String.fromCodePoint(point)
+          : entity;
+      }
+      if (code.startsWith("#")) {
+        const point = Number.parseInt(code.slice(1), 10);
+        return Number.isInteger(point) && point >= 0 && point <= 0x10ffff
+          ? String.fromCodePoint(point)
+          : entity;
+      }
+      return { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" }[code.toLowerCase()] ?? entity;
+    })
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+async function loadFotMobRecapSummary(details: FotMobDetails, payload: unknown): Promise<void> {
+  if (!details.recap?.articleId || !/^[\w-]{1,128}$/.test(details.recap.articleId)) return;
+  try {
+    const article = await fetchFotMob<unknown>(
+      `https://apigw.fotmob.com/searchapi/search?entity=id&term=${encodeURIComponent(details.recap.articleId)}`
+    );
+    if (!isRecord(article) || typeof article.Summary !== "string") return;
+    const summary = htmlToPlainText(article.Summary);
+    if (summary) {
+      details.recap = {
+        ...details.recap,
+        title: text(article.Title).trim() || details.recap.title,
+        summary,
+      };
+    }
+  } catch (error) {
+    const matchId = isRecord(payload) && isRecord(payload.general) ? text(payload.general.matchId) : "unknown";
+    console.error(`Could not load FotMob recap article for match ${matchId}.`, error);
+  }
+}
+
+function mapFotMobMomentum(payload: UnknownRecord, facts: UnknownRecord): FotMobMomentumPoint[] {
+  const content = isRecord(payload.content) ? payload.content : {};
+  const momentum = isRecord(content.momentum)
+    ? content.momentum
+    : isRecord(facts.momentum)
+      ? facts.momentum
+      : {};
+  const main = isRecord(momentum.main) ? momentum.main : momentum;
+  const points = Array.isArray(main.data) ? main.data : [];
+  return points.flatMap(point => {
+    if (!isRecord(point) || typeof point.minute !== "number" || typeof point.value !== "number") {
+      return [];
+    }
+    if (!Number.isFinite(point.minute) || point.minute < 0 || !Number.isFinite(point.value)) return [];
+    return [{ minute: point.minute, value: Math.max(-100, Math.min(100, point.value)) }];
+  }).sort((a, b) => a.minute - b.minute);
 }
 
 function parseFotMobDetails(payload: unknown, matchId: string, source: "fotmob" | "cache", cachedAt?: string): FotMobDetails {
@@ -408,6 +607,18 @@ function parseFotMobDetails(payload: unknown, matchId: string, source: "fotmob" 
 
   const eventContainer = isRecord(facts.events) ? facts.events : {};
   const rawEvents = Array.isArray(eventContainer.events) ? eventContainer.events : [];
+  const liveticker = isRecord(content.liveticker) ? content.liveticker : {};
+  const rawComments = [
+    ...(Array.isArray(eventContainer.comments) ? eventContainer.comments : []),
+    ...(Array.isArray(liveticker.comments) ? liveticker.comments : []),
+    ...(Array.isArray(content.comments) ? content.comments : []),
+  ];
+  const comments = mapFotMobComments(
+    rawEvents.filter(isRecord),
+    rawComments
+  );
+  const recap = mapFotMobRecap(facts);
+  const momentum = mapFotMobMomentum(payload, facts);
   const events = rawEvents.filter(isRecord).map(event => {
     const player = isRecord(event.player) ? text(event.player.name) : text(event.player);
     const type = text(event.type) || "Event";
@@ -483,6 +694,7 @@ function parseFotMobDetails(payload: unknown, matchId: string, source: "fotmob" 
   }).filter((id, index, all) => all.indexOf(id) === index);
   const homeLineup = mapLineup(payload, "homeTeam");
   const awayLineup = mapLineup(payload, "awayTeam");
+  const lineup = isRecord(content.lineup) ? content.lineup : {};
   const topPlayers = mapTopPlayers(payload);
   const cards = {
     home: {
@@ -525,6 +737,7 @@ function parseFotMobDetails(payload: unknown, matchId: string, source: "fotmob" 
     source,
     ...(cachedAt ? { cachedAt } : {}),
     ...(typeof general.coverageLevel === "string" ? { coverageLevel: general.coverageLevel } : {}),
+    lineupType: text(lineup.lineupType),
     ...(homeTeamImageUrl ? { homeImageUrl: homeTeamImageUrl } : {}),
     ...(awayTeamImageUrl ? { awayImageUrl: awayTeamImageUrl } : {}),
     homeFormation: homeLineup.formation,
@@ -535,6 +748,11 @@ function parseFotMobDetails(payload: unknown, matchId: string, source: "fotmob" 
     awayLineup: awayLineup.starters,
     homeSubstitutes: homeLineup.subs,
     awaySubstitutes: awayLineup.subs,
+    homeUnavailablePlayers: homeLineup.unavailable,
+    awayUnavailablePlayers: awayLineup.unavailable,
+    comments,
+    ...(recap ? { recap } : {}),
+    momentum,
     topPlayers,
     stats,
     history: { confrontations, recentMatches },
@@ -649,6 +867,7 @@ export async function loadFotMobDetails(matchId: string): Promise<FotMobDetails>
       `https://www.fotmob.com/api/data/matchDetails?matchId=${encodeURIComponent(matchId)}`
     );
     const details = parseFotMobDetails(payload, matchId, "fotmob");
+    await loadFotMobRecapSummary(details, payload);
     details.standings = await loadFotMobStandings(payload);
     try {
       await saveFotMobMatchDetails(matchId, payload);
@@ -661,6 +880,7 @@ export async function loadFotMobDetails(matchId: string): Promise<FotMobDetails>
       const cached = await loadCachedFotMobMatchDetails(matchId);
       if (cached) {
         const details = parseFotMobDetails(cached.response, matchId, "cache", cached.cachedAt);
+        await loadFotMobRecapSummary(details, cached.response);
         details.standings = await loadFotMobStandings(cached.response);
         return details;
       }

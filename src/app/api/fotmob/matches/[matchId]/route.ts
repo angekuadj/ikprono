@@ -42,14 +42,21 @@ export async function GET(
           description: `${event.player}${event.detail ? ` ${event.detail}` : ""}`,
           isHome: event.side === undefined ? null : event.side === "home",
         })),
+        comments: details.comments,
+        ...(details.recap ? { recap: details.recap } : {}),
+        momentum: details.momentum,
         stats,
         lineup: {
+          type: details.lineupType,
           home: {
             formation: details.homeFormation,
             starters: details.homeLineup.map(player => ({
               name: player.name,
               shirtNumber: String(player.number),
               position: player.position,
+              ...(player.imageUrl ? { imageUrl: player.imageUrl } : {}),
+              ...(player.x === undefined ? {} : { x: player.x }),
+              ...(player.y === undefined ? {} : { y: player.y }),
               ...(player.rating === undefined ? {} : { rating: Number(player.rating) }),
             })),
             subs: details.homeSubstitutes.map(player => ({
@@ -58,6 +65,7 @@ export async function GET(
               position: player.position,
               ...(player.rating === undefined ? {} : { rating: Number(player.rating) }),
             })),
+            unavailable: details.homeUnavailablePlayers,
           },
           away: {
             formation: details.awayFormation,
@@ -65,6 +73,9 @@ export async function GET(
               name: player.name,
               shirtNumber: String(player.number),
               position: player.position,
+              ...(player.imageUrl ? { imageUrl: player.imageUrl } : {}),
+              ...(player.x === undefined ? {} : { x: player.x }),
+              ...(player.y === undefined ? {} : { y: player.y }),
               ...(player.rating === undefined ? {} : { rating: Number(player.rating) }),
             })),
             subs: details.awaySubstitutes.map(player => ({
@@ -73,6 +84,7 @@ export async function GET(
               position: player.position,
               ...(player.rating === undefined ? {} : { rating: Number(player.rating) }),
             })),
+            unavailable: details.awayUnavailablePlayers,
           },
         },
         source: details.source,
