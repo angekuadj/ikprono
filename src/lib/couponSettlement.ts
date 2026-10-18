@@ -101,11 +101,12 @@ export function settleCoupon(outcomes: CouponOutcome[]): CouponOutcome {
 export function combinationCompletion(combination: {
   matches: CouponFixturePrediction[];
   fixtures: Fixture[];
+  fixturesById?: Record<string, Fixture | undefined>;
 }): { finished: number; pending: number; total: number; allFinished: boolean } {
   let finished = 0;
   let pending = 0;
   for (const match of combination.matches) {
-    const fixture = combination.fixtures.find(f => f.id === match.fixtureId);
+    const fixture = combination.fixturesById?.[match.fixtureId] ?? combination.fixtures.find(f => f.id === match.fixtureId);
     if (fixture && isFixtureFinished(fixture)) {
       finished += 1;
     } else {

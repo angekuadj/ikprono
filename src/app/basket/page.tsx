@@ -571,8 +571,11 @@ export default function BasketPage() {
                 const completion = combinationCompletion({
                   matches: combination.coupon.matches,
                   fixtures: combination.fixtures,
+                  fixturesById,
                 });
                 const isArchivingSoon = completion.allFinished && (outcome === "won" || outcome === "lost");
+                // Le badge "En cours" ne s'affiche que si le résultat global n'est pas encore déterminé.
+                const showProgressBadge = outcome === "pending";
                 return (
                   <article key={combination.id} className="overflow-hidden rounded-2xl border border-green-900/70 bg-gradient-to-br from-gray-900 to-gray-950 shadow-lg shadow-black/30">
                     <header className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-800 p-4 sm:px-5">
@@ -600,7 +603,7 @@ export default function BasketPage() {
                                 <span aria-hidden="true">{outcomeIcon(outcome)}</span>
                                 {outcomeLabel(outcome)}
                               </span>
-                              {completion.total > 0 && (
+                              {showProgressBadge && completion.total > 0 && (
                                 <span
                                   className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                                     isArchivingSoon
