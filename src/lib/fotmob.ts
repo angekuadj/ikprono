@@ -656,6 +656,49 @@ function parseFotMobDetails(payload: unknown, matchId: string, source: "fotmob" 
       ...(type === "Half" && halfLabel === "FT" ? { period: "fulltime" as const } : {}),
     };
   });
+  const incidents = [
+    ...events.flatMap(event => {
+      const normalizedType = event.type.toLocaleLowerCase("en");
+      const normalizedDetail = (event.detail ?? "").toLocaleLowerCase("en");
+      const isCard = normalizedType.includes("card");
+      const type = /\bvar\b|video assistant/.test(normalizedType)
+        ? "var" as const
+        : isCard && /red/.test(normalizedDetail)
+          ? "red-card" as const
+          : normalizedType.includes("penalty") || normalizedDetail.includes("penalty")
+            ? "penalty" as const
+            : normalizedType.includes("goal")
+              ? "goal" as const
+              : normalizedType.includes("big chance") || normalizedType.includes("great chance")
+                ? "big-chance" as const
+                : null;
+      return type ? [{ type, minute: String(event.minute), player: event.player, side: event.side }] : [];
+    }),
+    ...comments.flatMap(comment => {
+      const content = comment.text.toLocaleLowerCase("en");
+      const type = /\bvar\b|video assistant|var review|checking (the )?(goal|penalty)/.test(content)
+        ? "var" as const
+        : /red card|sent off|second yellow card/.test(content)
+          ? "red-card" as const
+          : /penalt(y|ies)|spot[- ]kick/.test(content)
+            ? "penalty" as const
+            : /\bgoal\b|scores!|scored\b/.test(content)
+              ? "goal" as const
+              : /big chance|great chance|grosse occasion/.test(content)
+                ? "big-chance" as const
+                : null;
+      return type ? [{ type, minute: comment.minute, side: comment.side }] : [];
+    }),
+  ].sort((first, second) => {
+    const minuteValue = (minute: string) => {
+      const match = minute.match(/(\d+)(?:\+(\d+))?/);
+      return match ? Number(match[1]) + Number(match[2] ?? 0) / 100 : -1;
+    };
+    return minuteValue(second.minute) - minuteValue(first.minute);
+  });
+  if (status.started === true && status.finished !== true && incidents[0]) {
+    fixture.liveIncident = incidents[0];
+  }
   const halfs = isRecord(status.halfs) ? status.halfs : {};
   const isHalfTime = status.started === true
     && status.finished !== true

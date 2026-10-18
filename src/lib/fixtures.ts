@@ -43,6 +43,12 @@ export interface Fixture {
   score?: string;
   status?: string;
   liveDisplay?: string;
+  liveIncident?: {
+    type: "goal" | "penalty" | "red-card" | "var" | "big-chance";
+    minute: string;
+    player?: string;
+    side?: "home" | "away";
+  };
   matchCards?: FixtureCards;
   liveStatistics?: LiveFixtureStatistics;
   odds?: {

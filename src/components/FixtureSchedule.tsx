@@ -378,8 +378,20 @@ export default function FixtureSchedule({
 
   useEffect(() => {
     const requests = marketEstimateRequests.current;
-    const fixtureIds = (JSON.parse(marketFixtureIdsKey) as string[])
+    const requestedIds = Array.from(new Set(JSON.parse(marketFixtureIdsKey) as string[]))
       .filter(id => !marketEstimates[id] && !requests.has(id));
+    if (requestedIds.length === 0) return;
+    const fixtureIds = requestedIds.filter(id => /^\d{1,20}$/.test(id));
+    const unavailableIds = requestedIds.filter(id => !/^\d{1,20}$/.test(id));
+    if (unavailableIds.length > 0) {
+      setMarketErrors(current => ({
+        ...current,
+        ...Object.fromEntries(unavailableIds.map(id => [
+          id,
+          text("Estimation indisponible pour cette rencontre.", "Estimates are unavailable for this fixture."),
+        ])),
+      }));
+    }
     if (fixtureIds.length === 0) return;
 
     fixtureIds.forEach(id => requests.add(id));
@@ -389,51 +401,49 @@ export default function FixtureSchedule({
     }));
     let cancelled = false;
     const loadEstimates = async () => {
-      try {
-        const params = new URLSearchParams();
-        fixtureIds.forEach(id => params.append("id", id));
-        const response = await fetch(`/api/football/market-estimates?${params.toString()}`, {
-          cache: "no-store",
-        });
-        const payload: unknown = await response.json();
-        if (!response.ok || !isRecord(payload) || !isRecord(payload.marketEstimates)) {
-          const errorMessage = isRecord(payload) && typeof payload.error === "string"
-            ? payload.error
-            : text("Impossible de charger les estimations de cotes.", "Unable to load odds estimates.");
-          throw new Error(errorMessage);
-        }
-        if (cancelled) return;
-
-        const estimates: Record<string, MarketEstimate[]> = {};
-        const errors: Record<string, string> = {};
-        for (const id of fixtureIds) {
-          const result = payload.marketEstimates[id];
-          if (isRecord(result) && isMarketEstimateArray(result.markets)) {
-            estimates[id] = result.markets;
-          } else {
-            errors[id] = text("Estimation indicative indisponible.", "Indicative estimate unavailable.");
+      const estimates: Record<string, MarketEstimate[]> = {};
+      const errors: Record<string, string> = {};
+      for (let start = 0; start < fixtureIds.length; start += 20) {
+        const batch = fixtureIds.slice(start, start + 20);
+        try {
+          const params = new URLSearchParams();
+          batch.forEach(id => params.append("id", id));
+          const response = await fetch(`/api/football/market-estimates?${params.toString()}`, {
+            cache: "no-store",
+          });
+          const payload: unknown = await response.json();
+          if (!response.ok || !isRecord(payload) || !isRecord(payload.marketEstimates)) {
+            const errorMessage = isRecord(payload) && typeof payload.error === "string"
+              ? payload.error
+              : text("Impossible de charger les estimations de cotes.", "Unable to load odds estimates.");
+            throw new Error(errorMessage);
           }
-        }
-        setMarketEstimates(current => ({ ...current, ...estimates }));
-        setMarketErrors(current => ({ ...current, ...errors }));
-      } catch (error) {
-        if (cancelled) return;
-        const message = error instanceof Error
-          ? error.message
-          : text("Impossible de charger les estimations de cotes.", "Unable to load odds estimates.");
-        setMarketErrors(current => ({
-          ...current,
-          ...Object.fromEntries(fixtureIds.map(id => [id, message])),
-        }));
-      } finally {
-        fixtureIds.forEach(id => requests.delete(id));
-        if (!cancelled) {
-          setMarketEstimateLoadingIds(current => {
-            const next = { ...current };
-            fixtureIds.forEach(id => delete next[id]);
-            return next;
+          for (const id of batch) {
+            const result = payload.marketEstimates[id];
+            if (isRecord(result) && isMarketEstimateArray(result.markets)) {
+              estimates[id] = result.markets;
+            } else {
+              errors[id] = text("Estimation indicative indisponible.", "Indicative estimate unavailable.");
+            }
+          }
+        } catch (error) {
+          const message = error instanceof Error
+            ? error.message
+            : text("Impossible de charger les estimations de cotes.", "Unable to load odds estimates.");
+          batch.forEach(id => {
+            errors[id] = message;
           });
         }
+      }
+      if (!cancelled) {
+        setMarketEstimates(current => ({ ...current, ...estimates }));
+        setMarketErrors(current => ({ ...current, ...errors }));
+        fixtureIds.forEach(id => requests.delete(id));
+        setMarketEstimateLoadingIds(current => {
+          const next = { ...current };
+          fixtureIds.forEach(id => delete next[id]);
+          return next;
+        });
       }
     };
     void loadEstimates();
@@ -564,6 +574,13 @@ export default function FixtureSchedule({
       marketLoadingFixtureId === fixture.id ||
       marketEstimateRequests.current.has(fixture.id)
     ) return;
+    if (!/^\d{1,20}$/.test(fixture.id)) {
+      setMarketErrors(current => ({
+        ...current,
+        [fixture.id]: text("Estimation indisponible pour cette rencontre.", "Estimates are unavailable for this fixture."),
+      }));
+      return;
+    }
     marketEstimateRequests.current.add(fixture.id);
     setMarketLoadingFixtureId(fixture.id);
     setMarketErrors(current => {

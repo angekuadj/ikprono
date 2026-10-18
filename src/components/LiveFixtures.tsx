@@ -33,6 +33,12 @@ export default function LiveFixtures() {
   const [selectedFixtures, setSelectedFixtures] = useState<Set<string>>(() => new Set());
   const [basketCount, setBasketCount] = useState(0);
   const [basketError, setBasketError] = useState("");
+  const [visibleLiveIncidents, setVisibleLiveIncidents] = useState<Record<string, {
+    key: string;
+    incident: NonNullable<Fixture["liveIncident"]>;
+  }>>({});
+  const handledLiveIncidents = useRef(new Set<string>());
+  const liveIncidentTimeouts = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const { fixturesById: refreshedLiveFixtures, error: liveFixturesError } = useFixtureStatuses(
     fixtures.map(fixture => fixture.id)
   );
@@ -119,6 +125,37 @@ export default function LiveFixtures() {
     ...fixture,
     ...refreshedLiveFixtures[fixture.id],
   }));
+  useEffect(() => {
+    for (const fixture of fixturesForDisplay) {
+      const incident = fixture.liveIncident;
+      if (!incident) continue;
+      const incidentKey = `${fixture.id}:${incident.type}:${incident.minute}:${incident.player ?? ""}`;
+      if (handledLiveIncidents.current.has(incidentKey)) continue;
+      handledLiveIncidents.current.add(incidentKey);
+
+      const previousTimeout = liveIncidentTimeouts.current.get(fixture.id);
+      if (previousTimeout) clearTimeout(previousTimeout);
+      setVisibleLiveIncidents(current => ({
+        ...current,
+        [fixture.id]: { key: incidentKey, incident },
+      }));
+      liveIncidentTimeouts.current.set(fixture.id, setTimeout(() => {
+        setVisibleLiveIncidents(current => {
+          if (current[fixture.id]?.key !== incidentKey) return current;
+          const next = { ...current };
+          delete next[fixture.id];
+          return next;
+        });
+        liveIncidentTimeouts.current.delete(fixture.id);
+      }, 5_000));
+    }
+  }, [fixturesForDisplay]);
+
+  useEffect(() => () => {
+    liveIncidentTimeouts.current.forEach(timeout => clearTimeout(timeout));
+    liveIncidentTimeouts.current.clear();
+  }, []);
+
   const fixturesByCompetition = new Map<string, {
     display: ReturnType<typeof getFixtureCompetitionDisplay>;
     fixtures: Fixture[];
@@ -271,7 +308,9 @@ export default function LiveFixtures() {
                   </svg>
                 </button>
                 {!isCollapsed && <div id={contentId} className="grid gap-4 lg:grid-cols-3">
-            {competitionFixtures.map(fixture => (
+            {competitionFixtures.map(fixture => {
+              const incident = visibleLiveIncidents[fixture.id]?.incident;
+              return (
               <article key={fixture.id} className="rounded-xl border border-red-900 bg-gray-900 p-3">
                 <Link
                   href={`/match/${encodeURIComponent(fixture.id)}`}
@@ -312,6 +351,37 @@ export default function LiveFixtures() {
                     )}
                     <span className="break-words text-right text-sm font-semibold text-white">{fixture.awayTeam}</span>
                   </div>
+                  {incident && (
+                    <p
+                      role="status"
+                      className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-red-500/30 bg-red-950/50 px-2.5 py-1.5 text-xs text-red-100"
+                    >
+                      <span aria-hidden="true">
+                        {incident.type === "goal"
+                          ? "⚽"
+                          : incident.type === "penalty"
+                            ? "🥅"
+                            : incident.type === "red-card"
+                              ? "🟥"
+                              : incident.type === "var"
+                                ? "📺"
+                                : "⚡"}
+                      </span>
+                      <span className="font-bold uppercase tracking-wide">
+                        {incident.type === "goal"
+                          ? text("But", "Goal")
+                          : incident.type === "penalty"
+                            ? text("Pénalty", "Penalty")
+                            : incident.type === "red-card"
+                              ? text("Carton rouge", "Red card")
+                              : incident.type === "var"
+                                ? text("Vérification VAR", "VAR review")
+                                : text("Grosse occasion", "Big chance")}
+                      </span>
+                      {incident.minute && <span>{incident.minute}′</span>}
+                      {incident.player && <span className="truncate">{incident.player}</span>}
+                    </p>
+                  )}
                   <FixtureCards
                     cards={fixture.matchCards}
                     homeTeam={fixture.homeTeam}
@@ -325,7 +395,8 @@ export default function LiveFixtures() {
                   <FavoriteFixtureButton fixture={fixture} />
                 </div>
               </article>
-            ))}
+              );
+            })}
                 </div>}
               </section>
             );

@@ -23,7 +23,6 @@ const IDLE_REFRESH_INTERVAL_MS = 60_000;
 interface MatchStats {
   source?: "fotmob" | "cache";
   cachedAt?: string;
-  coverageLevel?: string;
   availableStats: string[];
   date: string;
   competition: string;
@@ -769,16 +768,6 @@ export default function MatchStatisticsClient({ fixtureId }: { fixtureId: string
         <p role="status" className="mb-5 rounded-lg border border-amber-700/60 bg-amber-950/40 p-4 text-sm text-amber-200">
           Le flux live FotMob est indisponible. Les dernières données PostgreSQL sont affichées et peuvent être obsolètes ; veuillez réessayer plus tard.
           {stats.cachedAt && <span className="ml-1">{new Date(stats.cachedAt).toLocaleString("fr-FR")}</span>}
-        </p>
-      )}
-      {stats.coverageLevel === "lower" && stats.availableStats.length === 0 && (
-        <p role="status" className="mb-5 rounded-lg border border-amber-700/60 bg-amber-950/40 p-4 text-sm text-amber-200">
-          Toutes les statistiques sont indisponibles pour ce match.
-        </p>
-      )}
-      {stats.coverageLevel === "lower" && stats.availableStats.length > 0 && (
-        <p role="status" className="mb-5 rounded-lg border border-amber-700/60 bg-amber-950/40 p-4 text-sm text-amber-200">
-          Couverture FotMob limitée pour ce match : certaines statistiques, compositions ou données récentes peuvent être indisponibles.
         </p>
       )}
       {/* Tabs */}
