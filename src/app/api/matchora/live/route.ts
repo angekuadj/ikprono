@@ -6,6 +6,11 @@ interface MatchoraLiveMatch {
   id: string;
   homeTeam: string;
   awayTeam: string;
+  league: string;
+  status: string;
+  minute: string | null;
+  score: string | null;
+  kickoff: number;
   embedUrl: string;
 }
 
@@ -17,7 +22,7 @@ export async function GET() {
   try {
     const response = await fetch("https://matchora.to/api/v1/live", {
       headers: { Accept: "application/json" },
-      cache: "no-store",
+      next: { revalidate: 20 },
       signal: AbortSignal.timeout(8_000),
     });
     if (!response.ok) {
@@ -41,7 +46,10 @@ export async function GET() {
         || typeof event.home !== "string"
         || !event.home.trim()
         || typeof event.away !== "string"
-        || !event.away.trim()) {
+        || !event.away.trim()
+        || typeof event.league !== "string"
+        || typeof event.kickoff !== "number"
+        || !Number.isFinite(event.kickoff)) {
         return [];
       }
 
@@ -49,6 +57,11 @@ export async function GET() {
         id: event.id,
         homeTeam: event.home.trim(),
         awayTeam: event.away.trim(),
+        league: event.league.trim(),
+        status: typeof event.status === "string" ? event.status : "LIVE",
+        minute: typeof event.minute === "string" ? event.minute : null,
+        score: typeof event.score === "string" ? event.score : null,
+        kickoff: event.kickoff,
         embedUrl: `https://matchora.to/embed/match/${encodeURIComponent(event.id)}`,
       }];
     });

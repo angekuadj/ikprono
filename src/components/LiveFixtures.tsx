@@ -23,6 +23,11 @@ interface MatchoraLiveMatch {
   id: string;
   homeTeam: string;
   awayTeam: string;
+  league: string;
+  status: string;
+  minute: string | null;
+  score: string | null;
+  kickoff: number;
   embedUrl: string;
 }
 
@@ -40,7 +45,7 @@ function normalizeTeamName(name: string): string {
 export default function LiveFixtures() {
   const { language, text } = useLanguage();
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [liveFilter, setLiveFilter] = useState<"all" | "watchable">("all");
   const [collapsedCompetitionGroups, setCollapsedCompetitionGroups] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -52,7 +57,6 @@ export default function LiveFixtures() {
   const [basketCount, setBasketCount] = useState(0);
   const [basketError, setBasketError] = useState("");
   const [matchoraMatches, setMatchoraMatches] = useState<MatchoraLiveMatch[]>([]);
-  const [matchoraError, setMatchoraError] = useState("");
   const [selectedMatchoraMatch, setSelectedMatchoraMatch] = useState<MatchoraLiveMatch | null>(null);
   const [visibleLiveIncidents, setVisibleLiveIncidents] = useState<Record<string, {
     key: string;
@@ -131,14 +135,11 @@ export default function LiveFixtures() {
           throw new Error(payload.error || "Impossible de vérifier les matchs disponibles sur Matchora.");
         }
         setMatchoraMatches(payload.matches);
-        setMatchoraError("");
       })
       .catch(error => {
         if (controller.signal.aborted) return;
+        console.error("Could not refresh watchable Matchora matches.", error);
         setMatchoraMatches([]);
-        setMatchoraError(error instanceof Error
-          ? error.message
-          : "Impossible de vérifier les matchs disponibles sur Matchora.");
       });
 
     return () => controller.abort();
@@ -154,28 +155,7 @@ export default function LiveFixtures() {
   }, [selectedMatchoraMatch]);
 
   const locale = language === "fr" ? "fr-FR" : "en-GB";
-  const normalizedSearch = searchQuery.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase(locale);
-  const visibleFixtures = fixtures.filter(fixture => {
-    const teamInitials = [fixture.homeTeam, fixture.awayTeam].map(team =>
-      team.split(/[\s-]+/).filter(Boolean).map(word => word[0]).join("")
-    );
-    return [
-      fixture.homeTeam,
-      fixture.awayTeam,
-      ...teamInitials,
-      fixture.league,
-      fixture.competition,
-      fixture.location,
-      fixture.status,
-      fixture.score,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLocaleLowerCase(locale)
-      .includes(normalizedSearch);
-  });
+  const visibleFixtures = fixtures;
   const fixturesForDisplay = visibleFixtures.map(fixture => ({
     ...fixture,
     ...refreshedLiveFixtures[fixture.id],
@@ -266,47 +246,58 @@ export default function LiveFixtures() {
         <section className="mb-6 rounded-xl border border-gray-800 bg-gray-900 p-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <p className="text-sm text-gray-300">
-              {text("Matchs en direct depuis FotMob", "Live matches from FotMob")}
-              {fixtures.length > 0 && (
+              {liveFilter === "watchable"
+                ? text("Matchs en direct disponibles sur Matchora", "Live matches available on Matchora")
+                : text("Matchs en direct depuis FotMob", "Live matches from FotMob")}
+              {liveFilter === "watchable" ? (
+                <span className="ml-2 text-green-400">
+                  {text(`${matchoraMatches.length} match(s) regardable(s)`, `${matchoraMatches.length} watchable match(es)`)}
+                </span>
+              ) : fixtures.length > 0 && (
                 <span className="ml-2 text-green-400">
                   {text(`${fixturesForDisplay.length}/${fixtures.length} match(s) en direct`, `${visibleFixtures.length}/${fixtures.length} live match(es)`)}
                 </span>
               )}
             </p>
-            <button
-              type="button"
-              onClick={refreshNow}
-              disabled={loading}
-              className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-semibold text-gray-200 transition hover:border-green-600 hover:text-white disabled:cursor-wait disabled:opacity-50"
-            >
-              {loading ? text("Actualisation…", "Refreshing…") : text("Actualiser", "Refresh")}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex rounded-lg border border-gray-700 bg-gray-950 p-1" role="group" aria-label={text("Filtrer les matchs", "Filter matches")}>
+                <button
+                  type="button"
+                  aria-pressed={liveFilter === "all"}
+                  onClick={() => setLiveFilter("all")}
+                  className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+                    liveFilter === "all" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"
+                  }`}
+                >
+                  {text("Tous", "All")}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={liveFilter === "watchable"}
+                  onClick={() => setLiveFilter("watchable")}
+                  className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+                    liveFilter === "watchable" ? "bg-red-600 text-white" : "text-gray-400 hover:text-white"
+                  }`}
+                >
+                  {text("Regardables", "Watchable")}
+                  <span className="ml-1.5 text-xs opacity-80">{matchoraMatches.length}</span>
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={refreshNow}
+                disabled={loading}
+                className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-semibold text-gray-200 transition hover:border-green-600 hover:text-white disabled:cursor-wait disabled:opacity-50"
+              >
+                {loading ? text("Actualisation…", "Refreshing…") : text("Actualiser", "Refresh")}
+              </button>
+            </div>
           </div>
-          <label className="mt-4 block">
-            <span className="sr-only">{text("Rechercher une équipe ou une compétition", "Search team or competition")}</span>
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={event => setSearchQuery(event.target.value)}
-              placeholder={text("Rechercher une équipe ou une compétition", "Search team or competition")}
-              className="w-full rounded-lg border border-gray-700 bg-gray-950 px-4 py-3 text-sm text-white outline-none placeholder:text-gray-500 focus:border-red-500"
-            />
-          </label>
         </section>
 
         {liveFixturesError && fixtures.length > 0 && (
           <p role="status" className="mb-5 rounded-lg border border-amber-700/60 bg-amber-950/40 p-4 text-sm text-amber-200">
             {text("La mise à jour des cartons des matchs en cours est indisponible.", "Live match card updates are unavailable.")} {liveFixturesError}
-          </p>
-        )}
-
-        {matchoraError && fixtures.length > 0 && (
-          <p role="status" className="mb-5 rounded-lg border border-amber-700/60 bg-amber-950/40 p-4 text-sm text-amber-200">
-            {text(
-              "La disponibilité des lecteurs Matchora n’a pas pu être vérifiée.",
-              "Matchora player availability could not be checked."
-            )}{" "}
-            {matchoraError}
           </p>
         )}
 
@@ -326,7 +317,54 @@ export default function LiveFixtures() {
           </p>
         )}
 
-        {loadError && fixtures.length === 0 && liveAvailable ? (
+        {liveFilter === "watchable" ? (
+          matchoraMatches.length === 0 ? (
+            <p className="py-12 text-center text-gray-400">
+              {text("Aucun match en direct avec un lecteur disponible pour le moment.", "No live matches with an available stream right now.")}
+            </p>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {matchoraMatches.map(match => {
+                const kickoff = new Date(match.kickoff * 1000);
+                const matchTime = kickoff.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+                const matchDate = kickoff.toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
+                const statusLabels: Record<string, string> = {
+                  "1H": text("1re mi-temps", "1st half"),
+                  HT: text("Mi-temps", "Half-time"),
+                  "2H": text("2e mi-temps", "2nd half"),
+                  ET: text("Prolongations", "Extra time"),
+                  LIVE: text("En direct", "Live"),
+                };
+                return (
+                  <article key={match.id} className="rounded-xl border border-red-900 bg-gray-900 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-semibold text-white">{match.league}</p>
+                        <p className="mt-1 text-[11px] text-gray-500">{matchDate} · {matchTime}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-red-600 px-2 py-1 text-[10px] font-semibold text-white">
+                        {match.minute ? `${match.minute}′` : statusLabels[match.status] ?? match.status}
+                      </span>
+                    </div>
+                    <div className="mt-5 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 text-center">
+                      <span className="break-words text-left text-sm font-semibold text-white">{match.homeTeam}</span>
+                      <span className="whitespace-nowrap text-sm font-bold text-white">{match.score || "vs"}</span>
+                      <span className="break-words text-right text-sm font-semibold text-white">{match.awayTeam}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMatchoraMatch(match)}
+                      className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
+                    >
+                      <span aria-hidden="true">▶</span>
+                      {text("Regarder", "Watch")}
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          )
+        ) : loadError && fixtures.length === 0 && liveAvailable ? (
           <p role="alert" className="py-12 text-center text-red-300">{loadError}</p>
         ) : loading ? (
           <p className="py-12 text-center text-gray-400">{text("Chargement des matchs en direct…", "Loading live matches…")}</p>
@@ -335,11 +373,7 @@ export default function LiveFixtures() {
         ) : (
           <>
           {loadError && <p role="alert" className="mb-4 text-sm text-amber-300">{loadError}</p>}
-          {fixturesForDisplay.length === 0 ? (
-            <p className="py-12 text-center text-gray-400">
-              {text("Aucun match ne correspond à cette recherche.", "No matches match this search.")}
-            </p>
-          ) : (
+          {fixturesForDisplay.length > 0 && (
           <div className="space-y-7">
             {sortedCompetitions.map(({ display, fixtures: competitionFixtures }, index) => {
               const isCollapsed = collapsedCompetitionGroups.has(display.key);
@@ -499,17 +533,19 @@ export default function LiveFixtures() {
           aria-label={text("Match en direct sur Matchora", "Live match on Matchora")}
         >
           <div className="w-full max-w-5xl overflow-hidden rounded-xl border border-gray-700 bg-gray-950 shadow-2xl">
-            <div className="flex items-center justify-between gap-4 border-b border-gray-800 px-4 py-3">
-              <h2 className="min-w-0 truncate text-sm font-semibold text-white">
+            <div className="flex flex-col items-start gap-3 border-b border-gray-800 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="w-full truncate text-sm font-semibold text-white sm:min-w-0">
                 {selectedMatchoraMatch.homeTeam} - {selectedMatchoraMatch.awayTeam}
               </h2>
-              <button
-                type="button"
-                onClick={() => setSelectedMatchoraMatch(null)}
-                className="shrink-0 rounded-md px-3 py-1.5 text-sm font-semibold text-gray-300 hover:bg-gray-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
-              >
-                {text("Fermer", "Close")}
-              </button>
+              <div className="flex w-full shrink-0 items-center justify-end gap-2 sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setSelectedMatchoraMatch(null)}
+                  className="shrink-0 rounded-md px-3 py-1.5 text-sm font-semibold text-gray-300 hover:bg-gray-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                >
+                  {text("Fermer", "Close")}
+                </button>
+              </div>
             </div>
             <iframe
               key={selectedMatchoraMatch.id}
