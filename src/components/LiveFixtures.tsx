@@ -46,6 +46,7 @@ export default function LiveFixtures() {
   const { language, text } = useLanguage();
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
   const [liveFilter, setLiveFilter] = useState<"all" | "watchable">("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [collapsedCompetitionGroups, setCollapsedCompetitionGroups] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -155,11 +156,29 @@ export default function LiveFixtures() {
   }, [selectedMatchoraMatch]);
 
   const locale = language === "fr" ? "fr-FR" : "en-GB";
-  const visibleFixtures = fixtures;
-  const fixturesForDisplay = visibleFixtures.map(fixture => ({
+  const normalizedSearchQuery = normalizeTeamName(searchQuery);
+  const fixturesForDisplay = fixtures.map(fixture => ({
     ...fixture,
     ...refreshedLiveFixtures[fixture.id],
-  }));
+  })).filter(fixture => !normalizedSearchQuery || normalizeTeamName([
+    fixture.homeTeam,
+    fixture.awayTeam,
+    fixture.league,
+    fixture.competition ?? "",
+    fixture.score ?? "",
+    fixture.status ?? "",
+    fixture.time,
+  ].join(" ")).includes(normalizedSearchQuery));
+  const filteredMatchoraMatches = matchoraMatches.filter(match =>
+    !normalizedSearchQuery || normalizeTeamName([
+      match.homeTeam,
+      match.awayTeam,
+      match.league,
+      match.score ?? "",
+      match.status,
+      match.minute ?? "",
+    ].join(" ")).includes(normalizedSearchQuery)
+  );
   useEffect(() => {
     for (const fixture of fixturesForDisplay) {
       const incident = fixture.liveIncident;
@@ -251,11 +270,11 @@ export default function LiveFixtures() {
                 : text("Matchs en direct depuis FotMob", "Live matches from FotMob")}
               {liveFilter === "watchable" ? (
                 <span className="ml-2 text-green-400">
-                  {text(`${matchoraMatches.length} match(s) regardable(s)`, `${matchoraMatches.length} watchable match(es)`)}
+                  {text(`${filteredMatchoraMatches.length}/${matchoraMatches.length} match(s) regardable(s)`, `${filteredMatchoraMatches.length}/${matchoraMatches.length} watchable match(es)`)}
                 </span>
               ) : fixtures.length > 0 && (
                 <span className="ml-2 text-green-400">
-                  {text(`${fixturesForDisplay.length}/${fixtures.length} match(s) en direct`, `${visibleFixtures.length}/${fixtures.length} live match(es)`)}
+                  {text(`${fixturesForDisplay.length}/${fixtures.length} match(s) en direct`, `${fixturesForDisplay.length}/${fixtures.length} live match(es)`)}
                 </span>
               )}
             </p>
@@ -293,6 +312,30 @@ export default function LiveFixtures() {
               </button>
             </div>
           </div>
+          <label className="relative mt-4 block">
+            <span className="sr-only">{text("Rechercher une équipe ou une compétition", "Search for a team or competition")}</span>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={event => setSearchQuery(event.target.value)}
+              placeholder={text("Rechercher une équipe, une compétition, un score…", "Search teams, competitions, scores…")}
+              className="w-full rounded-lg border border-gray-700 bg-gray-950 py-2.5 pl-10 pr-10 text-sm text-white placeholder:text-gray-500 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-600/30"
+            />
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500">
+              <circle cx="10.8" cy="10.8" r="6.3" stroke="currentColor" strokeWidth="1.8" />
+              <path d="m15.5 15.5 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                aria-label={text("Effacer la recherche", "Clear search")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-sm text-gray-400 hover:bg-gray-800 hover:text-white"
+              >
+                ×
+              </button>
+            )}
+          </label>
         </section>
 
         {liveFixturesError && fixtures.length > 0 && (
@@ -318,13 +361,15 @@ export default function LiveFixtures() {
         )}
 
         {liveFilter === "watchable" ? (
-          matchoraMatches.length === 0 ? (
+          filteredMatchoraMatches.length === 0 ? (
             <p className="py-12 text-center text-gray-400">
-              {text("Aucun match en direct avec un lecteur disponible pour le moment.", "No live matches with an available stream right now.")}
+              {matchoraMatches.length === 0
+                ? text("Aucun match en direct avec un lecteur disponible pour le moment.", "No live matches with an available stream right now.")
+                : text("Aucun match ne correspond à votre recherche.", "No matches match your search.")}
             </p>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {matchoraMatches.map(match => {
+              {filteredMatchoraMatches.map(match => {
                 const kickoff = new Date(match.kickoff * 1000);
                 const matchTime = kickoff.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
                 const matchDate = kickoff.toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
@@ -370,6 +415,8 @@ export default function LiveFixtures() {
           <p className="py-12 text-center text-gray-400">{text("Chargement des matchs en direct…", "Loading live matches…")}</p>
         ) : fixtures.length === 0 ? (
           <p className="py-12 text-center text-gray-400">{text("Aucun match en direct pour le moment.", "No live matches at the moment.")}</p>
+        ) : fixturesForDisplay.length === 0 ? (
+          <p className="py-12 text-center text-gray-400">{text("Aucun match ne correspond à votre recherche.", "No matches match your search.")}</p>
         ) : (
           <>
           {loadError && <p role="alert" className="mb-4 text-sm text-amber-300">{loadError}</p>}

@@ -34,6 +34,7 @@ import {
   type CouponOutcome,
 } from "@/lib/couponSettlement";
 import { generateUUID } from "@/lib/uuid";
+import { exportCombinationPdf } from "@/lib/exportCombinationPdf";
 import { MARKET_ESTIMATES, type MarketSelection } from "@/lib/marketEstimates";
 import {
   readMarketSelections,
@@ -275,6 +276,34 @@ export default function BasketPage() {
     return labels[pick.selection];
   };
 
+  const exportGeneratedCombinationPdf = (combination: StoredGeneratedCombination) => {
+    const content = [
+      combination.coupon.title,
+      combination.coupon.description,
+      `${text("Date d’enregistrement", "Saved on")}: ${new Date(combination.createdAt).toLocaleString(locale)}`,
+      ...(typeof combination.coupon.estimatedCombinedRate === "number"
+        ? [`${text("Estimation indicative", "Indicative estimate")}: ${combination.coupon.estimatedCombinedRate}%`]
+        : []),
+      "",
+      ...combination.coupon.matches.flatMap(match => [
+        `${match.homeTeam} — ${match.awayTeam}`,
+        ...match.picks.map(pick => `  - ${getCouponPickLabel(pick)}`),
+        "",
+      ]),
+    ].join("\n");
+
+    try {
+      exportCombinationPdf(combination.coupon.title, content, language);
+      setBasketError("");
+    } catch (error) {
+      console.error("Could not export saved combination as PDF.", error);
+      setBasketError(text(
+        "Impossible d’ouvrir l’export PDF. Autorisez les fenêtres contextuelles puis réessayez.",
+        "Could not open the PDF export. Allow pop-ups and try again."
+      ));
+    }
+  };
+
   const outcomeLabel = (outcome: CouponOutcome) => ({
     pending: text("En attente", "Pending"),
     won: text("Gagnée", "Won"),
@@ -396,7 +425,7 @@ export default function BasketPage() {
                 </div>
                 <h2 className="mt-4 text-lg font-semibold text-white">{text("Aucune combinaison enregistrée", "No saved combinations")}</h2>
                 <p className="mx-auto mt-2 max-w-md text-sm text-gray-400">
-                  {text("Ajoutez ici une combinaison depuis la page Combinaisons. Elle sera conservée telle qu’elle a été générée.", "Add a combination from the Combinations page. It will be saved exactly as generated.")}
+                  {text("Ajoutez une combinaison depuis la page Combinaisons après avoir retiré les rencontres que vous ne souhaitez pas garder.", "Add a combination from the Combinations page after removing any fixtures you do not want to keep.")}
                 </p>
                 <Link href="/combinations" className="mt-5 inline-flex rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-500">
                   {text("Trouver une combinaison", "Find a combination")}
@@ -425,12 +454,20 @@ export default function BasketPage() {
                       <p className="mt-1 text-xs text-gray-400">{combination.coupon.description}</p>
                       <p className="mt-1.5 text-[11px] text-gray-500">{new Date(combination.createdAt).toLocaleString(locale)}</p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
                       {typeof combination.coupon.estimatedCombinedRate === "number" && (
                         <span className="rounded-full border border-green-800 bg-green-950/60 px-3 py-1 text-xs font-semibold text-green-200">
                           {text("Estimation indicative", "Indicative estimate")} {combination.coupon.estimatedCombinedRate}%
                         </span>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => exportGeneratedCombinationPdf(combination)}
+                        title={text("Ouvrir l’impression et choisir « Enregistrer au format PDF »", "Open print and choose “Save as PDF”")}
+                        className="rounded-lg border border-green-700 px-3 py-1.5 text-xs font-semibold text-green-200 transition hover:bg-green-950/50"
+                      >
+                        {text("Exporter PDF", "Export PDF")}
+                      </button>
                       <button
                         type="button"
                         onClick={() => removeGeneratedCombination(combination.id)}

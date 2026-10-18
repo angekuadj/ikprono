@@ -10,6 +10,12 @@ import { readGeneratedCombinations, writeGeneratedCombinations } from "@/lib/gen
 import { uniqueGeneratedCoupons, type GeneratedCoupon, type GeneratedStatisticCoupon, type CouponPick, type StatisticMarket } from "@/lib/coupons";
 import type { Fixture, FixtureResponse } from "@/lib/fixtures";
 import { generateUUID } from "@/lib/uuid";
+import { exportCombinationPdf } from "@/lib/exportCombinationPdf";
+import {
+  readSavedStatisticCombinations,
+  writeSavedStatisticCombinations,
+  type SavedStatisticCombination,
+} from "@/lib/savedStatisticCombinations";
 
 const MAX_FIXTURES = 20;
 const GUEST_COMBINATION_LIMIT = 20;
@@ -99,11 +105,13 @@ export default function CombinationsPage() {
   const [statisticCount, setStatisticCount] = useState(3);
   const [aiSetupStep, setAiSetupStep] = useState<1 | 2>(1);
   const [statisticCoupon, setStatisticCoupon] = useState<GeneratedStatisticCoupon | null>(null);
+  const [savedStatisticCombinations, setSavedStatisticCombinations] = useState<SavedStatisticCombination[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
+  const [actionNotice, setActionNotice] = useState("");
   const [guestCombinationsUsed, setGuestCombinationsUsed] = useState(0);
   const [refreshKey, refreshNow] = useAutoRefresh();
   const guestCombinationsRemaining = Math.max(0, GUEST_COMBINATION_LIMIT - guestCombinationsUsed);
@@ -133,6 +141,17 @@ export default function CombinationsPage() {
     loadGuestCombinationCount();
     window.addEventListener("storage", loadGuestCombinationCount);
     return () => window.removeEventListener("storage", loadGuestCombinationCount);
+  }, [text]);
+
+  useEffect(() => {
+    try {
+      setSavedStatisticCombinations(readSavedStatisticCombinations());
+    } catch (error) {
+      console.error("Could not read saved statistics combinations.", error);
+      setActionError(error instanceof Error
+        ? error.message
+        : text("Impossible de lire les combinaisons enregistrées.", "Unable to read saved combinations."));
+    }
   }, [text]);
 
   const recordGuestCombinations = (count: number) => {
@@ -316,7 +335,7 @@ export default function CombinationsPage() {
       }
       setCoupons(distinctCoupons);
       recordGuestCombinations(distinctCoupons.length);
-      saveCouponsForTracking(distinctCoupons);
+      setActionNotice("");
     } catch (error) {
       setActionError(error instanceof Error
         ? error.message
@@ -474,10 +493,196 @@ export default function CombinationsPage() {
 
   const addGeneratedCombinationToBasket = (coupon: GeneratedCoupon) => {
     setActionError("");
+    setActionNotice("");
     if (saveCouponsForTracking([coupon])) {
-      setActionError(text("Cette combinaison est enregistrée et son résultat est suivi dans le panier.", "This combination is saved and its result is tracked in your basket."));
+      setActionNotice(text("Cette combinaison est enregistrée et son résultat est suivi dans le panier.", "This combination is saved and its result is tracked in your basket."));
     }
   };
+
+  const removeCouponMatch = (couponIndex: number, fixtureId: string) => {
+    setCoupons(current => current.map((coupon, index) => {
+      if (index !== couponIndex || coupon.matches.length <= 1) return coupon;
+      const matches = coupon.matches.filter(match => match.fixtureId !== fixtureId);
+      const pickRates = matches.map(match => {
+        const rates = match.picks.map(pick => pick.historicalRate).filter((rate): rate is number => rate !== null);
+        return rates.length > 0 ? rates.reduce((rate, next) => rate * next / 100, 100) : 0;
+      });
+      const estimatedCombinedRate = coupon.estimatedCombinedRate === undefined
+        ? undefined
+        : Number(pickRates.reduce((rate, next) => rate * next / 100, 100).toFixed(2));
+      return { ...coupon, matches, ...(estimatedCombinedRate === undefined ? {} : { estimatedCombinedRate }) };
+    }));
+    setActionError("");
+    setActionNotice(text("La rencontre a été retirée de la combinaison.", "Fixture removed from the combination."));
+  };
+
+  const removeSafeCouponMatch = (fixtureId: string) => {
+    setSafeCoupon(current => current && current.matches.length > 1
+      ? (() => {
+        const matches = current.matches.filter(match => match.fixtureId !== fixtureId);
+        const pickRates = matches.map(match => {
+          const rates = match.picks.map(pick => pick.historicalRate).filter((rate): rate is number => rate !== null);
+          return rates.length > 0 ? rates.reduce((rate, next) => rate * next / 100, 100) : 0;
+        });
+        const estimatedCombinedRate = current.estimatedCombinedRate === undefined
+          ? undefined
+          : Number(pickRates.reduce((rate, next) => rate * next / 100, 100).toFixed(2));
+        return { ...current, matches, ...(estimatedCombinedRate === undefined ? {} : { estimatedCombinedRate }) };
+      })()
+      : current);
+    setActionError("");
+    setActionNotice(text("La rencontre a été retirée de la combinaison.", "Fixture removed from the combination."));
+  };
+
+  const removeStatisticMatch = (fixtureId: string) => {
+    setStatisticCoupon(current => current && current.matches.length > 1
+      ? (() => {
+        const matches = current.matches.filter(match => match.fixtureId !== fixtureId);
+        return {
+          ...current,
+          matches,
+          estimatedCombinedRate: Number(matches.reduce((rate, match) => rate * match.historicalRate / 100, 100).toFixed(2)),
+        };
+      })()
+      : current);
+    setActionError("");
+    setActionNotice(text("La rencontre a été retirée de la combinaison.", "Fixture removed from the combination."));
+  };
+
+  const formatGeneratedCoupon = (coupon: GeneratedCoupon) => [
+    coupon.title,
+    coupon.description,
+    "",
+    ...coupon.matches.flatMap(match => [
+      `${match.homeTeam} — ${match.awayTeam}`,
+      ...match.picks.map(pick => `  - ${pickLabel(pick)}`),
+      "",
+    ]),
+  ].join("\n");
+
+  const formatStatisticCoupon = (coupon: GeneratedStatisticCoupon) => [
+    coupon.title,
+    coupon.description,
+    `${text("Estimation combinée indicative", "Indicative combined estimate")}: ${coupon.estimatedCombinedRate}%`,
+    "",
+    ...coupon.matches.flatMap(match => {
+      const market = STATISTIC_MARKETS.find(option => option.id === match.market);
+      const direction = match.selection === "over" ? text("Plus de", "Over") : text("Moins de", "Under");
+      const line = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(match.line);
+      return [
+        `${match.homeTeam} — ${match.awayTeam}`,
+        `  - ${text(market?.label ?? match.market, market?.labelEn ?? match.market)}: ${direction} ${line}`,
+        `  - ${match.historicalRate}% ${text("sur", "across")} ${match.sampleSize} ${text("match(s) historique(s)", "historical match(es)")}`,
+        "",
+      ];
+    }),
+  ].join("\n");
+
+  const exportCombination = (title: string, content: string) => {
+    try {
+      exportCombinationPdf(title, content, language);
+      setActionError("");
+      setActionNotice(text(
+        "Choisissez « Enregistrer au format PDF » dans la fenêtre d’impression.",
+        "Choose “Save as PDF” in the print window."
+      ));
+    } catch (error) {
+      console.error("Could not export combination.", error);
+      setActionError(text("Impossible d’exporter cette combinaison.", "Unable to export this combination."));
+    }
+  };
+
+  const shareCombination = async (title: string, content: string) => {
+    setActionError("");
+    setActionNotice("");
+    try {
+      if (navigator.share) {
+        await navigator.share({ title, text: content });
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(content);
+        setActionNotice(text("La combinaison a été copiée pour être partagée.", "Combination copied and ready to share."));
+      } else {
+        throw new Error("Sharing and clipboard access are unavailable.");
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") return;
+      console.error("Could not share combination.", error);
+      setActionError(text("Impossible de partager cette combinaison. Essayez de l’exporter.", "Unable to share this combination. Try exporting it."));
+    }
+  };
+
+  const saveStatisticCombination = (coupon: GeneratedStatisticCoupon) => {
+    try {
+      const saved = readSavedStatisticCombinations();
+      const signature = JSON.stringify(coupon.matches.map(match => [
+        match.fixtureId,
+        match.market,
+        match.selection,
+        match.line,
+      ]));
+      const alreadySaved = saved.some(item =>
+        JSON.stringify(item.coupon.matches.map(match => [
+          match.fixtureId,
+          match.market,
+          match.selection,
+          match.line,
+        ])) === signature
+      );
+      if (alreadySaved) {
+        setActionNotice(text("Cette combinaison est déjà enregistrée sur cet appareil.", "This combination is already saved on this device."));
+        setActionError("");
+        return;
+      }
+      const next = [
+        ...saved,
+        { id: generateUUID(), createdAt: new Date().toISOString(), coupon },
+      ];
+      writeSavedStatisticCombinations(next);
+      setSavedStatisticCombinations(next);
+      setActionError("");
+      setActionNotice(text("La combinaison a été enregistrée sur cet appareil.", "Combination saved on this device."));
+    } catch (error) {
+      console.error("Could not save statistics combination.", error);
+      setActionNotice("");
+      setActionError(error instanceof Error
+        ? error.message
+        : text("Impossible d’enregistrer cette combinaison.", "Unable to save this combination."));
+    }
+  };
+
+  const removeSavedStatisticCombination = (id: string) => {
+    try {
+      const next = savedStatisticCombinations.filter(item => item.id !== id);
+      writeSavedStatisticCombinations(next);
+      setSavedStatisticCombinations(next);
+      setActionError("");
+      setActionNotice(text("La combinaison enregistrée a été supprimée.", "Saved combination removed."));
+    } catch (error) {
+      console.error("Could not remove saved statistics combination.", error);
+      setActionError(error instanceof Error
+        ? error.message
+        : text("Impossible de supprimer cette combinaison.", "Unable to remove this combination."));
+    }
+  };
+
+  const renderCombinationActions = (title: string, content: string) => (
+    <div className="flex flex-wrap gap-2">
+      <button
+        type="button"
+        onClick={() => exportCombination(title, content)}
+        className="rounded-lg border border-gray-700 px-3 py-2 text-xs font-semibold text-gray-200 transition hover:border-green-600 hover:text-white"
+      >
+        {text("Exporter en PDF", "Export as PDF")}
+      </button>
+      <button
+        type="button"
+        onClick={() => void shareCombination(title, content)}
+        className="rounded-lg border border-green-700 px-3 py-2 text-xs font-semibold text-green-200 transition hover:bg-green-950/50"
+      >
+        {text("Partager", "Share")}
+      </button>
+    </div>
+  );
 
   const pickLabel = (pick: CouponPick) => {
     if (!pick.selection) return text("Historique insuffisant", "Insufficient history");
@@ -498,6 +703,13 @@ export default function CombinationsPage() {
   return (
     <main className="min-h-screen bg-black px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
+        {(actionError || actionNotice) && (
+          <p className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
+            actionError ? "border-red-800 bg-red-950/40 text-red-200" : "border-green-800 bg-green-950/30 text-green-200"
+          }`} role={actionError ? "alert" : "status"}>
+            {actionError || actionNotice}
+          </p>
+        )}
         <header className="mb-8">
           <h1 className="text-3xl font-bold text-white">
             {activeTab === "ai" ? text("Combinaisons IA", "AI combinations") : text("Combinaisons à venir", "Upcoming combinations")}
@@ -902,7 +1114,19 @@ export default function CombinationsPage() {
             <div className="grid gap-2.5 p-3 sm:grid-cols-2 sm:p-4">
               {safeCoupon.matches.map(match => (
                 <article key={match.fixtureId} className="rounded-xl border border-gray-800 bg-black/30 p-3">
-                  <h3 className="text-sm font-semibold text-white">{match.homeTeam} — {match.awayTeam}</h3>
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-white">{match.homeTeam} — {match.awayTeam}</h3>
+                    <button
+                      type="button"
+                      onClick={() => removeSafeCouponMatch(match.fixtureId)}
+                      disabled={safeCoupon.matches.length <= 1}
+                      aria-label={text(`Retirer ${match.homeTeam} contre ${match.awayTeam}`, `Remove ${match.homeTeam} vs ${match.awayTeam}`)}
+                      title={text("Retirer cette rencontre", "Remove this fixture")}
+                      className="shrink-0 rounded border border-gray-700 px-2 text-xs text-gray-300 hover:border-red-700 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      ×
+                    </button>
+                  </div>
                   <ul className="mt-2 space-y-1.5">
                     {match.picks.map(pick => (
                       <li key={`${pick.market}-${pick.selection}`} className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs">
@@ -945,6 +1169,7 @@ export default function CombinationsPage() {
                   "Estimate based on available history; outcomes are not guaranteed."
                 )}
               </p>
+              {renderCombinationActions(safeCoupon.title, formatGeneratedCoupon(safeCoupon))}
             </footer>
           </section>
         )}
@@ -953,7 +1178,7 @@ export default function CombinationsPage() {
           <section className="mt-10" aria-label={text("Combinaisons proposées", "Suggested combinations")}>
             <h2 className="mb-4 text-2xl font-bold text-white">{text("Vos combinaisons", "Your combinations")}</h2>
             <p className="mb-4 text-sm text-green-300">
-              {text("Ces coupons sont enregistrés automatiquement et leurs résultats seront suivis dans votre panier.", "These coupons are saved automatically and their results will be tracked in your basket.")}
+              {text("Retirez les rencontres que vous ne souhaitez pas garder, puis enregistrez chaque combinaison pour suivre son résultat dans le panier.", "Remove any fixtures you do not want, then save each combination to track its result in your basket.")}
               {" "}
               <Link href="/basket" className="font-semibold underline hover:text-green-200">
                 {text("Voir le suivi", "View tracking")}
@@ -967,7 +1192,19 @@ export default function CombinationsPage() {
                   <ul className="mt-4 space-y-3">
                     {coupon.matches.map(match => (
                       <li key={match.fixtureId} className="rounded-lg border border-gray-800 bg-black/30 p-3">
-                        <p className="text-sm font-semibold text-white">{match.homeTeam} — {match.awayTeam}</p>
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm font-semibold text-white">{match.homeTeam} — {match.awayTeam}</p>
+                          <button
+                            type="button"
+                            onClick={() => removeCouponMatch(index, match.fixtureId)}
+                            disabled={coupon.matches.length <= 1}
+                            aria-label={text(`Retirer ${match.homeTeam} contre ${match.awayTeam}`, `Remove ${match.homeTeam} vs ${match.awayTeam}`)}
+                            title={text("Retirer cette rencontre", "Remove this fixture")}
+                            className="shrink-0 rounded border border-gray-700 px-2 text-xs text-gray-300 hover:border-red-700 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            ×
+                          </button>
+                        </div>
                         <ul className="mt-2 space-y-2">
                           {match.picks.map(pick => (
                             <li key={`${pick.market}-${pick.selection}`} className="flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -986,6 +1223,23 @@ export default function CombinationsPage() {
                       </li>
                     ))}
                   </ul>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActionError("");
+                      setActionNotice("");
+                      if (saveCouponsForTracking([coupon])) {
+                        setActionNotice(text(
+                          "La combinaison a été enregistrée et son résultat sera suivi dans le panier.",
+                          "Combination saved and its result will be tracked in your basket."
+                        ));
+                      }
+                    }}
+                    className="mt-4 rounded-lg border border-green-700 bg-green-950/40 px-3 py-2 text-xs font-semibold text-green-200 transition hover:bg-green-900/50"
+                  >
+                    {text("Enregistrer et suivre", "Save and track")}
+                  </button>
+                  {renderCombinationActions(coupon.title, formatGeneratedCoupon(coupon))}
                 </article>
               ))}
             </div>
@@ -1173,7 +1427,19 @@ export default function CombinationsPage() {
                     const line = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(match.line);
                     return (
                       <article key={match.fixtureId} className="rounded-lg border border-gray-800 bg-black/30 p-4">
-                        <h4 className="font-semibold text-white">{match.homeTeam} — {match.awayTeam}</h4>
+                        <div className="flex items-start justify-between gap-2">
+                          <h4 className="font-semibold text-white">{match.homeTeam} — {match.awayTeam}</h4>
+                          <button
+                            type="button"
+                            onClick={() => removeStatisticMatch(match.fixtureId)}
+                            disabled={statisticCoupon.matches.length <= 1}
+                            aria-label={text(`Retirer ${match.homeTeam} contre ${match.awayTeam}`, `Remove ${match.homeTeam} vs ${match.awayTeam}`)}
+                            title={text("Retirer cette rencontre", "Remove this fixture")}
+                            className="shrink-0 rounded border border-gray-700 px-2 text-xs text-gray-300 hover:border-red-700 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            ×
+                          </button>
+                        </div>
                         <p className="mt-2 text-sm text-gray-300">{text(market.label, market.labelEn)} : {direction} {line}</p>
                         <p className="mt-1 text-xs text-green-300">
                           {match.historicalRate}% {text("sur", "across")} {match.sampleSize} {text("match(s) historique(s)", "historical match(es)")}
@@ -1185,6 +1451,16 @@ export default function CombinationsPage() {
                     );
                   })}
                 </div>
+                <div className="mt-4 space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => saveStatisticCombination(statisticCoupon)}
+                    className="rounded-lg border border-green-700 bg-green-950/40 px-3 py-2 text-xs font-semibold text-green-200 transition hover:bg-green-900/50"
+                  >
+                    {text("Enregistrer", "Save")}
+                  </button>
+                  {renderCombinationActions(statisticCoupon.title, formatStatisticCoupon(statisticCoupon))}
+                </div>
                 <button
                   type="button"
                   onClick={() => void generateStatisticCombination(riskLevel, statisticCoupon.matches.map(match => match.fixtureId))}
@@ -1193,6 +1469,48 @@ export default function CombinationsPage() {
                 >
                   {generating ? text("Génération…", "Generating…") : text("Proposer une autre", "Suggest another")}
                 </button>
+              </section>
+            )}
+            {savedStatisticCombinations.length > 0 && (
+              <section className="mt-8 border-t border-gray-800 pt-6" aria-label={text("Combinaisons statistiques enregistrées", "Saved statistics combinations")}>
+                <h3 className="mb-3 text-lg font-bold text-white">{text("Combinaisons enregistrées sur cet appareil", "Combinations saved on this device")}</h3>
+                <ul className="space-y-3">
+                  {savedStatisticCombinations.map(saved => (
+                    <li key={saved.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-800 bg-black/30 p-4">
+                      <div>
+                        <p className="font-semibold text-white">{saved.coupon.title}</p>
+                        <p className="mt-1 text-xs text-gray-400">
+                          {new Date(saved.createdAt).toLocaleDateString(locale)}
+                          {" · "}
+                          {saved.coupon.matches.length} {text("rencontre(s)", "fixture(s)")}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => exportCombination(saved.coupon.title, formatStatisticCoupon(saved.coupon))}
+                          className="rounded-lg border border-gray-700 px-3 py-2 text-xs font-semibold text-gray-200 hover:text-white"
+                        >
+                          {text("Exporter PDF", "Export PDF")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void shareCombination(saved.coupon.title, formatStatisticCoupon(saved.coupon))}
+                          className="rounded-lg border border-green-700 px-3 py-2 text-xs font-semibold text-green-200 hover:bg-green-950/50"
+                        >
+                          {text("Partager", "Share")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeSavedStatisticCombination(saved.id)}
+                          className="rounded-lg border border-red-900 px-3 py-2 text-xs font-semibold text-red-200 hover:bg-red-950/40"
+                        >
+                          {text("Supprimer", "Delete")}
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               </section>
             )}
           </section>
