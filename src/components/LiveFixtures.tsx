@@ -19,6 +19,24 @@ import {
 } from "@/lib/competitionPriority";
 import type { Fixture } from "@/lib/fixtures";
 
+interface MatchoraLiveMatch {
+  id: string;
+  homeTeam: string;
+  awayTeam: string;
+  embedUrl: string;
+}
+
+function normalizeTeamName(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("en")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 export default function LiveFixtures() {
   const { language, text } = useLanguage();
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
@@ -33,6 +51,9 @@ export default function LiveFixtures() {
   const [selectedFixtures, setSelectedFixtures] = useState<Set<string>>(() => new Set());
   const [basketCount, setBasketCount] = useState(0);
   const [basketError, setBasketError] = useState("");
+  const [matchoraMatches, setMatchoraMatches] = useState<MatchoraLiveMatch[]>([]);
+  const [matchoraError, setMatchoraError] = useState("");
+  const [selectedMatchoraMatch, setSelectedMatchoraMatch] = useState<MatchoraLiveMatch | null>(null);
   const [visibleLiveIncidents, setVisibleLiveIncidents] = useState<Record<string, {
     key: string;
     incident: NonNullable<Fixture["liveIncident"]>;
@@ -97,6 +118,40 @@ export default function LiveFixtures() {
 
     return () => controller.abort();
   }, [refreshKey]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/matchora/live", { signal: controller.signal, cache: "no-store" })
+      .then(async response => {
+        const payload = await response.json() as {
+          matches?: MatchoraLiveMatch[];
+          error?: string;
+        };
+        if (!response.ok || !Array.isArray(payload.matches)) {
+          throw new Error(payload.error || "Impossible de vérifier les matchs disponibles sur Matchora.");
+        }
+        setMatchoraMatches(payload.matches);
+        setMatchoraError("");
+      })
+      .catch(error => {
+        if (controller.signal.aborted) return;
+        setMatchoraMatches([]);
+        setMatchoraError(error instanceof Error
+          ? error.message
+          : "Impossible de vérifier les matchs disponibles sur Matchora.");
+      });
+
+    return () => controller.abort();
+  }, [refreshKey]);
+
+  useEffect(() => {
+    if (!selectedMatchoraMatch) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedMatchoraMatch(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [selectedMatchoraMatch]);
 
   const locale = language === "fr" ? "fr-FR" : "en-GB";
   const normalizedSearch = searchQuery.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase(locale);
@@ -245,6 +300,16 @@ export default function LiveFixtures() {
           </p>
         )}
 
+        {matchoraError && fixtures.length > 0 && (
+          <p role="status" className="mb-5 rounded-lg border border-amber-700/60 bg-amber-950/40 p-4 text-sm text-amber-200">
+            {text(
+              "La disponibilité des lecteurs Matchora n’a pas pu être vérifiée.",
+              "Matchora player availability could not be checked."
+            )}{" "}
+            {matchoraError}
+          </p>
+        )}
+
         {(!liveAvailable || loadError) && (
           <p role="status" className="mb-5 rounded-lg border border-amber-700/60 bg-amber-950/40 p-4 text-sm text-amber-200">
             {liveAvailable
@@ -310,6 +375,12 @@ export default function LiveFixtures() {
                 {!isCollapsed && <div id={contentId} className="grid gap-4 lg:grid-cols-3">
             {competitionFixtures.map(fixture => {
               const incident = visibleLiveIncidents[fixture.id]?.incident;
+              const fixtureHome = normalizeTeamName(fixture.homeTeam);
+              const fixtureAway = normalizeTeamName(fixture.awayTeam);
+              const matchoraMatch = matchoraMatches.find(match =>
+                normalizeTeamName(match.homeTeam) === fixtureHome
+                && normalizeTeamName(match.awayTeam) === fixtureAway
+              );
               return (
               <article key={fixture.id} className="rounded-xl border border-red-900 bg-gray-900 p-3">
                 <Link
@@ -395,7 +466,17 @@ export default function LiveFixtures() {
                   />
                   <span className="mt-1 block text-[10px] font-medium text-red-300">{text("Voir les détails →", "View details →")}</span>
                 </Link>
-                <div className="mt-2">
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                  {matchoraMatch && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMatchoraMatch(matchoraMatch)}
+                      className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
+                    >
+                      <span aria-hidden="true">▶</span>
+                      {text("Regarder", "Watch")}
+                    </button>
+                  )}
                   <FavoriteFixtureButton fixture={fixture} />
                 </div>
               </article>
@@ -410,6 +491,42 @@ export default function LiveFixtures() {
           </>
         )}
       </div>
+      {selectedMatchoraMatch && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={text("Match en direct sur Matchora", "Live match on Matchora")}
+        >
+          <div className="w-full max-w-5xl overflow-hidden rounded-xl border border-gray-700 bg-gray-950 shadow-2xl">
+            <div className="flex items-center justify-between gap-4 border-b border-gray-800 px-4 py-3">
+              <h2 className="min-w-0 truncate text-sm font-semibold text-white">
+                {selectedMatchoraMatch.homeTeam} - {selectedMatchoraMatch.awayTeam}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setSelectedMatchoraMatch(null)}
+                className="shrink-0 rounded-md px-3 py-1.5 text-sm font-semibold text-gray-300 hover:bg-gray-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+              >
+                {text("Fermer", "Close")}
+              </button>
+            </div>
+            <iframe
+              key={selectedMatchoraMatch.id}
+              src={selectedMatchoraMatch.embedUrl}
+              title={`${selectedMatchoraMatch.homeTeam} - ${selectedMatchoraMatch.awayTeam}`}
+              className="aspect-video w-full bg-black"
+              allow="autoplay; fullscreen"
+              allowFullScreen
+              loading="lazy"
+              referrerPolicy="no-referrer"
+            />
+            <p className="px-4 py-2 text-xs text-gray-500">
+              {text("Lecteur fourni par Matchora.", "Player provided by Matchora.")}
+            </p>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
