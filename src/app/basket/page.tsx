@@ -37,6 +37,7 @@ import {
   settleCoupon,
   settleCouponMatch,
   settleCouponPick,
+  combinationCompletion,
   type CouponOutcome,
 } from "@/lib/couponSettlement";
 import { generateUUID } from "@/lib/uuid";
@@ -558,6 +559,11 @@ export default function BasketPage() {
               generatedCombinations.slice().reverse().map(combination => {
                 const isExpanded = expandedCombinations.has(combination.id);
                 const outcome = couponOutcome(combination.coupon, combination.fixtures);
+                const completion = combinationCompletion({
+                  matches: combination.coupon.matches,
+                  fixtures: combination.fixtures,
+                });
+                const isArchivingSoon = completion.allFinished && (outcome === "won" || outcome === "lost");
                 return (
                   <article key={combination.id} className="overflow-hidden rounded-2xl border border-green-900/70 bg-gradient-to-br from-gray-900 to-gray-950 shadow-lg shadow-black/30">
                     <header className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-800 p-4 sm:px-5">
@@ -585,6 +591,22 @@ export default function BasketPage() {
                                 <span aria-hidden="true">{outcomeIcon(outcome)}</span>
                                 {outcomeLabel(outcome)}
                               </span>
+                              {completion.total > 0 && (
+                                <span
+                                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                                    isArchivingSoon
+                                      ? "border-orange-600 bg-orange-950/40 text-orange-300"
+                                      : "border-gray-600 bg-gray-900/50 text-gray-300"
+                                  }`}
+                                >
+                                  <span aria-hidden="true">
+                                    {isArchivingSoon ? "⟳" : "●"}
+                                  </span>
+                                  {isArchivingSoon
+                                    ? `${text("À archiver", "Archiving soon")} (${completion.finished}/${completion.total})`
+                                    : `${text("En cours", "In progress")} (${completion.finished}/${completion.total})`}
+                                </span>
+                              )}
                             </div>
                             <p className="mt-1 text-xs text-gray-400">{combination.coupon.description}</p>
                             <p className="mt-1.5 text-[11px] text-gray-500">{new Date(combination.createdAt).toLocaleString(locale)}</p>

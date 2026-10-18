@@ -97,3 +97,19 @@ export function settleCoupon(outcomes: CouponOutcome[]): CouponOutcome {
   if (outcomes.includes("pending")) return "pending";
   return "unavailable";
 }
+
+export function combinationCompletion(combination: {
+  matches: CouponFixturePrediction[];
+  fixtures: Fixture[];
+}): { finished: number; total: number; allFinished: boolean } {
+  let finished = 0;
+  for (const match of combination.matches) {
+    const fixture = combination.fixtures.find(f => f.id === match.fixtureId);
+    if (fixture && isFixtureFinished(fixture)) finished += 1;
+  }
+  return {
+    finished,
+    total: combination.matches.length,
+    allFinished: finished === combination.matches.length && combination.matches.length > 0,
+  };
+}
