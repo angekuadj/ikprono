@@ -14,6 +14,7 @@ export default function SocialAuthButtons({ callbackUrl }: { callbackUrl: string
   const [configuredProviders, setConfiguredProviders] = useState<string[] | null>(null);
   const [pendingProvider, setPendingProvider] = useState<Provider | null>(null);
   const [error, setError] = useState("");
+  const [providerLoadError, setProviderLoadError] = useState("");
   const firebaseEnabled = isFirebaseAuthConfigured();
 
   // Firebase actif : inutile de demander les providers NextAuth.
@@ -28,10 +29,16 @@ export default function SocialAuthButtons({ callbackUrl }: { callbackUrl: string
         setConfiguredProviders(Object.keys(providers ?? {}));
       })
       .catch(() => {
-        if (!controller.signal.aborted) setConfiguredProviders([]);
+        if (!controller.signal.aborted) {
+          setConfiguredProviders([]);
+          setProviderLoadError(text(
+            "Impossible de vérifier les méthodes de connexion : le serveur d’authentification renvoie une erreur.",
+            "Unable to check sign-in methods: the authentication server returned an error."
+          ));
+        }
       });
     return () => controller.abort();
-  }, [firebaseEnabled]);
+  }, [firebaseEnabled, text]);
 
   const handleGoogleSignIn = async () => {
     setError("");
@@ -60,10 +67,10 @@ export default function SocialAuthButtons({ callbackUrl }: { callbackUrl: string
   const handleNextAuthSignIn = async (provider: Provider) => {
     setError("");
     if (!configuredProviders?.includes(provider)) {
-      setError(text(
-        `La connexion ${provider === "google" ? "Google" : "Apple"} n'est pas encore configurée.`,
-        `${provider === "google" ? "Google" : "Apple"} sign-in is not configured yet.`
-      ));
+      setError(providerLoadError || text(
+          `La connexion ${provider === "google" ? "Google" : "Apple"} n'est pas encore configurée.`,
+          `${provider === "google" ? "Google" : "Apple"} sign-in is not configured yet.`
+        ));
       return;
     }
 
