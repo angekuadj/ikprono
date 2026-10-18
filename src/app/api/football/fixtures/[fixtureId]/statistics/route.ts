@@ -100,6 +100,7 @@ export async function GET(
     }));
     const matchStats = {
       date: fixture.date,
+      time: fixture.time,
       competition: fixture.league,
       fixtureId: fixture.id,
       homeTeam: fixture.homeTeam,

@@ -34,6 +34,13 @@ import {
   type CouponOutcome,
 } from "@/lib/couponSettlement";
 import { generateUUID } from "@/lib/uuid";
+import { MARKET_ESTIMATES, type MarketSelection } from "@/lib/marketEstimates";
+import {
+  readMarketSelections,
+  subscribeToMarketSelections,
+  writeMarketSelections,
+  type MarketSelectionsByFixture,
+} from "@/lib/marketSelections";
 
 const MAX_SELECTION_SIZE = 20;
 type BasketTab = "basket" | "generated" | "selections";
@@ -47,6 +54,7 @@ export default function BasketPage() {
   const [basketError, setBasketError] = useState("");
   const [saveError, setSaveError] = useState("");
   const [savedSelections, setSavedSelections] = useState<SavedSelection[]>([]);
+  const [marketSelections, setMarketSelections] = useState<MarketSelectionsByFixture>({});
   const [couponErrors, setCouponErrors] = useState<Record<string, string>>({});
   const [generatingSelectionId, setGeneratingSelectionId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<BasketTab>("basket");
@@ -78,6 +86,18 @@ export default function BasketPage() {
   }, []);
 
   useEffect(() => {
+    const syncMarketSelections = () => {
+      try {
+        setMarketSelections(readMarketSelections());
+      } catch (error) {
+        setBasketError(error instanceof Error ? error.message : text("Impossible de lire les marchés sélectionnés.", "Unable to read selected markets."));
+      }
+    };
+    syncMarketSelections();
+    return subscribeToMarketSelections(syncMarketSelections);
+  }, [text]);
+
+  useEffect(() => {
     const syncGeneratedCombinations = () => {
       try {
         setGeneratedCombinations(readGeneratedCombinations());
@@ -106,6 +126,9 @@ export default function BasketPage() {
   const removeFixture = (fixtureId: string) => {
     try {
       writeFixtureBasket(fixtures.filter(fixture => fixture.id !== fixtureId));
+      const nextSelections = readMarketSelections();
+      delete nextSelections[fixtureId];
+      writeMarketSelections(nextSelections);
       setSaveError("");
     } catch (error) {
       setBasketError(error instanceof Error ? error.message : text("Impossible de modifier le panier.", "Unable to update the basket."));
@@ -115,6 +138,7 @@ export default function BasketPage() {
   const clearBasket = () => {
     try {
       writeFixtureBasket([]);
+      writeMarketSelections({});
       setSaveError("");
     } catch (error) {
       setBasketError(error instanceof Error ? error.message : text("Impossible de vider le panier.", "Unable to clear the basket."));
@@ -157,6 +181,11 @@ export default function BasketPage() {
       id: generateUUID(),
       createdAt: new Date().toISOString(),
       fixtures,
+      marketPicks: Object.fromEntries(
+        fixtures
+          .filter(fixture => (marketSelections[fixture.id] ?? []).length > 0)
+          .map(fixture => [fixture.id, marketSelections[fixture.id]])
+      ),
     };
     try {
       writeSavedSelections(user.id, [...existingSelections, selection]);
@@ -169,6 +198,7 @@ export default function BasketPage() {
         return;
       }
       writeFixtureBasket([]);
+      writeMarketSelections({});
       setSavedSelections([...existingSelections, selection]);
       setActiveTab("selections");
     } catch (error) {
@@ -273,6 +303,20 @@ export default function BasketPage() {
         fixturesById[match.fixtureId] ?? fallbackFixtures.find(fixture => fixture.id === match.fixtureId)
       )
     ));
+  const marketPickLabel = (pick: MarketSelection) => {
+    const market = MARKET_ESTIMATES.find(option => option.id === pick.market);
+    return market ? text(market.label, market.labelEn) : pick.market;
+  };
+  const combinationMarketEstimate = (picks: MarketSelection[]) => {
+    if (picks.length === 0) return null;
+    const estimatedProbability = picks.reduce((probability, pick) => probability * pick.estimatedRate / 100, 1);
+    return {
+      probabilityPercent: estimatedProbability * 100,
+      estimatedOdds: estimatedProbability > 0 ? 1 / estimatedProbability : null,
+    };
+  };
+  const basketMarketPicks = fixtures.flatMap(fixture => marketSelections[fixture.id] ?? []);
+  const basketEstimate = combinationMarketEstimate(basketMarketPicks);
 
   if (isLoading) {
     return (
@@ -505,16 +549,44 @@ export default function BasketPage() {
                   <ul className="mt-2 space-y-1">
                     {selection.fixtures.map(fixture => {
                       const currentFixture = fixturesById[fixture.id] ?? fixture;
+                      const picks = selection.marketPicks?.[fixture.id] ?? [];
                       return (
                         <li key={fixture.id} className="text-sm text-gray-200">
-                          {fixture.homeTeam} — {fixture.awayTeam}
-                          <span className="ml-2 text-gray-500">
-                            {currentFixture.score || currentFixture.status || fixture.time}
-                          </span>
+                          <span>{fixture.homeTeam} — {fixture.awayTeam}</span>
+                          <span className="ml-2 text-gray-500">{currentFixture.score || currentFixture.status || fixture.time}</span>
+                          {picks.length > 0 && (
+                            <ul className="mb-2 ml-3 mt-1 space-y-1 border-l border-fuchsia-900 pl-2">
+                              {picks.map(pick => (
+                                <li key={pick.market} className="flex flex-wrap justify-between gap-x-2 text-xs text-gray-400">
+                                  <span>{marketPickLabel(pick)}</span>
+                                  <span className="text-fuchsia-200">{pick.estimatedRate}% · ≈{pick.estimatedOdds.toFixed(2)}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
                         </li>
                       );
                     })}
                   </ul>
+                  {selection.marketPicks && (
+                    <div className="mt-2 rounded-md border border-green-900/60 bg-green-950/20 p-2 text-xs text-green-200">
+                      {(() => {
+                        const estimate = combinationMarketEstimate(Object.values(selection.marketPicks).flat());
+                        return estimate ? (
+                          <>
+                            <span className="font-semibold">{text("Estimation indicative", "Indicative estimate")}: </span>
+                            {estimate.probabilityPercent < 0.005 ? "< 0,01%" : `${estimate.probabilityPercent.toFixed(2)}%`}
+                            {estimate.estimatedOdds && <span> · ≈{estimate.estimatedOdds.toFixed(2)}</span>}
+                          </>
+                        ) : text("Aucun marché sélectionné", "No market picks selected");
+                      })()}
+                    </div>
+                  )}
+                  {selection.marketPicks && Object.values(selection.marketPicks).some(picks => picks.length > 0) && (
+                    <p className="mt-1 text-[10px] text-gray-500">
+                      {text("Estimation indicative, pas une cote bookmaker ; les choix sont supposés indépendants.", "Indicative estimate, not bookmaker odds; picks are assumed to be independent.")}
+                    </p>
+                  )}
                   <button
                     type="button"
                     onClick={() => void generateSelectionCoupons(selection)}
@@ -653,6 +725,7 @@ export default function BasketPage() {
             <section className="grid gap-2.5 sm:grid-cols-2" aria-label={text("Matchs dans le panier", "Fixtures in basket")}>
               {fixtures.map(fixture => {
                 const currentFixture = fixturesById[fixture.id] ?? fixture;
+                const selectedMarketPicks = marketSelections[fixture.id] ?? [];
                 const dateLabel = new Date(`${currentFixture.date}T12:00:00.000Z`).toLocaleDateString(locale, {
                   day: "numeric",
                   month: "short",
@@ -696,6 +769,18 @@ export default function BasketPage() {
                       <span className="truncate text-gray-400">{currentFixture.status || text("Rencontre sélectionnée", "Selected fixture")}</span>
                       {currentFixture.score && <span className="shrink-0 font-bold text-white">{currentFixture.score}</span>}
                     </div>
+                    {selectedMarketPicks.length > 0 && (
+                      <ul className="mt-2 space-y-1 border-t border-gray-800 pt-2">
+                        {selectedMarketPicks.map(pick => (
+                          <li key={pick.market} className="flex flex-wrap items-center justify-between gap-x-2 text-[10px]">
+                            <span className="text-gray-300">{marketPickLabel(pick)}</span>
+                            <span className="rounded-full border border-fuchsia-900 bg-fuchsia-950/30 px-2 py-0.5 font-medium text-fuchsia-200">
+                              {pick.estimatedRate}% · ≈{pick.estimatedOdds.toFixed(2)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </article>
                 );
               })}
@@ -726,10 +811,27 @@ export default function BasketPage() {
                     : text("Se connecter pour valider", "Log in to continue")}
                 </button>
               </div>
+              {basketEstimate && (
+                <div className="mt-4 rounded-lg border border-green-800/70 bg-green-950/30 px-3 py-2.5">
+                  <p className="text-xs font-semibold text-green-200">
+                    {text("Estimation indicative de la combinaison", "Indicative combination estimate")}
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-white">
+                    {basketEstimate.probabilityPercent < 0.005 ? "< 0,01%" : `${basketEstimate.probabilityPercent.toFixed(2)}%`}
+                    {basketEstimate.estimatedOdds && <span className="ml-2 text-green-300">≈ {basketEstimate.estimatedOdds.toFixed(2)}</span>}
+                  </p>
+                  <p className="mt-1 text-[10px] text-gray-400">
+                    {text(
+                      "Calcul simplifié à partir des fréquences historiques, en supposant les sélections indépendantes. Ce n’est pas une cote bookmaker ni une garantie.",
+                      "Simplified calculation from historical frequencies, assuming independent picks. This is not bookmaker odds or a guarantee."
+                    )}
+                  </p>
+                </div>
+              )}
               <p className="mt-4 border-t border-gray-800 pt-4 text-xs text-gray-500">
                 {text(
-                  "Cette action enregistre vos matchs et utilise une sélection de votre quota. Aucun pronostic ou cote automatique n’est produit.",
-                  "This saves your fixtures and uses one selection from your quota. It does not generate a prediction or odds."
+                  "Cette action enregistre les matchs et marchés choisis et utilise une sélection de votre quota. Les cotes affichées sont des estimations indicatives, pas des cotes bookmaker.",
+                  "This saves your chosen fixtures and markets and uses one selection from your quota. Displayed odds are indicative estimates, not bookmaker odds."
                 )}
               </p>
             </section>

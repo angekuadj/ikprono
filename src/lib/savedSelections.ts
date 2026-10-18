@@ -1,5 +1,7 @@
 import type { GeneratedCoupon } from "@/lib/coupons";
 import type { Fixture } from "@/lib/fixtures";
+import type { MarketSelection } from "@/lib/marketEstimates";
+import { isMarketSelection } from "@/lib/marketSelections";
 
 export interface SavedSelection {
   id: string;
@@ -7,6 +9,7 @@ export interface SavedSelection {
   fixtures: Fixture[];
   coupons?: GeneratedCoupon[];
   couponsGeneratedAt?: string;
+  marketPicks?: Record<string, MarketSelection[]>;
 }
 
 const couponSelections = [
@@ -75,6 +78,11 @@ export function isSavedSelection(value: unknown): value is SavedSelection {
         value.coupons.length <= 3 &&
         value.coupons.every(isGeneratedCoupon))) &&
     (value.couponsGeneratedAt === undefined || typeof value.couponsGeneratedAt === "string")
+    && (value.marketPicks === undefined ||
+      (isRecord(value.marketPicks) &&
+        Object.entries(value.marketPicks).every(([fixtureId, picks]) =>
+          fixtureId.length > 0 && Array.isArray(picks) && picks.every(isMarketSelection)
+        )))
   );
 }
 

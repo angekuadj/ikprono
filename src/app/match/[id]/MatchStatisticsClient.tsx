@@ -4,6 +4,18 @@ import Image from 'next/image';
 import { useState, useEffect, useCallback } from 'react';
 import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import { useLanguage } from '@/context/LanguageContext';
+import {
+  MARKET_ESTIMATES,
+  type MarketEstimate,
+} from '@/lib/marketEstimates';
+import {
+  readMarketSelections,
+  isMarketEstimateId,
+  subscribeToMarketSelections,
+  toggleFixtureMarketSelection,
+  type MarketSelectionsByFixture,
+} from '@/lib/marketSelections';
+import type { Fixture } from '@/lib/fixtures';
 
 const LIVE_REFRESH_INTERVAL_MS = 15_000;
 const IDLE_REFRESH_INTERVAL_MS = 60_000;
@@ -16,6 +28,7 @@ interface MatchStats {
   date: string;
   competition: string;
   fixtureId: string;
+  time: string;
   homeTeam: string;
   awayTeam: string;
   homeImageUrl?: string;
@@ -200,6 +213,25 @@ const STRING_SIDE_FIELDS = [
 const INITIAL_H2H_COUNT = 5;
 const UPCOMING_FIXTURES_DAYS = 14;
 
+function isMarketEstimateArray(value: unknown): value is MarketEstimate[] {
+  return Array.isArray(value) && value.every(market =>
+    typeof market === 'object' &&
+    market !== null &&
+    'market' in market &&
+    typeof market.market === 'string' &&
+    isMarketEstimateId(market.market) &&
+    'estimatedRate' in market &&
+    typeof market.estimatedRate === 'number' &&
+    Number.isFinite(market.estimatedRate) &&
+    market.estimatedRate > 0 &&
+    market.estimatedRate <= 100 &&
+    'sampleSize' in market &&
+    typeof market.sampleSize === 'number' &&
+    Number.isSafeInteger(market.sampleSize) &&
+    market.sampleSize >= 5
+  );
+}
+
 interface UpcomingFixture {
   date: string;
   time: string;
@@ -305,6 +337,11 @@ export default function MatchStatisticsClient({ fixtureId }: { fixtureId: string
   const [isLoadingUpcomingFixtures, setIsLoadingUpcomingFixtures] = useState(false);
   const [upcomingFixturesError, setUpcomingFixturesError] = useState<string | null>(null);
   const [hasLoadedUpcomingFixtures, setHasLoadedUpcomingFixtures] = useState(false);
+  const [marketEstimates, setMarketEstimates] = useState<MarketEstimate[]>([]);
+  const [marketEstimatesLoading, setMarketEstimatesLoading] = useState(false);
+  const [marketEstimatesError, setMarketEstimatesError] = useState('');
+  const [marketSelections, setMarketSelections] = useState<MarketSelectionsByFixture>({});
+  const [marketBasketError, setMarketBasketError] = useState('');
 
   const fetchMatchStats = useCallback(async (silent = false) => {
     try {
@@ -333,6 +370,94 @@ export default function MatchStatisticsClient({ fixtureId }: { fixtureId: string
       if (!silent) setIsLoading(false);
     }
   }, [fixtureId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setMarketEstimatesLoading(true);
+    setMarketEstimatesError('');
+    fetch(`/api/football/fixtures/${encodeURIComponent(fixtureId)}/market-estimates`, {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+      .then(async response => {
+        const payload: unknown = await response.json();
+        if (
+          !response.ok ||
+          typeof payload !== 'object' ||
+          payload === null ||
+          !('markets' in payload) ||
+          !isMarketEstimateArray(payload.markets)
+        ) {
+          const message = typeof payload === 'object' && payload !== null && 'error' in payload && typeof payload.error === 'string'
+            ? payload.error
+            : text('Impossible de charger les estimations de marchés.', 'Unable to load market estimates.');
+          throw new Error(message);
+        }
+        setMarketEstimates(payload.markets);
+      })
+      .catch(error => {
+        if (controller.signal.aborted) return;
+        setMarketEstimatesError(
+          error instanceof Error
+            ? error.message
+            : text('Impossible de charger les estimations de marchés.', 'Unable to load market estimates.')
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setMarketEstimatesLoading(false);
+      });
+    return () => controller.abort();
+  }, [fixtureId, text]);
+
+  useEffect(() => {
+    const syncMarketSelections = () => {
+      try {
+        setMarketSelections(readMarketSelections());
+        setMarketBasketError('');
+      } catch (error) {
+        setMarketBasketError(
+          error instanceof Error
+            ? error.message
+            : text('Impossible de lire les marchés sélectionnés.', 'Unable to read selected markets.')
+        );
+      }
+    };
+    syncMarketSelections();
+    return subscribeToMarketSelections(syncMarketSelections);
+  }, [text]);
+
+  const toggleDetailMarket = (estimate: MarketEstimate) => {
+    if (!stats || stats.status !== 'Prévu') return;
+    const fixture: Fixture = {
+      id: stats.fixtureId,
+      matchId: stats.fixtureId,
+      sport: 'football',
+      date: stats.date,
+      time: stats.time,
+      league: stats.competition,
+      competition: stats.competition,
+      homeTeam: stats.homeTeam,
+      awayTeam: stats.awayTeam,
+      homeImageUrl: stats.homeImageUrl,
+      awayImageUrl: stats.awayImageUrl,
+      status: stats.status,
+      ...(stats.homeScore !== undefined && stats.awayScore !== undefined
+        ? { score: `${stats.homeScore} - ${stats.awayScore}` }
+        : {}),
+    };
+    try {
+      toggleFixtureMarketSelection(fixture, estimate);
+      setMarketBasketError('');
+    } catch (error) {
+      setMarketBasketError(
+        error instanceof Error
+          ? text(error.message, error.message === 'Le panier est limité à 20 matchs.'
+            ? 'The basket is limited to 20 matches.'
+            : error.message)
+          : text('Impossible d’enregistrer ce marché.', 'Unable to save this market.')
+      );
+    }
+  };
 
   useEffect(() => {
     fetchMatchStats();
@@ -677,6 +802,114 @@ export default function MatchStatisticsClient({ fixtureId }: { fixtureId: string
       {/* Tab Content */}
       {activeTab === 'resume' && (
         <div className="space-y-6">
+          <section className="rounded-2xl border border-gray-800 bg-gray-900 p-4 sm:p-5" aria-label={text('Marchés et estimations indicatives', 'Markets and indicative estimates')}>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h3 className="text-lg font-bold text-white">{text('Marchés du match', 'Match markets')}</h3>
+                <p className="mt-1 text-xs text-gray-400">
+                  {text('Estimations historiques · pas des cotes bookmaker', 'Historical estimates · not bookmaker odds')}
+                </p>
+              </div>
+              {stats.status !== 'Prévu' && (
+                <span className="rounded-full border border-gray-700 bg-gray-800 px-2.5 py-1 text-[10px] text-gray-400">
+                  {text('Sélection disponible avant le match', 'Selections available before kickoff')}
+                </span>
+              )}
+            </div>
+            {marketBasketError && <p role="alert" className="mt-3 text-xs text-red-300">{marketBasketError}</p>}
+            {marketEstimatesError && <p role="alert" className="mt-3 text-xs text-amber-300">{marketEstimatesError}</p>}
+            {marketEstimatesLoading ? (
+              <p role="status" className="mt-4 text-sm text-gray-400">{text('Calcul des estimations…', 'Calculating estimates…')}</p>
+            ) : marketEstimates.length > 0 ? (
+              <>
+                <div className="mt-4">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400">1X2</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {([
+                      { id: 'home-win', label: '1' },
+                      { id: 'draw', label: 'N' },
+                      { id: 'away-win', label: '2' },
+                    ] as const).map(market => {
+                      const estimate = marketEstimates.find(item => item.market === market.id);
+                      const selected = (marketSelections[stats.fixtureId] ?? []).some(item => item.market === market.id);
+                      return (
+                        <button
+                          key={market.id}
+                          type="button"
+                          disabled={!estimate || stats.status !== 'Prévu'}
+                          aria-pressed={selected}
+                          title={estimate
+                            ? `${estimate.estimatedRate}% ${text('sur', 'across')} ${estimate.sampleSize} ${text('matchs historiques', 'historical matches')}`
+                            : text('Historique insuffisant', 'Insufficient history')}
+                          onClick={() => estimate && toggleDetailMarket(estimate)}
+                          className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm transition ${
+                            selected
+                              ? 'border-fuchsia-700 bg-fuchsia-950/40 text-fuchsia-100'
+                              : estimate
+                                ? 'border-gray-700 bg-gray-950 text-gray-300 hover:border-gray-500'
+                                : 'cursor-not-allowed border-gray-800 bg-gray-950/50 text-gray-600'
+                          } disabled:cursor-not-allowed disabled:opacity-70`}
+                        >
+                          <span className="font-semibold">{market.label}</span>
+                          <span className="font-bold text-white">{estimate ? `≈${(100 / estimate.estimatedRate).toFixed(2)}` : '—'}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                    {text('Autres marchés', 'Other markets')}
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {MARKET_ESTIMATES.filter(market =>
+                      !['home-win', 'draw', 'away-win'].includes(market.id)
+                    ).map(market => {
+                      const estimate = marketEstimates.find(item => item.market === market.id);
+                      const selected = (marketSelections[stats.fixtureId] ?? []).some(item => item.market === market.id);
+                      return (
+                        <button
+                          key={market.id}
+                          type="button"
+                          disabled={!estimate || stats.status !== 'Prévu'}
+                          aria-pressed={selected}
+                          title={estimate
+                            ? `${estimate.estimatedRate}% ${text('sur', 'across')} ${estimate.sampleSize} ${text('matchs historiques', 'historical matches')}`
+                            : text('Historique insuffisant', 'Insufficient history')}
+                          onClick={() => estimate && toggleDetailMarket(estimate)}
+                          className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-xs transition ${
+                            selected
+                              ? 'border-fuchsia-700 bg-fuchsia-950/40 text-fuchsia-100'
+                              : estimate
+                                ? 'border-gray-700 bg-gray-950 text-gray-300 hover:border-gray-500'
+                                : 'cursor-not-allowed border-gray-800 bg-gray-950/50 text-gray-600'
+                          } disabled:cursor-not-allowed disabled:opacity-70`}
+                        >
+                          <span>{text(market.label, market.labelEn)}</span>
+                          <span className="shrink-0 font-bold text-white">{estimate ? `≈${(100 / estimate.estimatedRate).toFixed(2)}` : '—'}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {Boolean(marketSelections[stats.fixtureId]?.length) && (
+                  <p className="mt-3 text-xs text-fuchsia-300">
+                    {text(
+                      `${marketSelections[stats.fixtureId].length} sélection(s) de ce match dans votre panier.`,
+                      `${marketSelections[stats.fixtureId].length} pick(s) from this match in your basket.`
+                    )}
+                  </p>
+                )}
+              </>
+            ) : (
+              !marketEstimatesError && (
+                <p className="mt-4 text-sm text-gray-400">
+                  {text('Historique insuffisant pour estimer les marchés.', 'Not enough history to estimate markets.')}
+                </p>
+              )
+            )}
+          </section>
+
           {/* Odds */}
           {stats.odds && (
             <div className="rounded-2xl border border-gray-800 bg-gray-900 p-6">

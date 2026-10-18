@@ -9,6 +9,19 @@ import { useNotifications } from "@/context/NotificationContext";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { useFixtureStatuses } from "@/hooks/useFixtureStatuses";
 import {
+  MARKET_ESTIMATES,
+  type MarketEstimate,
+  type MarketEstimateId,
+} from "@/lib/marketEstimates";
+import {
+  readMarketSelections,
+  isMarketEstimateId,
+  subscribeToMarketSelections,
+  toggleFixtureMarketSelection,
+  writeMarketSelections,
+  type MarketSelectionsByFixture,
+} from "@/lib/marketSelections";
+import {
   readFixtureBasket,
   subscribeToFixtureBasket,
   writeFixtureBasket,
@@ -25,6 +38,29 @@ type MatchStatusFilter = "all" | "completed" | "upcoming" | "live";
 type TimeFilter = "all" | "5min" | "10min" | "30min" | "1h" | "2h";
 
 const PAGE_SIZE = 20;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isMarketEstimateArray(value: unknown): value is MarketEstimate[] {
+  return Array.isArray(value) && value.every(market =>
+    typeof market === "object" &&
+    market !== null &&
+    "market" in market &&
+    typeof market.market === "string" &&
+    isMarketEstimateId(market.market) &&
+    "estimatedRate" in market &&
+    typeof market.estimatedRate === "number" &&
+    Number.isFinite(market.estimatedRate) &&
+    market.estimatedRate > 0 &&
+    market.estimatedRate <= 100 &&
+    "sampleSize" in market &&
+    typeof market.sampleSize === "number" &&
+    Number.isSafeInteger(market.sampleSize) &&
+    market.sampleSize >= 5
+  );
+}
 
 function getLocalDate() {
   const now = new Date();
@@ -124,6 +160,12 @@ export default function FixtureSchedule({
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedFixtures, setSelectedFixtures] = useState<Set<string>>(() => new Set());
+  const [marketSelections, setMarketSelections] = useState<MarketSelectionsByFixture>({});
+  const [marketPanelFixtureId, setMarketPanelFixtureId] = useState<string | null>(null);
+  const [marketEstimates, setMarketEstimates] = useState<Record<string, MarketEstimate[]>>({});
+  const [marketLoadingFixtureId, setMarketLoadingFixtureId] = useState<string | null>(null);
+  const [marketEstimateLoadingIds, setMarketEstimateLoadingIds] = useState<Record<string, boolean>>({});
+  const [marketErrors, setMarketErrors] = useState<Record<string, string>>({});
   const [basketCount, setBasketCount] = useState(0);
   const [basketError, setBasketError] = useState("");
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
@@ -132,6 +174,7 @@ export default function FixtureSchedule({
   const [loadError, setLoadError] = useState("");
   const [refreshKey, refreshNow] = useAutoRefresh();
   const hasLoadedFixtures = useRef(false);
+  const marketEstimateRequests = useRef(new Set<string>());
 
   useEffect(() => {
     const syncBasket = () => {
@@ -147,6 +190,18 @@ export default function FixtureSchedule({
     syncBasket();
     return subscribeToFixtureBasket(syncBasket);
   }, [refreshKey]);
+
+  useEffect(() => {
+    const syncMarketSelections = () => {
+      try {
+        setMarketSelections(readMarketSelections());
+      } catch (error) {
+        setBasketError(error instanceof Error ? error.message : "Impossible de lire les marchés sélectionnés.");
+      }
+    };
+    syncMarketSelections();
+    return subscribeToMarketSelections(syncMarketSelections);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -278,6 +333,79 @@ export default function FixtureSchedule({
     ...fixture,
     ...refreshedLiveFixtures[fixture.id],
   }));
+  const marketFixtureIdsKey = JSON.stringify(
+    fixturesForDisplay
+      .filter(fixture => fixture.sport === "football" && fixture.status === "Prévu")
+      .map(fixture => fixture.id)
+  );
+
+  useEffect(() => {
+    const requests = marketEstimateRequests.current;
+    const fixtureIds = (JSON.parse(marketFixtureIdsKey) as string[])
+      .filter(id => !marketEstimates[id] && !requests.has(id));
+    if (fixtureIds.length === 0) return;
+
+    fixtureIds.forEach(id => requests.add(id));
+    setMarketEstimateLoadingIds(current => ({
+      ...current,
+      ...Object.fromEntries(fixtureIds.map(id => [id, true])),
+    }));
+    let cancelled = false;
+    const loadEstimates = async () => {
+      try {
+        const params = new URLSearchParams();
+        fixtureIds.forEach(id => params.append("id", id));
+        const response = await fetch(`/api/football/market-estimates?${params.toString()}`, {
+          cache: "no-store",
+        });
+        const payload: unknown = await response.json();
+        if (!response.ok || !isRecord(payload) || !isRecord(payload.marketEstimates)) {
+          const errorMessage = isRecord(payload) && typeof payload.error === "string"
+            ? payload.error
+            : text("Impossible de charger les estimations de cotes.", "Unable to load odds estimates.");
+          throw new Error(errorMessage);
+        }
+        if (cancelled) return;
+
+        const estimates: Record<string, MarketEstimate[]> = {};
+        const errors: Record<string, string> = {};
+        for (const id of fixtureIds) {
+          const result = payload.marketEstimates[id];
+          if (isRecord(result) && isMarketEstimateArray(result.markets)) {
+            estimates[id] = result.markets;
+          } else {
+            errors[id] = text("Estimation indicative indisponible.", "Indicative estimate unavailable.");
+          }
+        }
+        setMarketEstimates(current => ({ ...current, ...estimates }));
+        setMarketErrors(current => ({ ...current, ...errors }));
+      } catch (error) {
+        if (cancelled) return;
+        const message = error instanceof Error
+          ? error.message
+          : text("Impossible de charger les estimations de cotes.", "Unable to load odds estimates.");
+        setMarketErrors(current => ({
+          ...current,
+          ...Object.fromEntries(fixtureIds.map(id => [id, message])),
+        }));
+      } finally {
+        fixtureIds.forEach(id => requests.delete(id));
+        if (!cancelled) {
+          setMarketEstimateLoadingIds(current => {
+            const next = { ...current };
+            fixtureIds.forEach(id => delete next[id]);
+            return next;
+          });
+        }
+      }
+    };
+    void loadEstimates();
+    return () => {
+      cancelled = true;
+      fixtureIds.forEach(id => requests.delete(id));
+    };
+  }, [marketEstimates, marketFixtureIdsKey, text]);
+
   const locations = Array.from(new Set(fixtures.map(fixture => fixture.location).filter((value): value is string => Boolean(value))))
     .sort((first, second) => first.localeCompare(second, language === "fr" ? "fr" : "en"));
   const competitions = Array.from(new Set(
@@ -366,6 +494,9 @@ export default function FixtureSchedule({
       const alreadySelected = basket.some(item => item.id === fixture.id);
       if (alreadySelected) {
         writeFixtureBasket(basket.filter(item => item.id !== fixture.id));
+        const nextSelections = readMarketSelections();
+        delete nextSelections[fixture.id];
+        writeMarketSelections(nextSelections);
       } else if (basket.length >= 20) {
         addNotification(text("Le panier est limité à 20 matchs.", "The basket is limited to 20 matches."), "warning");
       } else {
@@ -374,6 +505,57 @@ export default function FixtureSchedule({
       }
     } catch (error) {
       setBasketError(error instanceof Error ? error.message : text("Impossible de modifier le panier.", "Unable to update the basket."));
+    }
+  };
+
+  const loadMarketEstimates = async (fixture: Fixture) => {
+    if (
+      marketEstimates[fixture.id] ||
+      marketLoadingFixtureId === fixture.id ||
+      marketEstimateRequests.current.has(fixture.id)
+    ) return;
+    marketEstimateRequests.current.add(fixture.id);
+    setMarketLoadingFixtureId(fixture.id);
+    setMarketErrors(current => {
+      const next = { ...current };
+      delete next[fixture.id];
+      return next;
+    });
+    try {
+      const response = await fetch(`/api/football/fixtures/${encodeURIComponent(fixture.id)}/market-estimates`, {
+        cache: "no-store",
+      });
+      const payload = await response.json() as { markets?: unknown; error?: string };
+      const markets = payload.markets;
+      if (!response.ok || !isMarketEstimateArray(markets)) {
+        throw new Error(payload.error || text("Impossible de calculer les estimations.", "Unable to calculate estimates."));
+      }
+      setMarketEstimates(current => ({ ...current, [fixture.id]: markets }));
+    } catch (error) {
+      setMarketErrors(current => ({
+        ...current,
+        [fixture.id]: error instanceof Error ? error.message : text("Impossible de calculer les estimations.", "Unable to calculate estimates."),
+      }));
+    } finally {
+      marketEstimateRequests.current.delete(fixture.id);
+      setMarketLoadingFixtureId(current => current === fixture.id ? null : current);
+    }
+  };
+
+  const toggleMarketSelection = (fixture: Fixture, estimate: MarketEstimate) => {
+    try {
+      const wasSelected = (marketSelections[fixture.id] ?? [])
+        .some(selection => selection.market === estimate.market);
+      toggleFixtureMarketSelection(fixture, estimate);
+      if (!wasSelected && !selectedFixtures.has(fixture.id)) {
+        addNotification(text("Match et marché ajoutés au panier.", "Fixture and market added to basket."), "success");
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message === "Le panier est limité à 20 matchs.") {
+        addNotification(text(error.message, "The basket is limited to 20 matches."), "warning");
+        return;
+      }
+      setBasketError(error instanceof Error ? error.message : text("Impossible d’enregistrer ce marché.", "Unable to save this market."));
     }
   };
 
@@ -393,6 +575,12 @@ export default function FixtureSchedule({
     const hasOddsRow = Boolean(
       showOdds && odds && odds.homeWin > 0 && odds.awayWin > 0
     );
+    const oneXTwoMarkets: Array<{ id: MarketEstimateId; label: string }> = [
+      { id: "home-win", label: "1" },
+      { id: "draw", label: "N" },
+      { id: "away-win", label: "2" },
+    ];
+    const fixtureMarketEstimates = marketEstimates[fixture.id] ?? [];
     const nameColor = (outcome: MatchOutcome) => {
       if (result === outcome) return "text-green-400";
       if (result === "home" || result === "away") return "text-gray-400";
@@ -457,6 +645,55 @@ export default function FixtureSchedule({
             homeImageUrl={fixture.homeImageUrl}
             awayImageUrl={fixture.awayImageUrl}
           />
+          {fixture.sport === "football" && fixture.status === "Prévu" && (
+            <div className="mt-2" role="group" aria-label={text("Estimations indicatives 1 N 2", "Indicative 1 X 2 estimates")}>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">
+                  1X2 · {text("estimation indicative", "indicative estimate")}
+                </span>
+                <span className="text-[9px] text-gray-600">{text("pas bookmaker", "not bookmaker odds")}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-1">
+                {oneXTwoMarkets.map(market => {
+                  const estimate = fixtureMarketEstimates.find(item => item.market === market.id);
+                  const selected = (marketSelections[fixture.id] ?? []).some(item => item.market === market.id);
+                  return (
+                    <button
+                      key={market.id}
+                      type="button"
+                      disabled={!estimate}
+                      aria-pressed={selected}
+                      title={estimate
+                        ? text(
+                          `${estimate.estimatedRate}% sur ${estimate.sampleSize} matchs historiques`,
+                          `${estimate.estimatedRate}% across ${estimate.sampleSize} historical matches`
+                        )
+                        : text("Historique insuffisant", "Insufficient history")}
+                      onClick={() => estimate && toggleMarketSelection(fixture, estimate)}
+                      className={`grid grid-cols-[1fr_auto] items-center gap-1 rounded-md border px-2 py-1 text-[9px] transition ${
+                        selected
+                          ? "border-fuchsia-700 bg-fuchsia-950/50 text-fuchsia-100"
+                          : estimate
+                            ? "border-gray-800 bg-gray-950/80 text-gray-300 hover:border-gray-600"
+                            : "cursor-not-allowed border-gray-900 bg-gray-950/40 text-gray-600"
+                      }`}
+                    >
+                      <span className="text-left font-semibold">{market.label}</span>
+                      <span className="font-bold text-white">
+                        {estimate ? (100 / estimate.estimatedRate).toFixed(2) : "—"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {marketEstimateLoadingIds[fixture.id] && (
+                <p className="mt-1 text-[9px] text-gray-500">{text("Calcul…", "Calculating…")}</p>
+              )}
+              {marketErrors[fixture.id] && !marketEstimateLoadingIds[fixture.id] && (
+                <p className="mt-1 text-[9px] text-amber-400">{marketErrors[fixture.id]}</p>
+              )}
+            </div>
+          )}
           {hasOddsRow && fixture.odds && (
             <div
               className="mt-2 grid grid-cols-3 gap-1.5"
@@ -526,6 +763,79 @@ export default function FixtureSchedule({
             ? text("Retirer du panier", "Remove from basket")
             : text("Ajouter au panier", "Add to basket")}
         </button>
+        {fixture.sport === "football" && fixture.status === "Prévu" && (
+          <div className="mt-2">
+            <button
+              type="button"
+              aria-expanded={marketPanelFixtureId === fixture.id}
+              onClick={() => {
+                const opening = marketPanelFixtureId !== fixture.id;
+                setMarketPanelFixtureId(opening ? fixture.id : null);
+                if (opening) void loadMarketEstimates(fixture);
+              }}
+              className="w-full rounded-md border border-fuchsia-900/70 bg-fuchsia-950/20 px-3 py-2 text-left text-xs font-semibold text-fuchsia-200 transition hover:border-fuchsia-700"
+            >
+              {marketPanelFixtureId === fixture.id
+                ? text("Masquer les marchés", "Hide markets")
+                : text("Marchés · estimations indicatives", "Markets · indicative estimates")}
+            </button>
+            {marketPanelFixtureId === fixture.id && (
+              <div className="mt-2 rounded-lg border border-gray-800 bg-gray-950/80 p-2.5">
+                <p className="mb-2 text-[10px] text-gray-500">
+                  {text(
+                    "Estimations issues des derniers résultats connus, pas des cotes bookmaker.",
+                    "Estimates from recent results, not bookmaker odds."
+                  )}
+                </p>
+                {marketLoadingFixtureId === fixture.id && (
+                  <p role="status" className="py-2 text-xs text-gray-400">{text("Calcul des estimations…", "Calculating estimates…")}</p>
+                )}
+                {marketErrors[fixture.id] && <p role="alert" className="py-2 text-xs text-red-300">{marketErrors[fixture.id]}</p>}
+                {Boolean(marketEstimates[fixture.id]?.length) && (
+                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                    {MARKET_ESTIMATES.map(market => {
+                      const estimate = marketEstimates[fixture.id].find(item => item.market === market.id);
+                      const isSelected = (marketSelections[fixture.id] ?? []).some(item => item.market === market.id);
+                      return (
+                        <button
+                          key={market.id}
+                          type="button"
+                          disabled={!estimate}
+                          aria-pressed={isSelected}
+                          onClick={() => estimate && toggleMarketSelection(fixture, estimate)}
+                          className={`flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left text-[10px] transition ${
+                            isSelected
+                              ? "border-fuchsia-700 bg-fuchsia-950/40 text-fuchsia-100"
+                              : estimate
+                                ? "border-gray-800 bg-gray-900 text-gray-300 hover:border-gray-600"
+                                : "cursor-not-allowed border-gray-900 bg-gray-950 text-gray-600"
+                          }`}
+                        >
+                          <span>{text(market.label, market.labelEn)}</span>
+                          <span className="shrink-0 font-semibold">
+                            {estimate
+                              ? `${estimate.estimatedRate}% · ≈${(100 / estimate.estimatedRate).toFixed(2)}`
+                              : text("Données insuffisantes", "Insufficient data")}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {marketEstimates[fixture.id]?.length === 0 && (
+                  <p className="py-2 text-xs text-gray-400">
+                    {text("Historique insuffisant pour estimer les marchés de ce match.", "Not enough history to estimate this fixture's markets.")}
+                  </p>
+                )}
+                {Boolean(marketSelections[fixture.id]?.length) && (
+                  <p className="mt-2 text-[10px] text-fuchsia-300">
+                    {text(`${marketSelections[fixture.id].length} sélection(s) ajoutée(s) au panier.`, `${marketSelections[fixture.id].length} pick(s) added to the basket.`)}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         <div className="mt-2">
           <FavoriteFixtureButton fixture={fixture} />
         </div>
