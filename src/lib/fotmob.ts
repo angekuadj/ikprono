@@ -160,6 +160,7 @@ function liveDisplay(status: UnknownRecord): string | undefined {
     || short.toUpperCase() === "HT"
     || (Boolean(text(halfs.firstHalfEnded)) && !text(halfs.secondHalfStarted));
   if (isHalfTime) return "Mi-temps";
+  if (short.toUpperCase() === "IR" || liveKey.includes("interrupted")) return "Interrompu";
 
   const addedTime = Number(liveTime.addedTime);
   const basePeriod = Number(liveTime.basePeriod);
