@@ -604,7 +604,7 @@ export default function BasketPage() {
                                   </span>
                                   {isArchivingSoon
                                     ? `${text("À archiver", "Archiving soon")} (${completion.finished}/${completion.total})`
-                                    : `${text("En cours", "In progress")} (${completion.finished}/${completion.total})`}
+                                    : `${text("En cours", "In progress")} (${completion.pending}/${completion.total})`}
                                 </span>
                               )}
                             </div>

@@ -101,15 +101,21 @@ export function settleCoupon(outcomes: CouponOutcome[]): CouponOutcome {
 export function combinationCompletion(combination: {
   matches: CouponFixturePrediction[];
   fixtures: Fixture[];
-}): { finished: number; total: number; allFinished: boolean } {
+}): { finished: number; pending: number; total: number; allFinished: boolean } {
   let finished = 0;
+  let pending = 0;
   for (const match of combination.matches) {
     const fixture = combination.fixtures.find(f => f.id === match.fixtureId);
-    if (fixture && isFixtureFinished(fixture)) finished += 1;
+    if (fixture && isFixtureFinished(fixture)) {
+      finished += 1;
+    } else {
+      pending += 1;
+    }
   }
   return {
     finished,
+    pending,
     total: combination.matches.length,
-    allFinished: finished === combination.matches.length && combination.matches.length > 0,
+    allFinished: pending === 0 && combination.matches.length > 0,
   };
 }
