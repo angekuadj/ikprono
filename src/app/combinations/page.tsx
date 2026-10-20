@@ -707,9 +707,10 @@ export default function CombinationsPage() {
     }
   };
 
-  const saveCouponsForTracking = (couponsToSave: GeneratedCoupon[]): boolean => {
+  const saveCouponsForTracking = (couponsToSave: GeneratedCoupon[]): { success: boolean; wasDuplicate: boolean } => {
     try {
       const stored = readGeneratedCombinations();
+      console.log("📦 Combinations actuelles dans localStorage:", stored.length);
       const additions = couponsToSave
         .map(coupon => {
           const matchedFixtures = coupon.matches
@@ -728,29 +729,63 @@ export default function CombinationsPage() {
             fixtures: matchedFixtures,
           };
         })
-        .filter(candidate =>
-          !stored.some(combination =>
-            JSON.stringify(combination.coupon) === JSON.stringify(candidate.coupon)
-          )
-        );
+        .filter(candidate => {
+          const signature = JSON.stringify(
+            candidate.coupon.matches
+              .map(match => ({
+                fixtureId: match.fixtureId,
+                picks: match.picks
+                  .map(pick => ({ market: pick.market, selection: pick.selection }))
+                  .sort((first, second) =>
+                    `${first.market}:${first.selection}`.localeCompare(`${second.market}:${second.selection}`)
+                  ),
+              }))
+              .sort((first, second) => first.fixtureId.localeCompare(second.fixtureId))
+          );
+          return !stored.some(combination => {
+            const existingSignature = JSON.stringify(
+              combination.coupon.matches
+                .map(match => ({
+                  fixtureId: match.fixtureId,
+                  picks: match.picks
+                    .map(pick => ({ market: pick.market, selection: pick.selection }))
+                    .sort((first, second) =>
+                      `${first.market}:${first.selection}`.localeCompare(`${second.market}:${second.selection}`)
+                    ),
+                }))
+                .sort((first, second) => first.fixtureId.localeCompare(second.fixtureId))
+            );
+            return existingSignature === signature;
+          });
+        });
 
+      console.log("➕ Nouvelles combinaisons à ajouter:", additions.length);
       if (additions.length > 0) {
         writeGeneratedCombinations([...stored, ...additions]);
+        console.log("✅ Écriture réussie dans localStorage");
+      } else {
+        console.log("⚠️ Aucune nouvelle combinaison (doublon)");
       }
-      return true;
+      return { success: true, wasDuplicate: additions.length === 0 };
     } catch (error) {
+      console.error("❌ Erreur lors de l'enregistrement:", error);
       setActionError(error instanceof Error
         ? error.message
         : text("Impossible d’enregistrer le suivi des coupons.", "Unable to save coupon tracking."));
-      return false;
+      return { success: false, wasDuplicate: false };
     }
   };
 
   const addGeneratedCombinationToBasket = (coupon: GeneratedCoupon) => {
     setActionError("");
     setActionNotice("");
-    if (saveCouponsForTracking([coupon])) {
-      setActionNotice(text("Cette combinaison est enregistrée et son résultat est suivi dans le panier.", "This combination is saved and its result is tracked in your basket."));
+    const result = saveCouponsForTracking([coupon]);
+    if (result.success) {
+      if (result.wasDuplicate) {
+        setActionNotice(text("Cette combinaison est déjà enregistrée dans le panier.", "This combination is already saved in your basket."));
+      } else {
+        setActionNotice(text("Cette combinaison est enregistrée et son résultat est suivi dans le panier.", "This combination is saved and its result is tracked in your basket."));
+      }
     }
   };
 
@@ -1711,11 +1746,16 @@ export default function CombinationsPage() {
                     onClick={() => {
                       setActionError("");
                       setActionNotice("");
-                      if (saveCouponsForTracking([coupon])) {
-                        setActionNotice(text(
-                          "La combinaison a été enregistrée et son résultat sera suivi dans le panier.",
-                          "Combination saved and its result will be tracked in your basket."
-                        ));
+                      const result = saveCouponsForTracking([coupon]);
+                      if (result.success) {
+                        if (result.wasDuplicate) {
+                          setActionNotice(text("Cette combinaison est déjà enregistrée dans le panier.", "This combination is already saved in your basket."));
+                        } else {
+                          setActionNotice(text(
+                            "La combinaison a été enregistrée et son résultat sera suivi dans le panier.",
+                            "Combination saved and its result will be tracked in your basket."
+                          ));
+                        }
                       }
                     }}
                     className="mt-4 rounded-lg border border-green-700 bg-green-950/40 px-3 py-2 text-xs font-semibold text-green-200 transition hover:bg-green-900/50"

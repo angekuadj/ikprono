@@ -24,7 +24,9 @@ function isFixture(value: unknown): value is Fixture {
     typeof value.time === "string" &&
     typeof value.league === "string" &&
     typeof value.homeTeam === "string" &&
-    typeof value.awayTeam === "string";
+    typeof value.awayTeam === "string" &&
+    (value.status === undefined || typeof value.status === "string") &&
+    (value.competition === undefined || typeof value.competition === "string");
 }
 
 function isStoredGeneratedCombination(value: unknown): value is StoredGeneratedCombination {
@@ -41,13 +43,19 @@ export function readGeneratedCombinations(): StoredGeneratedCombination[] {
   if (!stored) return [];
 
   const parsed: unknown = JSON.parse(stored);
-  if (!Array.isArray(parsed) || !parsed.every(isStoredGeneratedCombination)) {
+  if (!Array.isArray(parsed)) {
     throw new Error("Les combinaisons enregistrées sont invalides.");
   }
-  return parsed;
+  const valid = parsed.filter(isStoredGeneratedCombination);
+  if (valid.length !== parsed.length) {
+    console.warn(`${parsed.length - valid.length} combinaison(s) invalide(s) ignorée(s)`);
+    writeGeneratedCombinations(valid);
+  }
+  return valid;
 }
 
 export function writeGeneratedCombinations(combinations: StoredGeneratedCombination[]): void {
+  console.log("💾 Écriture de", combinations.length, "combinaison(s) dans localStorage");
   localStorage.setItem(GENERATED_COMBINATIONS_KEY, JSON.stringify(combinations));
   window.dispatchEvent(new Event(GENERATED_COMBINATIONS_UPDATED_EVENT));
 }

@@ -70,7 +70,8 @@ export function isGeneratedCoupon(value: unknown): value is GeneratedCoupon {
     !["sure", "medium", "risky"].includes(String(value.level)) ||
     typeof value.title !== "string" ||
     typeof value.description !== "string" ||
-    !Array.isArray(value.matches)
+    !Array.isArray(value.matches) ||
+    (value.estimatedCombinedRate !== undefined && typeof value.estimatedCombinedRate !== "number")
   ) {
     return false;
   }
@@ -85,7 +86,8 @@ export function isGeneratedCoupon(value: unknown): value is GeneratedCoupon {
       (pick.market === "result" || pick.market === "goals" || pick.market === "corners" || pick.market === "handicap" || pick.market === "scorer" || pick.market === "assist") &&
       (pick.selection === null || (typeof pick.selection === "string" && couponSelections.includes(pick.selection))) &&
       (pick.historicalRate === null || typeof pick.historicalRate === "number") &&
-      typeof pick.sampleSize === "number"
+      typeof pick.sampleSize === "number" &&
+      (pick.team === undefined || pick.team === "home" || pick.team === "away")
     )
   );
 }

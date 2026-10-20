@@ -69,7 +69,12 @@ export default function BasketPage() {
   const [couponErrors, setCouponErrors] = useState<Record<string, string>>({});
   const [generatingSelectionId, setGeneratingSelectionId] = useState<string | null>(null);
   const [verificationEnabled, setVerificationEnabled] = useState(false);
-  const [activeTab, setActiveTab] = useState<BasketTab>("basket");  const [expandedCombinations, setExpandedCombinations] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState<BasketTab>(() => {
+    const initialGenerated = readGeneratedCombinations();
+    const initialBasket = readFixtureBasket();
+    return initialGenerated.length > 0 ? "generated" : initialBasket.length > 0 ? "basket" : "generated";
+  });
+  const [expandedCombinations, setExpandedCombinations] = useState<Set<string>>(new Set());
   const trackedFixtures = useMemo(
     () => [
       ...fixtures,
@@ -117,9 +122,13 @@ export default function BasketPage() {
   useEffect(() => {
     const syncGeneratedCombinations = () => {
       try {
-        setGeneratedCombinations(readGeneratedCombinations());
+        const combinations = readGeneratedCombinations();
+        console.log("📥 Lecture des combinaisons dans le panier:", combinations.length);
+        console.log("📦 Contenu localStorage:", localStorage.getItem("ikprono_generated_combinations"));
+        setGeneratedCombinations(combinations);
         setBasketError("");
       } catch (error) {
+        console.error("❌ Erreur lecture combinaisons:", error);
         setBasketError(error instanceof Error ? error.message : text("Impossible de lire les combinaisons enregistrées.", "Unable to read saved combinations."));
       }
     };
@@ -625,6 +634,10 @@ export default function BasketPage() {
 
         {activeTab === "generated" && (
           <section className="space-y-4" aria-label={text("Combinaisons déjà générées", "Already generated combinations")}>
+            {(() => {
+              console.log("🎨 Rendu de l'onglet generated, nombre de combinaisons:", generatedCombinations.length);
+              return null;
+            })()}
             {generatedCombinations.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-gray-700 bg-gray-900/70 px-6 py-12 text-center">
                 <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-green-950 text-green-300">
@@ -641,6 +654,10 @@ export default function BasketPage() {
                 </Link>
               </div>
             ) : (
+              (() => {
+                console.log("📋 Liste des combinaisons à afficher:", generatedCombinations.map(c => ({ id: c.id, title: c.coupon.title, matches: c.coupon.matches.length })));
+                return null;
+              })(),
               generatedCombinations.slice().reverse().map(combination => {
                 const isExpanded = expandedCombinations.has(combination.id);
                 const outcome = couponOutcome(combination.coupon, combination.fixtures);
