@@ -8,12 +8,27 @@ rules_version = '2';
 //    est calculé et écrit par le serveur : le client ne peut PAS le modifier, sinon
 //    il pourrait réinitialiser son quota ou s'octroyer des offres gratuitement.
 //    Les activations d'offres passent par l'API /api/subscription/offer.
+//  - `users/{uid}.role` et `users/{uid}.plan` sont réservés : un utilisateur ne peut
+//    ni se promouvoir admin, ni changer son plan. Ils se modifient depuis la console
+//    Firebase ou via le serveur (Admin SDK).
 //  - Les autres données applicatives de l'utilisateur (favoris, panier, sélections,
 //    combinaisons, préférences) restent librement modifiables par leur propriétaire.
 service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && request.auth.uid == userId;
+
+      // Création du profil : rôle et plan par défaut imposés.
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.role == "user"
+        && request.resource.data.plan == "standard";
+
+      // Mise à jour : nom et e-mail libres, role et plan figés (inchangés).
+      allow update: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.plan == resource.data.plan;
 
       match /data/{key} {
         // Données applicatives : accès complet au propriétaire…

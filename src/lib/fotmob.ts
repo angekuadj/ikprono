@@ -215,17 +215,79 @@ function mapMatch(match: UnknownRecord, league: string, date: string): Fixture |
   };
 }
 
-async function fetchFotMob<T>(url: string): Promise<T> {
-  const response = await fetch(url, {
-    headers: { Accept: "application/json", "User-Agent": "IkProno/1.0 (FotMob data)" },
-    cache: "no-store",
-    signal: AbortSignal.timeout(12_000),
-  });
-  const contentType = response.headers.get("content-type") ?? "";
-  if (!response.ok || !contentType.includes("application/json")) {
-    throw new Error(`API returned an invalid response (HTTP ${response.status}).`);
+/**
+ * Erreur levée quand l'API sportive reste injoignable après plusieurs tentatives
+ * et qu'aucune donnée en cache n'est disponible. Le code permet aux routes API
+ * de renvoyer un libellé traduit côté client.
+ */
+export class FotMobDataUnavailableError extends Error {
+  readonly code = "fixtures_unavailable";
+
+  constructor(message = "The sports data service is temporarily unavailable.") {
+    super(message);
+    this.name = "FotMobDataUnavailableError";
   }
-  return response.json() as Promise<T>;
+}
+
+const FETCH_ATTEMPTS = 3;
+const FETCH_RETRY_DELAYS_MS = [500, 1_500];
+
+type FotMobFetchOutcome<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: Error; retryable: boolean };
+
+function wait(delayMs: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, delayMs));
+}
+
+function isRetryableStatus(status: number): boolean {
+  return status === 403 || status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+async function attemptFotMobRequest<T>(url: string): Promise<FotMobFetchOutcome<T>> {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+        "User-Agent": "IkProno/1.0 (FotMob data)",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(12_000),
+    });
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: new Error(`API returned an invalid response (HTTP ${response.status}).`),
+        retryable: isRetryableStatus(response.status),
+      };
+    }
+    if (!contentType.includes("application/json")) {
+      return { ok: false, error: new Error("API returned a non-JSON response."), retryable: true };
+    }
+    return { ok: true, value: await response.json() as T };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error : new Error("The sports data request failed."),
+      retryable: true,
+    };
+  }
+}
+
+/** Appel direct à l'API avec plusieurs tentatives avant d'abandonner. */
+async function fetchFotMob<T>(url: string): Promise<T> {
+  let lastError: Error = new Error("The sports data request failed.");
+  for (let attempt = 1; attempt <= FETCH_ATTEMPTS; attempt += 1) {
+    if (attempt > 1) await wait(FETCH_RETRY_DELAYS_MS[attempt - 2] ?? 1_500);
+    const outcome = await attemptFotMobRequest<T>(url);
+    if (outcome.ok) return outcome.value;
+    lastError = outcome.error;
+    if (!outcome.retryable) break;
+    console.error(`FotMob request attempt ${attempt}/${FETCH_ATTEMPTS} failed for ${url}.`, outcome.error.message);
+  }
+  throw lastError;
 }
 
 export function isIsoDate(value: string): boolean {
@@ -273,6 +335,7 @@ export async function loadFotMobDay(date: string): Promise<{
     }
     return { response: payload, fixtures, source: "fotmob" };
   } catch (apiError) {
+    // Fallback PostgreSQL : lecture silencieuse, jamais bloquante.
     try {
       const cached = await loadFotMobDailyResponse(date);
       if (cached) {
@@ -285,12 +348,9 @@ export async function loadFotMobDay(date: string): Promise<{
       }
     } catch (cacheError) {
       console.error(`Could not read matches cache for ${date}.`, cacheError);
-      throw new AggregateError(
-        [apiError, cacheError],
-        "Data source is unavailable and the PostgreSQL match cache could not be read."
-      );
     }
-    throw apiError;
+    console.error(`No matches available for ${date} from the API or the cache.`, apiError);
+    throw new FotMobDataUnavailableError();
   }
 }
 
@@ -928,11 +988,8 @@ async function loadFotMobStandings(payload: unknown): Promise<FixtureStanding[]>
       const cached = await loadCachedFotMobStandings(leagueId);
       if (cached) return cached.standings;
     } catch (cacheError) {
+      // Le classement reste facultatif : on n'interrompt jamais la rencontre pour lui.
       console.error(`Could not read standings cache for league ${leagueId}.`, cacheError);
-      throw new AggregateError(
-        [apiError, cacheError],
-        `Standings are unavailable and the PostgreSQL cache for league ${leagueId} could not be read.`
-      );
     }
     console.error(`Standings are unavailable for league ${leagueId}; no cached table was found.`, apiError);
     return [];
@@ -1030,6 +1087,7 @@ export async function loadFotMobDetails(matchId: string): Promise<FotMobDetails>
     }
     return details;
   } catch (apiError) {
+    // Fallback PostgreSQL : lecture silencieuse, jamais bloquante.
     try {
       const cached = await loadCachedFotMobMatchDetails(matchId);
       if (cached) {
@@ -1040,12 +1098,9 @@ export async function loadFotMobDetails(matchId: string): Promise<FotMobDetails>
       }
     } catch (cacheError) {
       console.error(`Could not read details cache for ${matchId}.`, cacheError);
-      throw new AggregateError(
-        [apiError, cacheError],
-        "Data source is unavailable and the PostgreSQL match-details cache could not be read."
-      );
     }
-    throw apiError;
+    console.error(`No match details available for ${matchId} from the API or the cache.`, apiError);
+    throw new FotMobDataUnavailableError();
   }
 }
 

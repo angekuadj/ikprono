@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Fixture, FixtureOption, FixtureSport } from "@/lib/fixtures";
-import { loadFotMobDay } from "@/lib/fotmob";
+import { FotMobDataUnavailableError, loadFotMobDay } from "@/lib/fotmob";
 
 export const dynamic = "force-dynamic";
 
@@ -64,11 +64,25 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Date ranges are limited to 31 days." }, { status: 422 });
     }
     const days = [];
+    const dayErrors: string[] = [];
     for (let offset = 0; offset < dayCount; offset += 4) {
       const batch = Array.from({ length: Math.min(4, dayCount - offset) }, (_, index) =>
         new Date(first.getTime() + (offset + index) * 86_400_000).toISOString().slice(0, 10)
       );
-      days.push(...await Promise.all(batch.map(loadFotMobDay)));
+      const results = await Promise.all(batch.map(async date => {
+        try {
+          return await loadFotMobDay(date);
+        } catch (error) {
+          // Une journée injoignable n'empêche pas d'afficher les autres.
+          console.error(`Could not load fixtures for ${date}.`, error);
+          dayErrors.push(date);
+          return null;
+        }
+      }));
+      days.push(...results.filter((day): day is NonNullable<typeof day> => day !== null));
+    }
+    if (days.length === 0 && dayErrors.length > 0) {
+      throw new FotMobDataUnavailableError();
     }
     const fixtures = days.flatMap(day => day.fixtures);
 
@@ -79,7 +93,9 @@ export async function GET(request: NextRequest) {
     const cachedDays = days.filter(day => day.source === "cache");
     return NextResponse.json({
       fixtures,
-      errors: {},
+      errors: dayErrors.length > 0
+        ? { football: `Some fixture days could not be loaded from the data service (${dayErrors.join(", ")}).` }
+        : {},
       source: cachedDays.length > 0 ? "cache" : "fotmob",
       ...(cachedDays.length > 0
         ? {
@@ -94,6 +110,10 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to load fixtures.";
-    return NextResponse.json({ error: message }, { status: 502 });
+    const code = error instanceof FotMobDataUnavailableError ? error.code : undefined;
+    return NextResponse.json(
+      { error: message, ...(code ? { code } : {}) },
+      { status: 502 }
+    );
   }
 }

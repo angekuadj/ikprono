@@ -22,8 +22,53 @@ const clubs = [
 ];
 const PAGE_SIZE = 12;
 const COUNTRY_PAGE_SIZE = 8;
+const POPULAR_FIXTURE_LIMIT = 8;
 
 type RiskProfile = "prudent" | "balanced" | "bold";
+
+/** Compétitions populaires affichées dans l'ordre demandé. */
+const POPULAR_COMPETITIONS = [
+  { key: "liga", label: "Liga", labelEn: "Liga" },
+  { key: "champions", label: "Champions League", labelEn: "Champions League" },
+  { key: "europa", label: "Europa League", labelEn: "Europa League" },
+] as const;
+
+type PopularCompetitionKey = (typeof POPULAR_COMPETITIONS)[number]["key"];
+
+function normalizeCompetition(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("fr-FR");
+}
+
+/** Rang d'affichage : 0 = Liga, 1 = Champions League, 2 = Europa League, 3 = autres. */
+function popularCompetitionRank(fixture: Fixture): number {
+  const league = normalizeCompetition(fixture.league);
+  const isLiga = ["laliga", "la liga", "primera division"].some(alias => league.includes(alias))
+    && !/apertura|clausura|femenil|liga mx|liga ii/.test(league);
+  if (isLiga) return 0;
+  if (/(champions league|ligue des champions)/.test(league) && !league.includes("caf")) return 1;
+  if (/(europa league|ligue europa)/.test(league)) return 2;
+  return POPULAR_COMPETITIONS.length;
+}
+
+function popularCompetitionKey(rank: number): PopularCompetitionKey | null {
+  return rank < POPULAR_COMPETITIONS.length ? POPULAR_COMPETITIONS[rank].key : null;
+}
+
+function normalizeTeamName(value: string): string {
+  return normalizeCompetition(value).replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function involvesPopularClub(fixture: Fixture): boolean {
+  const home = normalizeTeamName(fixture.homeTeam);
+  const away = normalizeTeamName(fixture.awayTeam);
+  return clubs.some(club => {
+    const name = normalizeTeamName(club.name);
+    return home.includes(name) || away.includes(name) || name.includes(home) || name.includes(away);
+  });
+}
 
 function getLocalDate() {
   const now = new Date();
@@ -44,6 +89,7 @@ export default function OnboardingPage() {
   const [matchPage, setMatchPage] = useState(1);
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
   const [fixturesError, setFixturesError] = useState("");
+  const [fixturesErrorCode, setFixturesErrorCode] = useState("");
   const [fixturesLoading, setFixturesLoading] = useState(true);
   const [refreshKey] = useAutoRefresh();
   const hasLoadedFixtures = useRef(false);
@@ -65,16 +111,22 @@ export default function OnboardingPage() {
 
     fetch(`/api/sports/fixtures?${params}`, { signal: controller.signal, cache: "no-store" })
       .then(async response => {
-        const payload = await response.json() as FixtureResponse & { error?: string };
-        if (!response.ok) throw new Error(payload.error || "Unable to load real fixtures.");
+        const payload = await response.json() as FixtureResponse & { error?: string; code?: string };
+        if (!response.ok) {
+          const failure = new Error(payload.error || "Unable to load real fixtures.") as Error & { code?: string };
+          failure.code = payload.code;
+          throw failure;
+        }
         if (!Array.isArray(payload.fixtures)) throw new Error("The fixtures service returned an invalid response.");
         setFixtures(payload.fixtures);
+        setFixturesErrorCode("");
         const errors = Object.values(payload.errors ?? {});
         setFixturesError(errors.join(" "));
       })
       .catch(error => {
         if (controller.signal.aborted) return;
         setFixturesError(error instanceof Error ? error.message : "Unable to load real fixtures.");
+        setFixturesErrorCode(error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "");
       })
       .finally(() => {
         if (!controller.signal.aborted) {
@@ -90,6 +142,29 @@ export default function OnboardingPage() {
     const status = fixture.status?.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLocaleLowerCase("fr-FR");
     return fixture.date >= getLocalDate() && ["prevu", "scheduled", "reporte", "postponed"].includes(status ?? "");
   });
+
+  const fixturesErrorMessage = fixturesErrorCode === "fixtures_unavailable"
+    ? text(
+      "Le service de données sportives est momentanément indisponible. Réessayez dans quelques instants.",
+      "The sports data service is temporarily unavailable. Please try again shortly."
+    )
+    : fixturesError;
+
+  /** Rencontres du jour encore jouables, ordonnées Liga → Champions League → Europa League. */
+  const today = getLocalDate();
+  const popularFixtures = fixtures
+    .filter(fixture => {
+      if (fixture.date !== today) return false;
+      const status = normalizeCompetition(fixture.status ?? "");
+      return !/termine|finished|annule|cancelled|abandon/.test(status);
+    })
+    .sort((first, second) =>
+      popularCompetitionRank(first) - popularCompetitionRank(second)
+      || Number(involvesPopularClub(second)) - Number(involvesPopularClub(first))
+      || `${first.date}T${first.time}`.localeCompare(`${second.date}T${second.time}`)
+    )
+    .slice(0, POPULAR_FIXTURE_LIMIT);
+
   const competitionsByCountry = new Map<string, Map<string, string>>();
   for (const fixture of upcomingFixtures) {
     const country = fixture.location?.trim() || text("Autres pays", "Other countries");
@@ -273,9 +348,41 @@ export default function OnboardingPage() {
                 ))}
                 {fixturesLoading && <p className="text-sm text-gray-400">{text("Chargement des rencontres…", "Loading fixtures…")}</p>}
                 {!fixturesLoading && fixtures.length === 0 && (
-                  <p className="text-sm text-gray-400">{fixturesError || text("Aucune rencontre à venir cette semaine.", "No upcoming fixtures this week.")}</p>
+                  <p className="text-sm text-gray-400">{fixturesErrorMessage || text("Aucune rencontre à venir cette semaine.", "No upcoming fixtures this week.")}</p>
                 )}
-                {fixturesError && fixtures.length > 0 && <p role="status" className="text-xs text-amber-300">{fixturesError}</p>}
+                {fixturesErrorMessage && fixtures.length > 0 && <p role="status" className="text-xs text-amber-300">{fixturesErrorMessage}</p>}
+              </div>
+            </div>
+            <div className="mt-5 overflow-hidden rounded-2xl border border-gray-800 bg-gradient-to-br from-gray-900 to-gray-950">
+              <div className="flex items-center justify-between gap-3 border-b border-gray-800 px-5 py-4">
+                <strong className="tracking-wider text-white">{text("POPULAIRES DU JOUR", "POPULAR TODAY")}</strong>
+                <span className="text-xs font-bold tracking-widest text-amber-400">{text("LIGA · CHAMPIONS · EUROPA", "LIGA · CHAMPIONS · EUROPA")}</span>
+              </div>
+              <div className="space-y-3 p-5">
+                {fixturesLoading && <p className="text-sm text-gray-400">{text("Chargement des rencontres…", "Loading fixtures…")}</p>}
+                {!fixturesLoading && popularFixtures.length === 0 && (
+                  <p className="text-sm text-gray-400">{text("Aucune rencontre populaire programmée aujourd’hui.", "No popular fixture scheduled today.")}</p>
+                )}
+                {popularFixtures.map(fixture => {
+                  const rank = popularCompetitionRank(fixture);
+                  const competition = popularCompetitionKey(rank);
+                  return (
+                    <div key={fixture.id} className="flex items-start gap-3 border-b border-gray-800/80 pb-3 text-sm last:border-0">
+                      <span className="w-12 shrink-0 pt-0.5 text-xs font-bold text-gray-500">{fixture.time}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-semibold text-white">{fixture.homeTeam} — {fixture.awayTeam}</span>
+                        <span className="mt-1 block text-xs text-gray-500">
+                          {fixture.league}{fixture.status ? ` · ${fixture.status}` : ""}
+                        </span>
+                      </span>
+                      {competition && (
+                        <span className="shrink-0 rounded-full border border-amber-500/40 bg-amber-950/40 px-2 py-1 text-[10px] font-black tracking-wider text-amber-300">
+                          {text(POPULAR_COMPETITIONS[rank].label, POPULAR_COMPETITIONS[rank].labelEn)}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
             <button type="button" onClick={() => setStep(2)} className="mt-6 w-full rounded-xl bg-gradient-to-r from-red-500 to-red-700 px-6 py-4 font-bold text-white shadow-lg shadow-red-950/40 transition hover:brightness-110">
@@ -438,7 +545,7 @@ export default function OnboardingPage() {
                 {text("Aucun pays ou compétition ne correspond à cette recherche.", "No country or competition matches this search.")}
               </p>
             )}
-            {fixturesError && <p role="status" className="mt-4 text-sm text-amber-300">{fixturesError}</p>}
+            {fixturesErrorMessage && <p role="status" className="mt-4 text-sm text-amber-300">{fixturesErrorMessage}</p>}
             {countryGroups.length === 0 && !fixturesLoading && (
               <p className="mt-4 text-sm text-gray-400">{text("Aucune compétition réelle n’est disponible pour la période sélectionnée. Vous pouvez continuer et réessayer plus tard.", "No real competition is available for this period. You can continue and try again later.")}</p>
             )}
@@ -477,7 +584,7 @@ export default function OnboardingPage() {
               </nav>
             )}
             {visibleFixtures.length === 0 && <p className="rounded-xl border border-gray-800 p-6 text-center text-sm text-gray-500">{t("invalidSelection")}</p>}
-            {fixturesError && <p role="status" className="mt-4 text-sm text-amber-300">{fixturesError}</p>}
+            {fixturesErrorMessage && <p role="status" className="mt-4 text-sm text-amber-300">{fixturesErrorMessage}</p>}
             <div className="mt-5 flex items-center justify-between rounded-xl border border-fuchsia-500/20 bg-fuchsia-950/15 px-4 py-3 text-sm">
               <span className="text-gray-300">{t("freeQuota")}</span><strong className="text-fuchsia-200">{Number.isFinite(remainingProposals) ? `${remainingProposals}/3` : "∞"}</strong>
             </div>

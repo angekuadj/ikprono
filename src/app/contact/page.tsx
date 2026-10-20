@@ -41,8 +41,8 @@ export default function ContactPage() {
     {
       icon: "📱",
       title: text("Téléphone", "Phone"),
-      value: "+33 1 23 45 67 89",
-      link: "tel:+33123456789"
+      value: "+225 0789880372",
+      link: "tel:+2250789880372"
     },
     {
       icon: "🌐",
@@ -53,7 +53,7 @@ export default function ContactPage() {
     {
       icon: "📍",
       title: text("Adresse", "Address"),
-      value: "Paris, France",
+      value: "Abidjan, Côte d'Ivoire",
       link: null
     }
   ];
