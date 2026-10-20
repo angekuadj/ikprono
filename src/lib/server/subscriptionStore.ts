@@ -123,6 +123,150 @@ export async function isAdminUser(db: Firestore, accountKey: string): Promise<bo
   }
 }
 
+export interface AdminAccountSummary {
+  accountKey: string;
+  uid: string;
+  email: string;
+  name: string;
+  role: "user" | "admin";
+  plan: "standard" | "premium";
+  createdAt: string | null;
+  trialActive: boolean;
+  trialEndsAt: string | null;
+  offers: SubscriptionOffer[];
+  hasTvAccess: boolean;
+  hasCombinationAccess: boolean;
+  usedToday: number;
+  dailyLimit: number;
+  remainingToday: number;
+}
+
+async function readUserIdSet(
+  db: Firestore,
+  field: "favorites" | "basket" | "network"
+): Promise<Set<string>> {
+  const snapshot = await db.collection(field).get();
+  return new Set(snapshot.docs.map(document => document.id));
+}
+
+/**
+ * Comptes connus du serveur, avec leurs droits réels.
+ *
+ * Deux sources sont fusionnées :
+ *  - la collection `users` (profils créés par l'application, rôle et plan) ;
+ *  - la collection `subscriptions` (essai et offres, écrite par le serveur).
+ *
+ * Les profils sont éventuellement complétés par les identifiants rencontrés dans
+ * `favorites`, `basket` et `network`, afin de couvrir les comptes dont le profil
+ * n'existe pas encore mais qui utilisent déjà l'application.
+ *
+ * Page réservée à l'administration : ne jamais exposer cette liste publiquement.
+ */
+export async function listAdminAccounts(db: Firestore): Promise<AdminAccountSummary[]> {
+  const [usersSnapshot, subscriptionsSnapshot, favorites, basket, network] = await Promise.all([
+    db.collection("users").get(),
+    db.collection(SUBSCRIPTIONS_COLLECTION).get(),
+    readUserIdSet(db, "favorites"),
+    readUserIdSet(db, "basket"),
+    readUserIdSet(db, "network"),
+  ]);
+
+  const profileByUid = new Map<string, Record<string, unknown>>();
+  usersSnapshot.docs.forEach(document => {
+    profileByUid.set(document.id, (document.data() ?? {}) as Record<string, unknown>);
+  });
+
+  const subscriptionByUid = new Map<string, Record<string, unknown>>();
+  subscriptionsSnapshot.docs.forEach(document => {
+    if (!document.id.startsWith("firebase:")) return;
+    subscriptionByUid.set(
+      document.id.slice("firebase:".length),
+      (document.data() ?? {}) as Record<string, unknown>
+    );
+  });
+
+  const uids = new Set<string>([
+    ...profileByUid.keys(),
+    ...subscriptionByUid.keys(),
+    ...favorites,
+    ...basket,
+    ...network,
+  ]);
+
+  const accounts: AdminAccountSummary[] = [];
+  for (const uid of uids) {
+    const profile = profileByUid.get(uid);
+    const accountKey = `firebase:${uid}`;
+    const role: "user" | "admin" = profile?.role === "admin" ? "admin" : "user";
+
+    const usageSnapshot = await db.collection(USAGE_COLLECTION).doc(accountKey).get();
+    const state: LoadedState = {
+      subscription: toSubscription(subscriptionByUid.get(uid)),
+      usage: toUsage(usageSnapshot.data(), localDay()),
+    };
+    const entitlements = computeEntitlements(state, role === "admin");
+
+    accounts.push({
+      accountKey,
+      uid,
+      email: typeof profile?.email === "string" ? profile.email : "",
+      name: typeof profile?.name === "string" ? profile.name : "",
+      role,
+      plan: role === "admin" || profile?.plan === "premium" ? "premium" : "standard",
+      createdAt: typeof profile?.createdAt === "string" ? profile.createdAt : null,
+      trialActive: entitlements.trialActive,
+      trialEndsAt: entitlements.trialEndsAt,
+      offers: entitlements.offers,
+      hasTvAccess: entitlements.hasTvAccess,
+      hasCombinationAccess: entitlements.hasCombinationAccess,
+      usedToday: entitlements.usedToday,
+      dailyLimit: entitlements.dailyLimit,
+      remainingToday: entitlements.remainingToday,
+    });
+  }
+
+  return accounts.sort((first, second) => {
+    const firstDate = first.createdAt ? new Date(first.createdAt).getTime() : 0;
+    const secondDate = second.createdAt ? new Date(second.createdAt).getTime() : 0;
+    return secondDate - firstDate;
+  });
+}
+
+/**
+ * Rattache un identifiant anonyme à un compte, à la première connexion.
+ *
+ * Le rattachement sert à repérer les comptes qui abuseaient du quota invité
+ * (compteur remis à zéro en vidant le stockage du navigateur). Il est ignoré
+ * silencieusement si Firestore n'est pas disponible.
+ */
+export async function linkGuestToUser(
+  db: Firestore | null,
+  guestId: string,
+  accountKey: string
+): Promise<void> {
+  if (!db || !guestId) return;
+  try {
+    const reference = db.collection("guestLinks").doc(guestId);
+    const snapshot = await reference.get();
+    if (snapshot.exists) return;
+    await reference.set({ accountKey, linkedAt: new Date().toISOString() });
+  } catch (error) {
+    console.error("Rattachement invité impossible.", error);
+  }
+}
+
+/** Compte associé à un identifiant anonyme, ou null s'il n'a jamais été rattaché. */
+export async function resolveGuestLink(db: Firestore, guestId: string): Promise<string | null> {
+  try {
+    const snapshot = await db.collection("guestLinks").doc(guestId).get();
+    const accountKey = snapshot.data()?.accountKey;
+    return typeof accountKey === "string" ? accountKey : null;
+  } catch (error) {
+    console.error("Lecture du rattachement invité impossible.", error);
+    return null;
+  }
+}
+
 function isOffer(value: unknown): value is SubscriptionOffer {
   return value === "tv" || value === "combinations" || value === "pack";
 }

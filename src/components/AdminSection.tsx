@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 const links = [
   { href: "/admin", label: "Vue d’ensemble" },
   { href: "/admin/users", label: "Utilisateurs" },
+  { href: "/admin/offers", label: "Offres" },
   { href: "/admin/stats", label: "Statistiques" },
   { href: "/admin/payments", label: "Paiements" }
 ];

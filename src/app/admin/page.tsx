@@ -42,6 +42,12 @@ export default function AdminPage() {
       action: text("Ouvrir les utilisateurs", "Open users")
     },
     {
+      href: "/admin/offers",
+      title: text("Offres et abonnements", "Plans and subscriptions"),
+      description: text("Attribuer ou retirer une offre à un compte, et consulter ses droits réels.", "Grant or remove a plan for an account and view its actual access."),
+      action: text("Gérer les offres", "Manage plans")
+    },
+    {
       href: "/admin/stats",
       title: text("Statistiques", "Statistics"),
       description: text("Consulter les indicateurs calculés depuis les données disponibles.", "View metrics calculated from available data."),

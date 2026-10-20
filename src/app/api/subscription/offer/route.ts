@@ -6,6 +6,7 @@ import {
   getAdminDb,
   isAdminConfigured,
   isAdminUser,
+  linkGuestToUser,
   loadState,
   setOffer as setStoredOffer,
 } from "@/lib/server/subscriptionStore";
@@ -26,7 +27,7 @@ function isOffer(value: unknown): value is SubscriptionOffer {
 }
 
 export async function POST(request: NextRequest) {
-  const { principal } = await identifyRequest(request);
+  const { principal, issuedGuestId } = await identifyRequest(request);
   if (principal.kind !== "user") {
     return NextResponse.json(
       { error: "Connectez-vous pour gérer vos offres.", code: "auth-required" },
@@ -51,6 +52,8 @@ export async function POST(request: NextRequest) {
     // mode local : on applique la même dégradation ici au lieu de bloquer la
     // souscription. Le serveur reprend la main dès que les identifiants sont présents.
     console.warn("Firebase Admin absent : offre appliquée en mode local (stockage navigateur).");
+    // Le client vient de basculer localement : on enregistre le rattachement invité.
+    if (issuedGuestId) await linkGuestToUser(null, issuedGuestId, principalKey(principal));
     return NextResponse.json({ entitlements: null, serverEnforced: false });
   }
 
@@ -58,8 +61,12 @@ export async function POST(request: NextRequest) {
   try {
     const state = await ensureTrial(db, accountKey, await loadState(db, accountKey));
     const updated = await setStoredOffer(db, accountKey, offer, state);
+    const isAdmin = await isAdminUser(db, accountKey);
+    // Un visiteur qui vient de se connecter garde la trace de son compteur invité.
+    if (issuedGuestId) await linkGuestToUser(db, issuedGuestId, accountKey);
     return NextResponse.json({
-      entitlements: computeEntitlements(updated, await isAdminUser(db, accountKey)),
+      entitlements: computeEntitlements(updated, isAdmin),
+      serverEnforced: true,
     });
   } catch (error) {
     console.error("Mise à jour de l'offre impossible.", error);

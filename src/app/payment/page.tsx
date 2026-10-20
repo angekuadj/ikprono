@@ -265,24 +265,34 @@ export default function PaymentPage() {
                     ))}
                   </ul>
 
-                  <button
-                    type="button"
-                    onClick={() => void handleToggleOffer(offer.id)}
-                    disabled={!isAuthenticated || busyOffer !== null || entitlements.trialActive}
-                    className={`w-full py-3 px-4 rounded-lg font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${
-                      active
-                        ? "border-2 border-gray-700 text-gray-300 hover:border-red-600 hover:text-red-300"
-                        : "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-lg"
-                    }`}
-                  >
-                    {busyOffer === offer.id
-                      ? t("processing")
-                      : entitlements.trialActive
-                        ? text("Inclus dans votre essai", "Included in your trial")
-                        : active
-                          ? text("Désactiver l’offre", "Turn off this plan")
-                          : text("Choisir cette offre", "Choose this plan")}
-                  </button>
+                  {(() => {
+                    // Cliquable uniquement si l'utilisateur est connecté, hors essai
+                    // et que l'offre n'est pas déjà active (sinon : bouton grisé).
+                    const canSubscribe = isAuthenticated
+                      && !entitlements.trialActive
+                      && !active
+                      && busyOffer === null;
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => void handleToggleOffer(offer.id)}
+                        disabled={!canSubscribe}
+                        className={`w-full py-3 px-4 rounded-lg font-semibold transition-all duration-300 disabled:cursor-not-allowed ${
+                          canSubscribe
+                            ? "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-lg"
+                            : "border-2 border-gray-700 bg-gray-800/60 text-gray-400 opacity-70"
+                        }`}
+                      >
+                        {busyOffer === offer.id
+                          ? t("processing")
+                          : entitlements.trialActive
+                            ? text("Inclus dans votre essai", "Included in your trial")
+                            : active
+                              ? text("Abonnement actif", "Subscription active")
+                              : text("Choisir cette offre", "Choose this plan")}
+                      </button>
+                    );
+                  })()}
                   {!isAuthenticated && (
                     <p className="mt-3 text-center text-xs text-gray-400">
                       {text(
@@ -391,7 +401,10 @@ export default function PaymentPage() {
                 {text("Puis-je annuler mon abonnement à tout moment ?", "Can I cancel my subscription at any time?")}
               </h3>
               <p className="text-gray-400">
-                {text("Oui, vous pouvez activer ou désactiver chaque offre à tout moment. Aucun frais caché.", "Yes, you can turn each plan on or off at any time. No hidden fees.")}
+                {text(
+                  "Oui. L’offre TV s’arrête automatiquement 24 h après le dernier paiement, sans démarche. Les offres mensuelles restent actives jusqu’à leur désactivation : contactez le support depuis la page Contact.",
+                  "Yes. The TV plan stops automatically 24 hours after your last payment, no action needed. Monthly plans stay active until deactivated: contact support from the Contact page."
+                )}
               </p>
             </div>
             <div className="border-b border-gray-800 pb-4">
