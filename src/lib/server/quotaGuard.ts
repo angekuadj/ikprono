@@ -7,12 +7,11 @@ import {
   consumeCombinations,
   consumeGuestCombinations,
   ensureTrial,
-  getAdminDb,
-  isAdminConfigured,
   isAdminUser,
   loadState,
   type ServerEntitlements,
 } from "@/lib/server/subscriptionStore";
+import { getAdminDb, isAdminConfigured } from "@/lib/server/firebaseAdminConfig";
 import { loadQuotaSettings, type QuotaSettings } from "@/lib/server/quotaSettings";
 
 /**

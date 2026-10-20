@@ -10,11 +10,11 @@ import {
 import {
   computeEntitlements,
   ensureTrial,
-  getAdminDb,
   isAdminUser,
   loadState,
   setOffer as setStoredOffer,
 } from "@/lib/server/subscriptionStore";
+import { getAdminDb } from "@/lib/server/firebaseAdminConfig";
 import { loadQuotaSettings } from "@/lib/server/quotaSettings";
 
 /**

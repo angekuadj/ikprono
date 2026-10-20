@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { Firestore } from "firebase-admin/firestore";
 import type { SubscriptionOffer } from "@/lib/subscription";
-import { getAdminDb, isAdminConfigured } from "@/lib/server/subscriptionStore";
+import { getAdminDb, isAdminConfigured } from "@/lib/server/firebaseAdminConfig";
 import { COMBINATIONS_MONTHLY_PRICE_FCFA, PACK_MONTHLY_PRICE_FCFA, TV_DAILY_PRICE_FCFA } from "@/lib/subscription";
 
 /**

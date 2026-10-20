@@ -3,14 +3,13 @@ import { identifyRequest } from "@/lib/server/identity";
 import {
   computeEntitlements,
   ensureTrial,
-  getAdminDb,
-  isAdminConfigured,
   isAdminUser,
   listAdminAccounts,
   loadState,
   setAccountPlan,
   setOffer as setStoredOffer,
 } from "@/lib/server/subscriptionStore";
+import { getAdminDb, isAdminConfigured } from "@/lib/server/firebaseAdminConfig";
 import type { SubscriptionOffer } from "@/lib/subscription";
 import {
   loadQuotaSettings,

@@ -1,8 +1,8 @@
-import { getApps, initializeApp, applicationDefault, type App } from "firebase-admin/app";
-import { getFirestore, FieldValue, type Firestore } from "firebase-admin/firestore";
+import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import type { SubscriptionOffer } from "@/lib/subscription";
 import { isTvDayValid, TRIAL_DAYS, TV_ACCESS_HOURS } from "@/lib/subscription";
 import { defaultQuotaSettings, type QuotaSettings } from "@/lib/server/quotaSettings";
+import { getAdminDb, isAdminConfigured } from "./firebaseAdminConfig";
 
 /**
  * Stockage serveur des abonnements et des quotas journaliers (source de vérité).
@@ -45,66 +45,6 @@ function addDaysIso(isoDay: string, days: number): string {
   const next = new Date(`${isoDay}T00:00:00.000Z`);
   next.setUTCDate(next.getUTCDate() + days);
   return next.toISOString().slice(0, 10);
-}
-
-let adminApp: App | null = null;
-let adminDb: Firestore | null = null;
-
-let adminUnavailable = false;
-let credentialsChecked = false;
-
-/**
- * Instance Firestore via le SDK Admin. Renvoie null si les identifiants serveur
- * ne sont pas disponibles (développement local sans compte de service) : l'appelant
- * retombe alors sur le mode démo (quota géré côté client). Le diagnostic n'est
- * journalisé qu'une seule fois pour ne pas polluer les logs à chaque requête.
- */
-export function getAdminDb(): Firestore | null {
-  if (adminDb) return adminDb;
-  if (adminUnavailable) return null;
-  try {
-    adminApp = getApps()[0] ?? initializeApp({ credential: applicationDefault() });
-    adminDb = getFirestore(adminApp);
-    return adminDb;
-  } catch (error) {
-    adminUnavailable = true;
-    console.warn(
-      "Firebase Admin indisponible : le quota est géré côté client (mode local).",
-      error instanceof Error ? error.message : error
-    );
-    return null;
-  }
-}
-
-/**
- * Vrai si des identifiants par défaut sont réellement disponibles. La vérification
- * n'a lieu qu'une fois puis est mise en cache, afin de ne pas interroger Firestore
- * en vain à chaque requête en développement local.
- */
-export async function isAdminConfigured(): Promise<boolean> {
-  if (adminDb) return true;
-  if (adminUnavailable) return false;
-  if (!credentialsChecked) {
-    const db = getAdminDb();
-    if (!db) return false;
-    try {
-      // Requête triviale : échoue immédiatement si aucun identifiant n'est présent.
-      // L'identifiant utilisé est un vrai document de la collection des quotas
-      // d'essai : Firestore refuse les identifiants réservés (« __...__ »), ce qui
-      // ferait passer un serveur pourtant correctement configuré en mode dégradé.
-      await db.collection(USAGE_COLLECTION).doc("healthcheck").get();
-      credentialsChecked = true;
-    } catch (error) {
-      adminUnavailable = true;
-      console.warn(
-        "Firebase Admin indisponible : le quota est géré côté client (mode local).",
-        error instanceof Error ? error.message : error
-      );
-      adminDb = null;
-      return false;
-    }
-  }
-  return true;
 }
 
 /** Indique si l'utilisateur a le rôle admin, d'après son profil Firestore. */
