@@ -48,6 +48,9 @@ function isSavedStatisticCombination(value: unknown): value is SavedStatisticCom
 }
 
 export function readSavedStatisticCombinations(): SavedStatisticCombination[] {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return [];
+  }
   const stored = localStorage.getItem(SAVED_STATISTIC_COMBINATIONS_KEY);
   if (!stored) return [];
 
@@ -68,5 +71,8 @@ export function readSavedStatisticCombinations(): SavedStatisticCombination[] {
 }
 
 export function writeSavedStatisticCombinations(combinations: SavedStatisticCombination[]): void {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return;
+  }
   localStorage.setItem(SAVED_STATISTIC_COMBINATIONS_KEY, JSON.stringify(combinations));
 }

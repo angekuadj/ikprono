@@ -114,17 +114,23 @@ export function isSavedSelection(value: unknown): value is SavedSelection {
 }
 
 export function readSavedSelections(userId: string): SavedSelection[] {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return [];
+  }
   const stored = localStorage.getItem(getSavedSelectionsKey(userId));
   if (!stored) return [];
 
   const parsed: unknown = JSON.parse(stored);
   if (!Array.isArray(parsed) || !parsed.every(isSavedSelection)) {
-    throw new Error("L’historique des sélections est invalide.");
+    throw new Error("L'historique des sélections est invalide.");
   }
   return parsed;
 }
 
 export function writeSavedSelections(userId: string, selections: SavedSelection[]): void {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return;
+  }
   localStorage.setItem(getSavedSelectionsKey(userId), JSON.stringify(selections));
 }
 

@@ -69,11 +69,7 @@ export default function BasketPage() {
   const [couponErrors, setCouponErrors] = useState<Record<string, string>>({});
   const [generatingSelectionId, setGeneratingSelectionId] = useState<string | null>(null);
   const [verificationEnabled, setVerificationEnabled] = useState(false);
-  const [activeTab, setActiveTab] = useState<BasketTab>(() => {
-    const initialGenerated = readGeneratedCombinations();
-    const initialBasket = readFixtureBasket();
-    return initialGenerated.length > 0 ? "generated" : initialBasket.length > 0 ? "basket" : "generated";
-  });
+  const [activeTab, setActiveTab] = useState<BasketTab>("generated");
   const [expandedCombinations, setExpandedCombinations] = useState<Set<string>>(new Set());
   const trackedFixtures = useMemo(
     () => [
@@ -124,7 +120,6 @@ export default function BasketPage() {
       try {
         const combinations = readGeneratedCombinations();
         console.log("📥 Lecture des combinaisons dans le panier:", combinations.length);
-        console.log("📦 Contenu localStorage:", localStorage.getItem("ikprono_generated_combinations"));
         setGeneratedCombinations(combinations);
         setBasketError("");
       } catch (error) {
@@ -177,6 +172,13 @@ export default function BasketPage() {
       setSaveError(error instanceof Error ? error.message : text("Impossible de lire vos sélections enregistrées.", "Unable to read saved selections."));
     }
   }, [user, text]);
+
+  // Set initial tab based on localStorage data (client-side only)
+  useEffect(() => {
+    const initialGenerated = readGeneratedCombinations();
+    const initialBasket = readFixtureBasket();
+    setActiveTab(initialGenerated.length > 0 ? "generated" : initialBasket.length > 0 ? "basket" : "generated");
+  }, []);
 
   const removeFixture = (fixtureId: string) => {
     try {

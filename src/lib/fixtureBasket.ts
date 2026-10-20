@@ -18,6 +18,9 @@ function isFixture(value: unknown): value is Fixture {
 }
 
 export function readFixtureBasket(): Fixture[] {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return [];
+  }
   const stored = localStorage.getItem(BASKET_STORAGE_KEY);
   if (!stored) return [];
 
@@ -29,11 +32,17 @@ export function readFixtureBasket(): Fixture[] {
 }
 
 export function writeFixtureBasket(fixtures: Fixture[]): void {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return;
+  }
   localStorage.setItem(BASKET_STORAGE_KEY, JSON.stringify(fixtures));
   window.dispatchEvent(new Event(BASKET_UPDATED_EVENT));
 }
 
 export function subscribeToFixtureBasket(callback: () => void): () => void {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
   window.addEventListener(BASKET_UPDATED_EVENT, callback);
   window.addEventListener("storage", callback);
   return () => {

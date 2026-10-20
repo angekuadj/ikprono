@@ -16,6 +16,9 @@ function isFixture(value: unknown): value is Fixture {
 }
 
 export function readLiveNotificationFixtures(): Fixture[] {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return [];
+  }
   const stored = localStorage.getItem(LIVE_FIXTURES_KEY);
   if (!stored) return [];
 
@@ -27,11 +30,17 @@ export function readLiveNotificationFixtures(): Fixture[] {
 }
 
 export function writeLiveNotificationFixtures(fixtures: Fixture[]): void {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return;
+  }
   localStorage.setItem(LIVE_FIXTURES_KEY, JSON.stringify(fixtures));
   window.dispatchEvent(new Event(LIVE_FIXTURES_UPDATED_EVENT));
 }
 
 export function subscribeToLiveNotificationFixtures(callback: () => void): () => void {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
   window.addEventListener(LIVE_FIXTURES_UPDATED_EVENT, callback);
   window.addEventListener("storage", callback);
   return () => {

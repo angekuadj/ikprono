@@ -281,7 +281,9 @@ export default function OnboardingPage() {
       leagues: selectedLeagues,
       matchIds: selectedMatches,
     };
-    localStorage.setItem(`ikprono_profile_${user?.id ?? "guest"}`, JSON.stringify(profile));
+    if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+      localStorage.setItem(`ikprono_profile_${user?.id ?? "guest"}`, JSON.stringify(profile));
+    }
     router.replace("/dashboard");
   };
 

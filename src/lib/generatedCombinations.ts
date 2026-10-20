@@ -39,6 +39,9 @@ function isStoredGeneratedCombination(value: unknown): value is StoredGeneratedC
 }
 
 export function readGeneratedCombinations(): StoredGeneratedCombination[] {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return [];
+  }
   const stored = localStorage.getItem(GENERATED_COMBINATIONS_KEY);
   if (!stored) return [];
 
@@ -55,12 +58,18 @@ export function readGeneratedCombinations(): StoredGeneratedCombination[] {
 }
 
 export function writeGeneratedCombinations(combinations: StoredGeneratedCombination[]): void {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return;
+  }
   console.log("💾 Écriture de", combinations.length, "combinaison(s) dans localStorage");
   localStorage.setItem(GENERATED_COMBINATIONS_KEY, JSON.stringify(combinations));
   window.dispatchEvent(new Event(GENERATED_COMBINATIONS_UPDATED_EVENT));
 }
 
 export function subscribeToGeneratedCombinations(callback: () => void): () => void {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
   window.addEventListener(GENERATED_COMBINATIONS_UPDATED_EVENT, callback);
   window.addEventListener("storage", callback);
   return () => {

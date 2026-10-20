@@ -115,13 +115,13 @@ const DEMO_PROFILE_OVERRIDES_KEY = "ikprono_demo_profiles";
 const FREE_PROPOSAL_LIMIT = 3;
 
 function readGuestCombinationCount(): number {
-  if (typeof window === "undefined") return 0;
+  if (typeof window === "undefined" || typeof localStorage === "undefined") return 0;
   const value = Number(localStorage.getItem(GUEST_COMBINATION_COUNT_KEY) ?? "0");
   return Number.isSafeInteger(value) && value >= 0 ? value : 0;
 }
 
 function readSubscriptionOnce(accountId: string): boolean {
-  return typeof window !== "undefined" && localStorage.getItem(`ikprono_subscription_${accountId}`) !== null;
+  return typeof window !== "undefined" && typeof localStorage !== "undefined" && localStorage.getItem(`ikprono_subscription_${accountId}`) !== null;
 }
 function isUser(value: unknown): value is User {
   if (typeof value !== "object" || value === null) return false;
@@ -139,11 +139,13 @@ function isUser(value: unknown): value is User {
 }
 
 function readProposalCount(userId: string): number {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") return 0;
   const value = Number(localStorage.getItem(`${PROPOSAL_COUNT_PREFIX}${userId}`) ?? "0");
   return Number.isSafeInteger(value) && value >= 0 ? value : 0;
 }
 
 function readAccounts(): StoredAccount[] {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") return [];
   const storedAccounts = localStorage.getItem(USERS_STORAGE_KEY);
   if (!storedAccounts) return [];
 
@@ -171,6 +173,7 @@ function readAccounts(): StoredAccount[] {
 }
 
 function readDemoProfileOverrides(): User[] {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") return [];
   const stored = localStorage.getItem(DEMO_PROFILE_OVERRIDES_KEY);
   if (!stored) return [];
   try {
@@ -293,6 +296,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      if (typeof window === "undefined" || typeof localStorage === "undefined") {
+        setProposalCount(readProposalCount("guest"));
+        setIsLoading(false);
+        return;
+      }
       const storedUser =
         localStorage.getItem(SESSION_STORAGE_KEY) ??
         sessionStorage.getItem(SESSION_STORAGE_KEY);
@@ -315,7 +323,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error("Impossible de restaurer la session.", error);
-      localStorage.removeItem(SESSION_STORAGE_KEY);
+      if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+        localStorage.removeItem(SESSION_STORAGE_KEY);
+      }
       sessionStorage.removeItem(SESSION_STORAGE_KEY);
     }
     setIsLoading(false);
@@ -338,7 +348,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const created = !readSubscriptionOnce(user.id);
     if (created) {
       ensureTrialStarted(user.id);
-      localStorage.removeItem(GUEST_COMBINATION_COUNT_KEY);
+      if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+        localStorage.removeItem(GUEST_COMBINATION_COUNT_KEY);
+      }
       setGuestCombinationCount(0);
       setSubscriptionVersion(version => version + 1);
     }
@@ -369,6 +381,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user?.id, subscriptionVersion]);
 
   const saveSession = (account: User, rememberMe: boolean) => {
+    if (typeof window === "undefined" || typeof localStorage === "undefined") {
+      setUser(account);
+      setProposalCount(readProposalCount(account.id));
+      return;
+    }
     const storage = rememberMe ? localStorage : sessionStorage;
     const otherStorage = rememberMe ? sessionStorage : localStorage;
     otherStorage.removeItem(SESSION_STORAGE_KEY);
@@ -533,14 +550,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       passwordHash: await hashPassword(password, salt)
     };
 
-    localStorage.setItem(
-      USERS_STORAGE_KEY,
-      JSON.stringify([...registeredAccounts, newAccount])
-    );
-    const guestProposalCount = readProposalCount("guest");
-    if (guestProposalCount > 0) {
-      localStorage.setItem(`${PROPOSAL_COUNT_PREFIX}${newUser.id}`, String(guestProposalCount));
-      localStorage.removeItem(`${PROPOSAL_COUNT_PREFIX}guest`);
+    if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+      localStorage.setItem(
+        USERS_STORAGE_KEY,
+        JSON.stringify([...registeredAccounts, newAccount])
+      );
+      const guestProposalCount = readProposalCount("guest");
+      if (guestProposalCount > 0) {
+        localStorage.setItem(`${PROPOSAL_COUNT_PREFIX}${newUser.id}`, String(guestProposalCount));
+        localStorage.removeItem(`${PROPOSAL_COUNT_PREFIX}guest`);
+      }
     }
     saveSession(newUser, true);
     return newUser;
@@ -566,8 +585,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       void updateUserProfile(uid, { name: normalizedName, email: normalizedEmail }).catch(
         error => console.error("Impossible de mettre à jour le profil Firestore.", error)
       );
-      const sessionStore = localStorage.getItem(SESSION_STORAGE_KEY) ? localStorage : sessionStorage;
-      sessionStore.setItem(SESSION_STORAGE_KEY, JSON.stringify(updatedUser));
+      if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+        const sessionStore = localStorage.getItem(SESSION_STORAGE_KEY) ? localStorage : sessionStorage;
+        sessionStore.setItem(SESSION_STORAGE_KEY, JSON.stringify(updatedUser));
+      }
       setUser(updatedUser);
       setFirebaseUser(updatedUser);
       return updatedUser;
@@ -590,19 +611,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const accountIndex = accounts.findIndex(account => account.user.id === user.id);
     if (accountIndex >= 0) {
       accounts[accountIndex] = { ...accounts[accountIndex], user: updatedUser };
-      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(accounts));
+      if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(accounts));
+      }
     } else if (DEMO_ACCOUNTS_ENABLED && DEMO_USERS.some(candidate => candidate.id === user.id)) {
       const updatedOverrides = [
         ...demoProfiles.filter(profile => profile.id !== user.id),
         updatedUser,
       ];
-      localStorage.setItem(DEMO_PROFILE_OVERRIDES_KEY, JSON.stringify(updatedOverrides));
+      if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+        localStorage.setItem(DEMO_PROFILE_OVERRIDES_KEY, JSON.stringify(updatedOverrides));
+      }
     } else {
       throw new Error("Ce compte ne peut pas être modifié.");
     }
 
-    const sessionStorageType = localStorage.getItem(SESSION_STORAGE_KEY) ? localStorage : sessionStorage;
-    sessionStorageType.setItem(SESSION_STORAGE_KEY, JSON.stringify(updatedUser));
+    if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+      const sessionStorageType = localStorage.getItem(SESSION_STORAGE_KEY) ? localStorage : sessionStorage;
+      sessionStorageType.setItem(SESSION_STORAGE_KEY, JSON.stringify(updatedUser));
+    }
     setUser(updatedUser);
     return updatedUser;
   };
@@ -611,7 +638,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setFirebaseUser(null);
     setProposalCount(readProposalCount("guest"));
-    localStorage.removeItem(SESSION_STORAGE_KEY);
+    if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+      localStorage.removeItem(SESSION_STORAGE_KEY);
+    }
     sessionStorage.removeItem(SESSION_STORAGE_KEY);
     if (isFirebaseAuthConfigured()) {
       void firebaseSignOut(getFirebaseAuth()).catch(error =>
@@ -660,8 +689,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
         setUser(adminProfile);
         setFirebaseUser(adminProfile);
-        const sessionStore = localStorage.getItem(SESSION_STORAGE_KEY) ? localStorage : sessionStorage;
-        sessionStore.setItem(SESSION_STORAGE_KEY, JSON.stringify(adminProfile));
+        if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+          const sessionStore = localStorage.getItem(SESSION_STORAGE_KEY) ? localStorage : sessionStorage;
+          sessionStore.setItem(SESSION_STORAGE_KEY, JSON.stringify(adminProfile));
+        }
         console.log("Rôle admin appliqué depuis le serveur");
       }
     } catch (error) {

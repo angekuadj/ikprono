@@ -41,6 +41,9 @@ function isStoredCouponHistory(value: unknown): value is StoredCouponHistory {
 }
 
 export function readCouponHistory(): StoredCouponHistory[] {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return [];
+  }
   const stored = localStorage.getItem(COUPON_HISTORY_KEY);
   if (!stored) return [];
 
@@ -52,11 +55,17 @@ export function readCouponHistory(): StoredCouponHistory[] {
 }
 
 export function writeCouponHistory(history: StoredCouponHistory[]): void {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return;
+  }
   localStorage.setItem(COUPON_HISTORY_KEY, JSON.stringify(history));
   window.dispatchEvent(new Event(COUPON_HISTORY_UPDATED_EVENT));
 }
 
 export function subscribeToCouponHistory(callback: () => void): () => void {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
   window.addEventListener(COUPON_HISTORY_UPDATED_EVENT, callback);
   window.addEventListener("storage", callback);
   return () => {

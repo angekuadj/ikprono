@@ -44,6 +44,9 @@ function isUser(value: unknown): value is User {
 }
 
 export function readAdminUsers(): User[] {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return [...DEMO_USERS];
+  }
   const value = localStorage.getItem(USERS_STORAGE_KEY);
   if (!value) return [...DEMO_USERS];
 
@@ -70,12 +73,15 @@ export function readAdminUsers(): User[] {
 }
 
 export function readAdminPayments(): AdminPayment[] {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return [];
+  }
   const value = localStorage.getItem(PAYMENTS_STORAGE_KEY);
   if (!value) return [];
 
   const parsed: unknown = JSON.parse(value);
   if (!Array.isArray(parsed)) {
-    throw new Error("L’historique des paiements est invalide.");
+    throw new Error("L'historique des paiements est invalide.");
   }
 
   return parsed.map((payment: unknown) => {
@@ -99,13 +105,16 @@ export function readAdminPayments(): AdminPayment[] {
       !("method" in payment) ||
       typeof payment.method !== "string"
     ) {
-      throw new Error("L’historique contient un paiement invalide.");
+      throw new Error("L'historique contient un paiement invalide.");
     }
     return payment as AdminPayment;
   });
 }
 
 export function writeAdminUsers(users: User[]): void {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return;
+  }
   const accountsValue = localStorage.getItem(USERS_STORAGE_KEY);
   const accounts: unknown = accountsValue ? JSON.parse(accountsValue) : [];
   if (!Array.isArray(accounts)) {

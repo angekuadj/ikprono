@@ -320,6 +320,9 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<Language>("fr");
 
   useEffect(() => {
+    if (typeof window === "undefined" || typeof localStorage === "undefined") {
+      return;
+    }
     const savedLanguage = localStorage.getItem(LANGUAGE_STORAGE_KEY);
     if (savedLanguage === "fr" || savedLanguage === "en") {
       setLanguageState(savedLanguage);
@@ -328,7 +331,9 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setLanguage = (nextLanguage: Language) => {
-    localStorage.setItem(LANGUAGE_STORAGE_KEY, nextLanguage);
+    if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+      localStorage.setItem(LANGUAGE_STORAGE_KEY, nextLanguage);
+    }
     setLanguageState(nextLanguage);
     document.documentElement.lang = nextLanguage;
   };

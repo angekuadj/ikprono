@@ -48,6 +48,9 @@ export function isMarketSelection(value: unknown): value is MarketSelection {
 }
 
 export function readMarketSelections(): MarketSelectionsByFixture {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return {};
+  }
   const stored = localStorage.getItem(MARKET_SELECTIONS_KEY);
   if (!stored) return {};
 
@@ -75,6 +78,9 @@ export function readMarketSelections(): MarketSelectionsByFixture {
 }
 
 export function writeMarketSelections(selections: MarketSelectionsByFixture): void {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return;
+  }
   localStorage.setItem(MARKET_SELECTIONS_KEY, JSON.stringify(selections));
   window.dispatchEvent(new Event(MARKET_SELECTIONS_UPDATED_EVENT));
 }
@@ -113,6 +119,9 @@ export function toggleFixtureMarketSelection(
 }
 
 export function subscribeToMarketSelections(callback: () => void): () => void {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
   window.addEventListener(MARKET_SELECTIONS_UPDATED_EVENT, callback);
   window.addEventListener("storage", callback);
   return () => {

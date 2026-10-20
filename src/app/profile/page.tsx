@@ -60,6 +60,9 @@ const defaultPreferences: UserPreferences = {
 };
 
 function readPreferences(userId: string): UserPreferences {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return defaultPreferences;
+  }
   const stored = localStorage.getItem(`ikprono_profile_${userId}`);
   if (!stored) return defaultPreferences;
 
@@ -287,7 +290,9 @@ export default function ProfilePage() {
     setSaving(true);
     try {
       updateProfile(name, email);
-      localStorage.setItem(`ikprono_profile_${user.id}`, JSON.stringify(preferences));
+      if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+        localStorage.setItem(`ikprono_profile_${user.id}`, JSON.stringify(preferences));
+      }
       addNotification(t("profileSaved"), "success");
     } catch (error) {
       addNotification(error instanceof Error ? error.message : "Impossible de mettre à jour le profil.", "error");

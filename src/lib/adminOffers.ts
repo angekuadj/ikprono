@@ -40,6 +40,9 @@ function isAdminOfferLog(value: unknown): value is AdminOfferLog {
 }
 
 export function readAdminOfferLogs(): AdminOfferLog[] {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return [];
+  }
   const stored = localStorage.getItem(ADMIN_OFFER_LOGS_KEY);
   if (!stored) return [];
 
@@ -51,5 +54,8 @@ export function readAdminOfferLogs(): AdminOfferLog[] {
 }
 
 export function writeAdminOfferLogs(logs: AdminOfferLog[]): void {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return;
+  }
   localStorage.setItem(ADMIN_OFFER_LOGS_KEY, JSON.stringify(logs));
 }

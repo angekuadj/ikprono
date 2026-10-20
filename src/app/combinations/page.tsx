@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
@@ -187,6 +188,10 @@ export default function CombinationsPage() {
     const loadGuestCombinationCount = () => {
       try {
         const stored = localStorage.getItem(GUEST_COMBINATION_COUNT_KEY);
+        if (typeof window === "undefined" || typeof localStorage === "undefined") {
+          setGuestCombinationsUsed(0);
+          return;
+        }
         if (stored === null) {
           setGuestCombinationsUsed(0);
           return;
@@ -1955,7 +1960,7 @@ export default function CombinationsPage() {
                         {match.homeScorer ? (
                           <div className="flex items-center gap-3">
                             {match.homeScorer.imageUrl && (
-                              <img src={match.homeScorer.imageUrl} alt={match.homeScorer.name} className="h-12 w-12 rounded-full object-cover" />
+                              <Image src={match.homeScorer.imageUrl} alt={match.homeScorer.name} width={48} height={48} className="h-12 w-12 rounded-full object-cover" />
                             )}
                             <div>
                               <p className="text-sm font-semibold text-white">{match.homeScorer.name}</p>
@@ -1971,7 +1976,7 @@ export default function CombinationsPage() {
                         {match.awayScorer ? (
                           <div className="flex items-center gap-3">
                             {match.awayScorer.imageUrl && (
-                              <img src={match.awayScorer.imageUrl} alt={match.awayScorer.name} className="h-12 w-12 rounded-full object-cover" />
+                              <Image src={match.awayScorer.imageUrl} alt={match.awayScorer.name} width={48} height={48} className="h-12 w-12 rounded-full object-cover" />
                             )}
                             <div>
                               <p className="text-sm font-semibold text-white">{match.awayScorer.name}</p>

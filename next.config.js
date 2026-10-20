@@ -6,8 +6,10 @@ const nextConfig = {
       {
         protocol: 'https',
         hostname: 'images.fotmob.com',
+        pathname: '/image_resources/**',
       },
     ],
+    unoptimized: false,
   },
   // Allow cross-origin requests from local network during development
   allowedDevOrigins: [
