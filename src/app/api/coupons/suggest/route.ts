@@ -10,6 +10,11 @@ import {
   suggestFotMobSafeCoupon,
 } from "@/lib/fotmobCoupons";
 import type { StatisticMarket } from "@/lib/coupons";
+import {
+  applyQuotaCookie,
+  commitCombinationUsage,
+  enforceCombinationQuota,
+} from "@/lib/server/quotaGuard";
 
 export const dynamic = "force-dynamic";
 
@@ -79,6 +84,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "The start date must be today or later." }, { status: 400 });
     }
 
+    // Application du quota côté serveur (source de vérité).
+    const guard = await enforceCombinationQuota(request);
+    if ("response" in guard) return guard.response;
+    const { context } = guard;
+
     try {
       const fixtures = includeLive
         ? (await loadFixturesFromFotMobByDate(today)).filter(fixture => fixture.status === "En direct")
@@ -91,50 +101,56 @@ export async function POST(request: NextRequest) {
           { status: 422 }
         );
       }
+
+      // Une génération réussie consomme une unité du quota du jour.
+      let result: Record<string, unknown>;
       if (mode === "statistic") {
         if (market === "scorers") {
-          const coupon = await generateFotMobScorerCoupon(
+          result = { coupon: await generateFotMobScorerCoupon(
             uniqueFixtures,
             payload.count,
             excludeFixtureIds,
             payload.randomSelection === true
-          );
-          return NextResponse.json({ coupon });
+          ) };
+        } else {
+          result = { coupon: await generateFotMobStatisticCoupon(
+            uniqueFixtures,
+            riskLevel,
+            market as StatisticMarket,
+            payload.count,
+            excludeFixtureIds,
+            payload.randomSelection === true
+          ) };
         }
-        const coupon = await generateFotMobStatisticCoupon(
-          uniqueFixtures,
-          riskLevel,
-          market as StatisticMarket,
-          payload.count,
-          excludeFixtureIds,
-          payload.randomSelection === true
-        );
-        return NextResponse.json({ coupon });
-      }
-      if (mode === "scorer") {
-        const coupon = await generateFotMobScorerCoupon(
+      } else if (mode === "scorer") {
+        result = { coupon: await generateFotMobScorerCoupon(
           uniqueFixtures,
           payload.count,
           excludeFixtureIds,
           payload.randomSelection === true
-        );
-        return NextResponse.json({ coupon });
-      }
-      if (mode === "safe") {
-        return NextResponse.json(await suggestFotMobSafeCoupon(
+        ) };
+      } else if (mode === "safe") {
+        result = await suggestFotMobSafeCoupon(
           uniqueFixtures,
           payload.count,
           [],
           payload.randomSelection === true
-        ));
+        );
+      } else {
+        result = await suggestFotMobCoupon(
+          uniqueFixtures,
+          payload.count,
+          riskLevel,
+          excludeFixtureIds,
+          payload.randomSelection === true
+        );
       }
-      return NextResponse.json(await suggestFotMobCoupon(
-        uniqueFixtures,
-        payload.count,
-        riskLevel,
-        excludeFixtureIds,
-        payload.randomSelection === true
-      ));
+
+      const entitlements = await commitCombinationUsage(context, 1);
+      return applyQuotaCookie(
+        NextResponse.json({ ...result, entitlements }),
+        context
+      );
     } catch (error) {
       console.error("Coupon suggestion failed.", error);
       const message = error instanceof Error ? error.message : "Unable to suggest a coupon.";
@@ -161,6 +177,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Provide a valid regenerate flag and coupon count." }, { status: 400 });
   }
 
+  // Application du quota côté serveur (source de vérité).
+  const guard = await enforceCombinationQuota(request);
+  if ("response" in guard) return guard.response;
+  const { context } = guard;
+
   try {
     const fixtures: Fixture[] = await loadFixturesFromFotMobByIds(fixtureIds);
     if (fixtures.length !== fixtureIds.length) {
@@ -174,7 +195,9 @@ export async function POST(request: NextRequest) {
       );
     }
     const coupons = await generateFotMobCoupons(fixtures, riskLevel, couponCount, regenerate);
-    return NextResponse.json({ coupons });
+    // Une génération réussie consomme une unité du quota du jour.
+    const entitlements = await commitCombinationUsage(context, 1);
+    return applyQuotaCookie(NextResponse.json({ coupons, entitlements }), context);
   } catch (error) {
     console.error("Combination suggestion failed.", error);
     const message = error instanceof Error ? error.message : "Unable to suggest combinations.";

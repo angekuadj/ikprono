@@ -10,6 +10,16 @@ import { readFixtureBasket, writeFixtureBasket } from "@/lib/fixtureBasket";
 import { readGeneratedCombinations, writeGeneratedCombinations } from "@/lib/generatedCombinations";
 import { uniqueGeneratedCoupons, type GeneratedCoupon, type GeneratedStatisticCoupon, type GeneratedScorerCoupon, type CouponPick, type StatisticMarket } from "@/lib/coupons";
 import type { Fixture, FixtureResponse } from "@/lib/fixtures";
+import {
+  COMBINATION_DAILY_LIMIT,
+  GUEST_COMBINATION_COUNT_KEY,
+  GUEST_COMBINATION_LIMIT,
+  MONTHLY_PRICE_FCFA,
+  TRIAL_DAILY_LIMIT,
+  recordCombinationUsage,
+  type ServerEntitlements,
+} from "@/lib/subscription";
+import { postJson } from "@/lib/apiClient";
 import { generateUUID } from "@/lib/uuid";
 import { exportCombinationPdf } from "@/lib/exportCombinationPdf";
 import {
@@ -26,13 +36,34 @@ import {
 } from "@/lib/couponSettlement";
 
 const MAX_FIXTURES = 20;
-const GUEST_COMBINATION_LIMIT = 20;
-const GUEST_COMBINATION_COUNT_KEY = "ikprono_guest_combination_count";
 const DEFAULT_LOOKAHEAD_DAYS = 7;
 const PAGE_SIZE = 12;
 
 type RiskLevel = "very-safe" | "safe" | "medium" | "bold" | "very-risky";
 type CombinationsTab = "fixtures" | "ai";
+
+/** Normalise un texte pour la recherche (accents et casse ignorés). */
+function normalizeSearchText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("fr")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+/** Texte indexé pour une rencontre : équipes, compétition, ligue, date. */
+function fixtureSearchText(fixture: Fixture): string {
+  return normalizeSearchText([
+    fixture.homeTeam,
+    fixture.awayTeam,
+    fixture.competition ?? "",
+    fixture.league,
+    fixture.date,
+    fixture.time,
+  ].join(" "));
+}
 
 const STATISTIC_MARKETS: { id: StatisticMarket; label: string; labelEn: string; description: string; descriptionEn: string }[] = [
   { id: "shots", label: "Tirs dans le match", labelEn: "Total shots", description: "Total des tirs des deux équipes", descriptionEn: "Combined shots from both teams" },
@@ -95,13 +126,14 @@ function addDays(date: string, days: number) {
 }
 
 export default function CombinationsPage() {
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, entitlements, user, refreshEntitlements } = useAuth();
   const { language, text } = useLanguage();
   const [activeTab, setActiveTab] = useState<CombinationsTab>("fixtures");
   const [startDate, setStartDate] = useState(getLocalDate);
   const [endDate, setEndDate] = useState(() => addDays(getLocalDate(), DEFAULT_LOOKAHEAD_DAYS - 1));
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [fixtureQuery, setFixtureQuery] = useState("");
   const [coupons, setCoupons] = useState<GeneratedCoupon[]>([]);
   const [safeCoupon, setSafeCoupon] = useState<GeneratedCoupon | null>(null);
   const [riskLevel, setRiskLevel] = useState<RiskLevel>("medium");
@@ -125,7 +157,18 @@ export default function CombinationsPage() {
   const [guestCombinationsUsed, setGuestCombinationsUsed] = useState(0);
   const [refreshKey, refreshNow] = useAutoRefresh();
   const guestCombinationsRemaining = Math.max(0, GUEST_COMBINATION_LIMIT - guestCombinationsUsed);
-  const canGenerateCombination = isAuthenticated || guestCombinationsRemaining > 0;
+  const canGenerateCombination = entitlements.canGenerate;
+  const combinationLimitReached = !entitlements.canGenerate && !authLoading;
+  const needsSignIn = !isAuthenticated && guestCombinationsRemaining === 0;
+  const needsOffer = isAuthenticated && !entitlements.trialActive && !entitlements.hasCombinationAccess;
+  const dailyLimitReached = entitlements.reason === "offer-daily-limit" || entitlements.reason === "trial-daily-limit";
+  const needsOfferForTomorrow = !entitlements.hasCombinationAccess || entitlements.reason === "trial-daily-limit";
+  const remainingTodayLabel = Number.isFinite(entitlements.remainingToday)
+    ? String(entitlements.remainingToday)
+    : "∞";
+  const suggestionCount = Number.isFinite(entitlements.remainingToday)
+    ? Math.min(3, Math.max(0, entitlements.remainingToday))
+    : 3;
   const couponFixtureIds = useMemo(
     () => Array.from(new Set([
       ...(safeCoupon?.matches.map(match => match.fixtureId) ?? []),
@@ -172,51 +215,66 @@ export default function CombinationsPage() {
     }
   }, [text]);
 
-  const recordGuestCombinations = (count: number) => {
-    if (isAuthenticated || count <= 0) return;
-    const stored = localStorage.getItem(GUEST_COMBINATION_COUNT_KEY);
-    const currentCount = stored === null ? 0 : Number(stored);
-    if (!Number.isSafeInteger(currentCount) || currentCount < 0) {
-      throw new Error(text(
-        "Impossible de lire votre quota de combinaisons gratuites.",
-        "Unable to read your free combination quota."
-      ));
-    }
-    const nextCount = currentCount + count;
-    localStorage.setItem(GUEST_COMBINATION_COUNT_KEY, String(nextCount));
-    setGuestCombinationsUsed(nextCount);
-  };
-
   const requireGuestCombinationQuota = () => {
     if (authLoading) {
       setActionError(text("Vérification de votre session…", "Checking your session…"));
       return 0;
     }
-    if (isAuthenticated) return Number.POSITIVE_INFINITY;
-    let currentCount: number;
-    try {
-      const stored = localStorage.getItem(GUEST_COMBINATION_COUNT_KEY);
-      currentCount = stored === null ? 0 : Number(stored);
-      if (!Number.isSafeInteger(currentCount) || currentCount < 0) {
-        throw new Error("The stored guest combination count is invalid.");
-      }
-    } catch (error) {
-      console.error("Could not read the guest combination count.", error);
-      setActionError(text(
-        "Impossible de lire votre quota de combinaisons gratuites.",
-        "Unable to read your free combination quota."
-      ));
+    if (!entitlements.canGenerate) {
+      setActionError(entitlements.reason === "no-offer" && !isAuthenticated
+        ? text(
+          `Vous avez utilisé vos ${GUEST_COMBINATION_LIMIT} combinaisons gratuites. Connectez-vous pour continuer.`,
+          `You have used your ${GUEST_COMBINATION_LIMIT} free combinations. Sign in to continue.`
+        )
+        : text(
+          "Votre quota de combinaisons du jour est épuisé. Passez à une offre pour continuer.",
+          "Your daily combination quota is used up. Get a plan to continue."
+        ));
       return 0;
     }
-    setGuestCombinationsUsed(currentCount);
-    const remaining = Math.max(0, GUEST_COMBINATION_LIMIT - currentCount);
-    if (remaining === 0) {
-      setActionError(text(
+    return Number.isFinite(entitlements.remainingToday)
+      ? entitlements.remainingToday
+      : Number.POSITIVE_INFINITY;
+  };
+
+  /**
+   * Enregistre `count` générations dans le quota courant (invité, essai ou offre).
+   * Renvoie false quand le quota est insuffisant.
+   */
+  const recordGuestCombinations = (count: number): boolean => {
+    if (count <= 0) return true;
+    const result = recordCombinationUsage({
+      accountId: user?.id ?? "guest",
+      isAuthenticated,
+      role: user?.role,
+      guestRemaining: guestCombinationsRemaining,
+    }, count);
+    if (!isAuthenticated) setGuestCombinationsUsed(current => current + result.accepted);
+    return result.accepted >= count;
+  };
+
+  /**
+   * Synchronise l'affichage avec le quota calculé par le serveur après une
+   * génération (le serveur est la source de vérité).
+   */
+  const applyServerEntitlements = (payload: { entitlements?: ServerEntitlements }) => {
+    if (!payload.entitlements) return;
+    setGuestCombinationsUsed(payload.entitlements.usedToday);
+    if (isAuthenticated) void refreshEntitlements();
+  };
+
+  /** Traduit un refus de quota renvoyé par le serveur (HTTP 402). */
+  const quotaErrorMessage = (payload: { error?: string; code?: string }): string => {
+    if (payload.code === "guest-limit-reached") {
+      return text(
         `Vous avez utilisé vos ${GUEST_COMBINATION_LIMIT} combinaisons gratuites. Connectez-vous pour continuer.`,
         `You have used your ${GUEST_COMBINATION_LIMIT} free combinations. Sign in to continue.`
-      ));
+      );
     }
-    return remaining;
+    return payload.error || text(
+      "Votre quota de combinaisons du jour est épuisé. Choisissez une offre pour continuer.",
+      "Your daily combination quota is used up. Choose a plan to continue."
+    );
   };
 
   useEffect(() => {
@@ -292,18 +350,29 @@ export default function CombinationsPage() {
       .filter((fixture): fixture is Fixture => fixture !== undefined),
     [fixtures, selectedIds]
   );
-  const totalPages = Math.max(1, Math.ceil(fixtures.length / PAGE_SIZE));
-  const visibleFixtures = fixtures.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const locale = language === "fr" ? "fr-FR" : "en-GB";
-  const relevantFixtures = liveOnly ? fixtures.filter(fixture => ["en live", "mi-temps"].includes(fixture.status?.trim().toLocaleLowerCase("fr-FR") ?? "")) : fixtures;
+  const relevantFixtures = liveOnly
+    ? fixtures.filter(fixture => ["en live", "mi-temps"].includes(fixture.status?.trim().toLocaleLowerCase("fr-FR") ?? ""))
+    : fixtures;
+  const normalizedFixtureQuery = normalizeSearchText(fixtureQuery);
+  const searchedFixtures = normalizedFixtureQuery
+    ? fixtures.filter(fixture => fixtureSearchText(fixture).includes(normalizedFixtureQuery))
+    : fixtures;
+  const totalPages = Math.max(1, Math.ceil(searchedFixtures.length / PAGE_SIZE));
+  const visibleFixtures = searchedFixtures.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const fixturesForCombination = selectedFixtures.length > 0
     ? selectedFixtures
     : relevantFixtures.slice(0, requestedCount);
 
-  const toggleFixture = (fixtureId: string) => {
+  const clearGeneratedOutputs = () => {
     setActionError("");
+    setActionNotice("");
     setCoupons([]);
     setSafeCoupon(null);
+  };
+
+  const toggleFixture = (fixtureId: string) => {
+    clearGeneratedOutputs();
     setSelectedIds(current => {
       if (current.includes(fixtureId)) {
         return current.filter(id => id !== fixtureId);
@@ -319,6 +388,25 @@ export default function CombinationsPage() {
     });
   };
 
+  const selectAllVisibleFixtures = () => {
+    clearGeneratedOutputs();
+    setSelectedIds(current => {
+      const room = MAX_FIXTURES - current.length;
+      if (room <= 0) {
+        setActionError(text(
+          `Choisissez au maximum ${MAX_FIXTURES} rencontres par combinaison.`,
+          `Choose no more than ${MAX_FIXTURES} fixtures per combination.`
+        ));
+        return current;
+      }
+      const additions = visibleFixtures
+        .map(fixture => fixture.id)
+        .filter(id => !current.includes(id))
+        .slice(0, room);
+      return [...current, ...additions];
+    });
+  };
+
   const generateCombinations = async (regenerate = false, couponCount = 3, selectedRiskLevel = riskLevel) => {
     if (fixturesForCombination.length === 0) return;
     const remaining = requireGuestCombinationQuota();
@@ -330,17 +418,16 @@ export default function CombinationsPage() {
     if (!regenerate) setCoupons([]);
 
     try {
-      const response = await fetch("/api/coupons/suggest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fixtureIds: fixturesForCombination.map(fixture => fixture.id),
-          riskLevel: selectedRiskLevel,
-          regenerate,
-          couponCount: requestedCoupons,
-        }),
+      const response = await postJson("/api/coupons/suggest", {
+        fixtureIds: fixturesForCombination.map(fixture => fixture.id),
+        riskLevel: selectedRiskLevel,
+        regenerate,
+        couponCount: requestedCoupons,
       });
-      const payload = await response.json() as { coupons?: GeneratedCoupon[]; error?: string };
+      const payload = await response.json() as { coupons?: GeneratedCoupon[]; error?: string; code?: string; entitlements?: ServerEntitlements };
+      if (response.status === 402) {
+        throw new Error(quotaErrorMessage(payload));
+      }
       if (!response.ok) {
         throw new Error(payload.error || text("Impossible de proposer les combinaisons.", "Unable to suggest combinations."));
       }
@@ -353,8 +440,8 @@ export default function CombinationsPage() {
       }
       setCoupons(distinctCoupons);
       recordGuestCombinations(distinctCoupons.length);
-      setActionNotice("");
-    } catch (error) {
+      applyServerEntitlements(payload);
+      setActionNotice("");    } catch (error) {
       setActionError(error instanceof Error
         ? error.message
         : text("Impossible de proposer les combinaisons.", "Unable to suggest combinations."));
@@ -364,27 +451,26 @@ export default function CombinationsPage() {
   };
 
   const generateAutoCombination = async (selectedRiskLevel = riskLevel, excludeFixtureIds: string[] = []) => {
-    const remaining = requireGuestCombinationQuota();
-    if (remaining === 0) return;
+    const remainingQuota = requireGuestCombinationQuota();
+    if (remainingQuota === 0) return;
     setGenerating(true);
     setActionError("");
     setCoupons([]);
     try {
-      const response = await fetch("/api/coupons/suggest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: "auto",
-          from: startDate,
-          to: endDate,
-          count: requestedCount,
-          riskLevel: selectedRiskLevel,
-          excludeFixtureIds,
-          includeLive: liveOnly,
-          randomSelection,
-        }),
+      const response = await postJson("/api/coupons/suggest", {
+        mode: "auto",
+        from: startDate,
+        to: endDate,
+        count: requestedCount,
+        riskLevel: selectedRiskLevel,
+        excludeFixtureIds,
+        includeLive: liveOnly,
+        randomSelection,
       });
-      const payload = await response.json() as { coupon?: GeneratedCoupon; error?: string };
+      const payload = await response.json() as { coupon?: GeneratedCoupon; error?: string; code?: string; entitlements?: ServerEntitlements };
+      if (response.status === 402) {
+        throw new Error(quotaErrorMessage(payload));
+      }
       if (!response.ok) {
         throw new Error(payload.error || text("Impossible de proposer cette combinaison.", "Unable to suggest this combination."));
       }
@@ -398,6 +484,7 @@ export default function CombinationsPage() {
       setRiskLevel(selectedRiskLevel);
       setSafeCoupon(payload.coupon);
       recordGuestCombinations(1);
+      applyServerEntitlements(payload);
       saveCouponsForTracking([payload.coupon]);
     } catch (error) {
       setActionError(error instanceof Error
@@ -422,22 +509,21 @@ export default function CombinationsPage() {
         return;
       }
 
-      const response = await fetch("/api/coupons/suggest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: "statistic",
-          from: startDate,
-          to: endDate,
-          count: statisticCount,
-          riskLevel: selectedRiskLevel,
-          market: statisticMarket,
-          excludeFixtureIds,
-          includeLive: liveOnly,
-          randomSelection,
-        }),
+      const response = await postJson("/api/coupons/suggest", {
+        mode: "statistic",
+        from: startDate,
+        to: endDate,
+        count: statisticCount,
+        riskLevel: selectedRiskLevel,
+        market: statisticMarket,
+        excludeFixtureIds,
+        includeLive: liveOnly,
+        randomSelection,
       });
-      const payload = await response.json() as { coupon?: GeneratedStatisticCoupon; error?: string };
+      const payload = await response.json() as { coupon?: GeneratedStatisticCoupon; error?: string; code?: string; entitlements?: ServerEntitlements };
+      if (response.status === 402) {
+        throw new Error(quotaErrorMessage(payload));
+      }
       if (!response.ok) {
         throw new Error(payload.error || text("Impossible de générer cette combinaison statistique.", "Unable to generate this statistics combination."));
       }
@@ -447,6 +533,7 @@ export default function CombinationsPage() {
       setRiskLevel(selectedRiskLevel);
       setStatisticCoupon(payload.coupon);
       recordGuestCombinations(1);
+      applyServerEntitlements(payload);
     } catch (error) {
       setActionError(error instanceof Error
         ? error.message
@@ -459,25 +546,24 @@ export default function CombinationsPage() {
   const generateScorerCombination = async (
     excludeFixtureIds: string[] = []
   ) => {
-    const remaining = requireGuestCombinationQuota();
-    if (remaining === 0) return;
+    const remainingQuota = requireGuestCombinationQuota();
+    if (remainingQuota === 0) return;
     setGenerating(true);
     setActionError("");
     try {
-      const response = await fetch("/api/coupons/suggest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: "scorer",
-          from: startDate,
-          to: endDate,
-          count: statisticCount,
-          excludeFixtureIds,
-          includeLive: liveOnly,
-          randomSelection,
-        }),
+      const response = await postJson("/api/coupons/suggest", {
+        mode: "scorer",
+        from: startDate,
+        to: endDate,
+        count: statisticCount,
+        excludeFixtureIds,
+        includeLive: liveOnly,
+        randomSelection,
       });
-      const payload = await response.json() as { coupon?: GeneratedScorerCoupon; error?: string };
+      const payload = await response.json() as { coupon?: GeneratedScorerCoupon; error?: string; code?: string; entitlements?: ServerEntitlements };
+      if (response.status === 402) {
+        throw new Error(quotaErrorMessage(payload));
+      }
       if (!response.ok) {
         throw new Error(payload.error || text("Impossible de générer cette combinaison de buteurs.", "Unable to generate this scorer combination."));
       }
@@ -486,6 +572,7 @@ export default function CombinationsPage() {
       }
       setScorerCoupon(payload.coupon);
       recordGuestCombinations(1);
+      applyServerEntitlements(payload);
     } catch (error) {
       setActionError(error instanceof Error
         ? error.message
@@ -880,13 +967,33 @@ export default function CombinationsPage() {
                 "Choose a statistic, number of fixtures, and risk level to create a combination from available history."
               )
               : text(
-                `Choisissez des rencontres programmées pour recevoir ${isAuthenticated ? 3 : Math.min(3, guestCombinationsRemaining)} proposition(s) de combinaison, établies selon les historiques disponibles.`,
-                `Choose scheduled fixtures to get ${isAuthenticated ? 3 : Math.min(3, guestCombinationsRemaining)} suggested combination(s) based on available match history.`
+                `Choisissez des rencontres programmées pour recevoir ${suggestionCount} proposition(s) de combinaison, établies selon les historiques disponibles.`,
+                `Choose scheduled fixtures to get ${suggestionCount} suggested combination(s) based on available match history.`
               )}
           </p>
           <p className="mt-2 text-xs text-green-400">
             {text("Les rencontres, scores et statuts sont actualisés automatiquement.", "Fixtures, scores, and statuses refresh automatically.")}
           </p>
+          {!authLoading && (
+            <p className="mt-2 text-xs text-gray-400">
+              {entitlements.trialActive
+                ? text(
+                  `Essai gratuit : ${entitlements.trialDaysLeft} jour(s) restant(s) · ${entitlements.usedToday}/${entitlements.dailyLimit} combinaisons utilisées aujourd'hui.`,
+                  `Free trial: ${entitlements.trialDaysLeft} day(s) left · ${entitlements.usedToday}/${entitlements.dailyLimit} combinations used today.`
+                )
+                : entitlements.hasCombinationAccess
+                  ? text(
+                    `Offre Combinaisons · ${entitlements.usedToday}/${entitlements.dailyLimit} utilisées aujourd'hui.`,
+                    `Combinations plan · ${entitlements.usedToday}/${entitlements.dailyLimit} used today.`
+                  )
+                  : !isAuthenticated
+                    ? text(
+                      `Sans compte : ${guestCombinationsRemaining}/${GUEST_COMBINATION_LIMIT} combinaison(s) gratuite(s) restante(s).`,
+                      `Without an account: ${guestCombinationsRemaining}/${GUEST_COMBINATION_LIMIT} free combination(s) left.`
+                    )
+                    : text("Aucune offre active.", "No active plan.")}
+            </p>
+          )}
         </header>
 
         {!authLoading && !isAuthenticated && (
@@ -911,6 +1018,44 @@ export default function CombinationsPage() {
                 {text("Se connecter pour continuer", "Sign in to continue")}
               </Link>
             )}
+          </section>
+        )}
+
+        {!authLoading && combinationLimitReached && (
+          <section
+            role="alert"
+            className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-700 bg-amber-950/30 p-4"
+          >
+            <p className="text-sm text-amber-100">
+              {needsSignIn
+                ? text(
+                  `Vous avez utilisé vos ${GUEST_COMBINATION_LIMIT} combinaisons gratuites. Connectez-vous : vous profitez ensuite de 3 jours d’essai gratuit (${TRIAL_DAILY_LIMIT} combinaisons par jour et vidéos en direct).`,
+                  `You have used your ${GUEST_COMBINATION_LIMIT} free combinations. Sign in: you then get a free 3-day trial (${TRIAL_DAILY_LIMIT} combinations per day and live videos).`
+                )
+                : needsOffer
+                  ? text(
+                    `Votre essai gratuit est terminé. Choisissez une offre à ${MONTHLY_PRICE_FCFA} FCFA/mois : TV, Combinaisons (${COMBINATION_DAILY_LIMIT}/jour) ou les deux.`,
+                    `Your free trial is over. Choose a plan at ${MONTHLY_PRICE_FCFA} XOF/month: TV, Combinations (${COMBINATION_DAILY_LIMIT}/day) or both.`
+                  )
+                  : dailyLimitReached
+                    ? text(
+                      `Vous avez atteint votre quota de ${entitlements.dailyLimit} combinaisons aujourd’hui. Revenez demain${needsOfferForTomorrow ? " ou passez à l’offre Combinaisons" : ""}.`,
+                      `You have reached your quota of ${entitlements.dailyLimit} combinations today. Come back tomorrow${needsOfferForTomorrow ? " or get the Combinations plan" : ""}.`
+                    )
+                    : text("Génération de combinaison indisponible.", "Combination generation unavailable.")}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {needsSignIn && (
+                <Link href="/login?next=%2Fcombinations" className="rounded-lg border border-amber-600 px-3 py-2 text-sm font-semibold text-amber-100 hover:bg-amber-900/40">
+                  {text("Se connecter", "Sign in")}
+                </Link>
+              )}
+              {(needsOffer || (dailyLimitReached && needsOfferForTomorrow)) && (
+                <Link href="/payment" className="rounded-lg bg-green-600 px-3 py-2 text-sm font-semibold text-white hover:bg-green-500">
+                  {text("Voir les offres", "View plans")}
+                </Link>
+              )}
+            </div>
           </section>
         )}
 
@@ -996,6 +1141,54 @@ export default function CombinationsPage() {
           </button>
         </div>
 
+        {activeTab === "fixtures" && (
+          <section className="mb-4 rounded-xl border border-gray-800 bg-gray-900 p-4" aria-label={text("Rechercher des rencontres", "Search fixtures")}>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <label className="min-w-[16rem] flex-1 text-xs text-gray-400">
+                {text("Rechercher une rencontre", "Search fixtures")}
+                <input
+                  type="search"
+                  value={fixtureQuery}
+                  onChange={event => {
+                    setFixtureQuery(event.target.value);
+                    setCurrentPage(1);
+                  }}
+                  placeholder={text("Équipe, compétition ou date (AAAA-MM-JJ)", "Team, competition or date (YYYY-MM-DD)")}
+                  className="mt-1 block w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white placeholder:text-gray-500"
+                />
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={selectAllVisibleFixtures}
+                  disabled={visibleFixtures.length === 0}
+                  className="rounded-lg border border-green-700 bg-green-950/30 px-3 py-2 text-xs font-semibold text-green-200 hover:border-green-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {text("Tout sélectionner (page)", "Select all (page)")}
+                </button>
+                {selectedIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearGeneratedOutputs();
+                      setSelectedIds([]);
+                    }}
+                    className="rounded-lg border border-gray-700 px-3 py-2 text-xs font-semibold text-gray-200 hover:border-red-700 hover:text-red-300"
+                  >
+                    {text("Tout désélectionner", "Clear selection")}
+                  </button>
+                )}
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-gray-500">
+              {text(
+                `Rencontres du ${startDate} au ${endDate} : ${searchedFixtures.length} résultat(s) sur ${fixtures.length}.`,
+                `Fixtures from ${startDate} to ${endDate}: ${searchedFixtures.length} result(s) out of ${fixtures.length}.`
+              )}
+            </p>
+          </section>
+        )}
+
         {loadError && (
           <p role="alert" className="mb-4 rounded-lg border border-red-800 bg-red-950/30 p-4 text-sm text-red-200">{loadError}</p>
         )}
@@ -1011,6 +1204,15 @@ export default function CombinationsPage() {
           ) : fixtures.length === 0 ? (
             <div className="rounded-xl border border-gray-800 bg-gray-900 p-8 text-center">
               <p className="text-gray-300">{text("Aucune rencontre programmée sur cette période.", "No scheduled fixtures in this period.")}</p>
+            </div>
+          ) : searchedFixtures.length === 0 ? (
+            <div className="rounded-xl border border-gray-800 bg-gray-900 p-8 text-center">
+              <p className="text-gray-300">
+                {text(
+                  `Aucune rencontre du ${startDate} au ${endDate} ne correspond à votre recherche.`,
+                  `No fixture between ${startDate} and ${endDate} matches your search.`
+                )}
+              </p>
             </div>
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
@@ -1055,7 +1257,7 @@ export default function CombinationsPage() {
               })}
             </div>
           )}
-          {fixtures.length > PAGE_SIZE && (
+          {searchedFixtures.length > PAGE_SIZE && (
             <nav className="mt-5 flex flex-wrap items-center justify-center gap-3" aria-label={text("Pagination des rencontres", "Fixture pagination")}>
               <button
                 type="button"
@@ -1136,7 +1338,7 @@ export default function CombinationsPage() {
             <button
               type="button"
               onClick={() => setShowAutoRiskOptions(current => !current)}
-              disabled={authLoading || !canGenerateCombination || loading || relevantFixtures.length === 0 || generating}
+              disabled={authLoading || !canGenerateCombination || loading || generating || relevantFixtures.length === 0}
               className="rounded-lg bg-green-600 px-5 py-3 text-sm font-bold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {generating
@@ -1196,19 +1398,19 @@ export default function CombinationsPage() {
           <button
             type="button"
             onClick={() => setShowRiskOptions(current => !current)}
-            disabled={authLoading || !canGenerateCombination || fixtures.length === 0 || generating}
+            disabled={authLoading || !canGenerateCombination || fixturesForCombination.length === 0 || generating}
             className="rounded-lg bg-green-600 px-5 py-3 text-sm font-bold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {generating
               ? text("Préparation des combinaisons…", "Preparing combinations…")
-              : !isAuthenticated && guestCombinationsRemaining < 3
-                ? text(`Proposer ${guestCombinationsRemaining} combinaison(s)`, `Suggest ${guestCombinationsRemaining} combination(s)`)
+              : suggestionCount < 3
+                ? text(`Proposer ${suggestionCount} combinaison(s)`, `Suggest ${suggestionCount} combination(s)`)
                 : text("Proposer 3 combinaisons", "Suggest 3 combinations")}
           </button>
           <button
             type="button"
             onClick={() => addFixturesToBasket(selectedFixtures)}
-            disabled={selectedIds.length === 0}
+            disabled={selectedFixtures.length === 0}
             className="rounded-lg border border-gray-700 px-5 py-3 text-sm font-semibold text-gray-200 hover:border-green-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {text("Ajouter au panier", "Add to basket")}
@@ -1236,9 +1438,8 @@ export default function CombinationsPage() {
                     disabled={authLoading || !canGenerateCombination || generating}
                     onClick={() => {
                       setRiskLevel(level);
-                      void generateCombinations(true, 3, level);
-                    }}
-                    className={`rounded-lg border p-3 text-left transition hover:border-green-600 ${
+                      void generateCombinations(true, suggestionCount || 3, level);
+                    }}                    className={`rounded-lg border p-3 text-left transition hover:border-green-600 ${
                       riskLevel === level ? "border-green-700 bg-green-950/30" : "border-gray-700 bg-gray-950"
                     }`}
                   >

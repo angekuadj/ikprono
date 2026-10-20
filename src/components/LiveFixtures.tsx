@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import FixtureCards from "@/components/FixtureCards";
 import FavoriteFixtureButton from "@/components/FavoriteFixtureButton";
+import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { useFixtureStatuses } from "@/hooks/useFixtureStatuses";
@@ -44,6 +45,7 @@ function normalizeTeamName(name: string): string {
 
 export default function LiveFixtures() {
   const { language, text } = useLanguage();
+  const { entitlements, isAuthenticated, isLoading: authLoading } = useAuth();
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
   const [liveFilter, setLiveFilter] = useState<"all" | "watchable">("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -55,6 +57,7 @@ export default function LiveFixtures() {
   const [refreshKey, refreshNow] = useAutoRefresh();
   const hasLoadedFixtures = useRef(false);
   const [selectedFixtures, setSelectedFixtures] = useState<Set<string>>(() => new Set());
+  const [basketFixtures, setBasketFixtures] = useState<Fixture[]>([]);
   const [basketCount, setBasketCount] = useState(0);
   const [basketError, setBasketError] = useState("");
   const [matchoraMatches, setMatchoraMatches] = useState<MatchoraLiveMatch[]>([]);
@@ -74,6 +77,7 @@ export default function LiveFixtures() {
       try {
         const basket = readFixtureBasket();
         setBasketCount(basket.length);
+        setBasketFixtures(basket);
         setSelectedFixtures(new Set(basket.map(fixture => fixture.id)));
         setBasketError("");
       } catch (error) {
@@ -157,6 +161,19 @@ export default function LiveFixtures() {
 
   const locale = language === "fr" ? "fr-FR" : "en-GB";
   const normalizedSearchQuery = normalizeTeamName(searchQuery);
+  // Sans offre TV (hors essai), seules les vidéos des matchs suivis dans le panier restent accessibles.
+  const trackedTeamKeys = new Set(
+    basketFixtures.flatMap(fixture => [
+      normalizeTeamName(fixture.homeTeam),
+      normalizeTeamName(fixture.awayTeam),
+    ])
+  );
+  const isWatchableMatchoraMatch = (match: MatchoraLiveMatch) => {
+    if (entitlements.hasTvAccess) return true;
+    return trackedTeamKeys.has(normalizeTeamName(match.homeTeam))
+      && trackedTeamKeys.has(normalizeTeamName(match.awayTeam));
+  };
+  const watchableMatchoraCount = matchoraMatches.filter(isWatchableMatchoraMatch).length;
   const fixturesForDisplay = fixtures.map(fixture => ({
     ...fixture,
     ...refreshedLiveFixtures[fixture.id],
@@ -169,16 +186,18 @@ export default function LiveFixtures() {
     fixture.status ?? "",
     fixture.time,
   ].join(" ")).includes(normalizedSearchQuery));
-  const filteredMatchoraMatches = matchoraMatches.filter(match =>
-    !normalizedSearchQuery || normalizeTeamName([
-      match.homeTeam,
-      match.awayTeam,
-      match.league,
-      match.score ?? "",
-      match.status,
-      match.minute ?? "",
-    ].join(" ")).includes(normalizedSearchQuery)
-  );
+  const filteredMatchoraMatches = matchoraMatches
+    .filter(isWatchableMatchoraMatch)
+    .filter(match =>
+      !normalizedSearchQuery || normalizeTeamName([
+        match.homeTeam,
+        match.awayTeam,
+        match.league,
+        match.score ?? "",
+        match.status,
+        match.minute ?? "",
+      ].join(" ")).includes(normalizedSearchQuery)
+    );
   useEffect(() => {
     for (const fixture of fixturesForDisplay) {
       const incident = fixture.liveIncident;
@@ -266,11 +285,11 @@ export default function LiveFixtures() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <p className="text-sm text-gray-300">
               {liveFilter === "watchable"
-                ? text("Matchs en direct disponibles sur Matchora", "Live matches available on Matchora")
+                ? text("Matchs en direct disponibles pour vous", "Live matches available to you")
                 : text("Matchs en direct", "Live matches")}
               {liveFilter === "watchable" ? (
                 <span className="ml-2 text-green-400">
-                  {text(`${filteredMatchoraMatches.length}/${matchoraMatches.length} match(s) regardable(s)`, `${filteredMatchoraMatches.length}/${matchoraMatches.length} watchable match(es)`)}
+                  {text(`${filteredMatchoraMatches.length}/${watchableMatchoraCount} match(s) regardable(s)`, `${filteredMatchoraMatches.length}/${watchableMatchoraCount} watchable match(es)`)}
                 </span>
               ) : fixtures.length > 0 && (
                 <span className="ml-2 text-green-400">
@@ -299,7 +318,7 @@ export default function LiveFixtures() {
                   }`}
                 >
                   {text("Regardables", "Watchable")}
-                  <span className="ml-1.5 text-xs opacity-80">{matchoraMatches.length}</span>
+                  <span className="ml-1.5 text-xs opacity-80">{watchableMatchoraCount}</span>
                 </button>
               </div>
               <button
@@ -337,6 +356,24 @@ export default function LiveFixtures() {
             )}
           </label>
         </section>
+
+        {!authLoading && !entitlements.hasTvAccess && (
+          <p role="status" className="mb-5 rounded-lg border border-amber-700/60 bg-amber-950/40 p-4 text-sm text-amber-200">
+            {isAuthenticated
+              ? text(
+                "Votre accès aux vidéos en direct est limité aux matchs suivis dans votre panier. Prenez l’offre TV à 2 000 FCFA/mois pour regarder tous les matchs.",
+                "Your live video access is limited to matches tracked in your basket. Get the TV plan at 2,000 XOF/month to watch every match."
+              )
+              : text(
+                "Connectez-vous pour profiter de 3 jours d’essai gratuit avec les vidéos en direct, puis choisissez l’offre TV à 2 000 FCFA/mois.",
+                "Sign in to enjoy a 3-day free trial with live videos, then choose the TV plan at 2,000 XOF/month."
+              )}
+            {" "}
+            <Link href={isAuthenticated ? "/payment" : "/login?next=%2Flive"} className="font-semibold underline hover:text-amber-100">
+              {isAuthenticated ? text("Voir les offres", "View plans") : text("Se connecter", "Sign in")}
+            </Link>
+          </p>
+        )}
 
         {liveFixturesError && fixtures.length > 0 && (
           <p role="status" className="mb-5 rounded-lg border border-amber-700/60 bg-amber-950/40 p-4 text-sm text-amber-200">
@@ -548,7 +585,7 @@ export default function LiveFixtures() {
                   <span className="mt-1 block text-[10px] font-medium text-red-300">{text("Voir les détails →", "View details →")}</span>
                 </Link>
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                  {matchoraMatch && (
+                  {matchoraMatch && isWatchableMatchoraMatch(matchoraMatch) && (
                     <button
                       type="button"
                       onClick={() => setSelectedMatchoraMatch(matchoraMatch)}

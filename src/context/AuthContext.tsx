@@ -17,6 +17,19 @@ import {
 } from "@/lib/firebaseAuth";
 import { ensureUserProfile, updateUserProfile } from "@/lib/firestore";
 import { generateUUID } from "@/lib/uuid";
+import { getJson, postJson } from "@/lib/apiClient";
+import {
+  GUEST_COMBINATION_COUNT_KEY,
+  GUEST_COMBINATION_LIMIT,
+  ensureTrialStarted,
+  entitlementsFromServer,
+  getEntitlements,
+  subscribeToSubscriptionChanges,
+  toggleOffer,
+  type Entitlements,
+  type ServerEntitlements,
+  type SubscriptionOffer,
+} from "@/lib/subscription";
 
 export interface User {
   id: string;
@@ -38,6 +51,12 @@ interface AuthContextType {
   proposalCount: number;
   remainingProposals: number;
   recordProposals: (count: number) => number;
+  /** Droits d'accès courants : essai, offres TV/Combinaisons, quota journalier. */
+  entitlements: Entitlements;
+  /** Active ou désactive une offre (simulation de paiement). */
+  setOffer: (offer: SubscriptionOffer) => Promise<void>;
+  /** Recharge les droits depuis le serveur (source de vérité). */
+  refreshEntitlements: () => Promise<void>;
   isAuthenticated: boolean;
   isLoading: boolean;
 }
@@ -78,6 +97,15 @@ const PROPOSAL_COUNT_PREFIX = "ikprono_proposals_";
 const DEMO_PROFILE_OVERRIDES_KEY = "ikprono_demo_profiles";
 const FREE_PROPOSAL_LIMIT = 3;
 
+function readGuestCombinationCount(): number {
+  if (typeof window === "undefined") return 0;
+  const value = Number(localStorage.getItem(GUEST_COMBINATION_COUNT_KEY) ?? "0");
+  return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
+function readSubscriptionOnce(accountId: string): boolean {
+  return typeof window !== "undefined" && localStorage.getItem(`ikprono_subscription_${accountId}`) !== null;
+}
 function isUser(value: unknown): value is User {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Partial<User>;
@@ -189,6 +217,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [proposalCount, setProposalCount] = useState(0);
+  const [guestCombinationCount, setGuestCombinationCount] = useState(0);
+  const [subscriptionVersion, setSubscriptionVersion] = useState(0);
+  const [serverEntitlements, setServerEntitlements] = useState<ServerEntitlements | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [firebaseReady, setFirebaseReady] = useState(false);
 
@@ -268,6 +299,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setIsLoading(false);
   }, [firebaseUser, firebaseReady]);
+
+  // Suit les changements d'abonnement (même onglet et autres onglets).
+  useEffect(() => {
+    const refresh = () => {
+      setGuestCombinationCount(readGuestCombinationCount());
+      setSubscriptionVersion(version => version + 1);
+    };
+    refresh();
+    return subscribeToSubscriptionChanges(refresh);
+  }, []);
+
+  // Démarre l'essai de 3 jours à la première connexion, et remet à zéro
+  // le compteur invité (qui ne concerne que les visiteurs non connectés).
+  useEffect(() => {
+    if (!user) return;
+    const created = !readSubscriptionOnce(user.id);
+    if (created) {
+      ensureTrialStarted(user.id);
+      localStorage.removeItem(GUEST_COMBINATION_COUNT_KEY);
+      setGuestCombinationCount(0);
+      setSubscriptionVersion(version => version + 1);
+    }
+  }, [user]);
+
+  // Récupère les droits calculés par le serveur (source de vérité) : essai,
+  // offres actives et quota du jour. Rechargé à chaque changement de compte.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const response = await getJson("/api/subscription");
+        if (!response.ok) return;
+        const payload = (await response.json()) as {
+          entitlements?: ServerEntitlements;
+          serverEnforced?: boolean;
+        };
+        if (cancelled) return;
+        setServerEntitlements(payload.serverEnforced && payload.entitlements ? payload.entitlements : null);
+      } catch (error) {
+        if (!cancelled) console.error("Impossible de charger les droits depuis le serveur.", error);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, subscriptionVersion]);
 
   const saveSession = (account: User, rememberMe: boolean) => {
     const storage = rememberMe ? localStorage : sessionStorage;
@@ -521,6 +599,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ? Number.POSITIVE_INFINITY
       : Math.max(0, FREE_PROPOSAL_LIMIT - proposalCount);
 
+  const entitlementInput = {
+    accountId: user?.id ?? "guest",
+    isAuthenticated: !!user,
+    role: user?.role,
+    guestRemaining: Math.max(0, GUEST_COMBINATION_LIMIT - guestCombinationCount),
+  };
+
+  // `subscriptionVersion` force le recalcul quand l'abonnement change.
+  void subscriptionVersion;
+  // Les droits serveur font foi dès qu'ils sont disponibles ; sinon, repli local.
+  const entitlements = serverEntitlements
+    ? entitlementsFromServer(serverEntitlements)
+    : getEntitlements(entitlementInput);
+
+  const refreshEntitlements = async () => {
+    try {
+      const response = await getJson("/api/subscription");
+      if (!response.ok) return;
+      const payload = (await response.json()) as {
+        entitlements?: ServerEntitlements;
+        serverEnforced?: boolean;
+      };
+      setServerEntitlements(payload.serverEnforced && payload.entitlements ? payload.entitlements : null);
+      setSubscriptionVersion(version => version + 1);
+    } catch (error) {
+      console.error("Impossible d'actualiser les droits depuis le serveur.", error);
+    }
+  };
+
+  const setOffer = async (offer: SubscriptionOffer) => {
+    const accountId = user?.id ?? "guest";
+    if (!user) return;
+    // Met à jour le stockage local (affichage immédiat) puis le serveur (source de vérité).
+    ensureTrialStarted(accountId);
+    toggleOffer(accountId, offer);
+    setSubscriptionVersion(version => version + 1);
+    try {
+      const response = await postJson("/api/subscription/offer", { offer });
+      if (response.ok) {
+        const payload = (await response.json()) as { entitlements?: ServerEntitlements };
+        if (payload.entitlements) setServerEntitlements(payload.entitlements);
+      }
+    } catch (error) {
+      console.error("Impossible d'enregistrer l'offre côté serveur.", error);
+    }
+  };
+
   const recordProposals = (count: number) => {
     if (!Number.isSafeInteger(count) || count <= 0) return 0;
     const accountId = user?.id ?? "guest";
@@ -551,6 +676,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         proposalCount,
         remainingProposals,
         recordProposals,
+        entitlements,
+        setOffer,
+        refreshEntitlements,
         isAuthenticated: !!user,
         isLoading
       }}

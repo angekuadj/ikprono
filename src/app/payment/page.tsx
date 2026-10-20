@@ -2,115 +2,244 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
+import {
+  COMBINATION_DAILY_LIMIT,
+  MONTHLY_PRICE_FCFA,
+  TRIAL_DAYS,
+  TRIAL_DAILY_LIMIT,
+  type SubscriptionOffer,
+} from "@/lib/subscription";
 
-const plans = [
+interface OfferDefinition {
+  id: SubscriptionOffer;
+  emoji: string;
+  titleFr: string;
+  titleEn: string;
+  descriptionFr: string;
+  descriptionEn: string;
+  featuresFr: string[];
+  featuresEn: string[];
+}
+
+const OFFERS: OfferDefinition[] = [
   {
-    id: "standard",
-    popular: false,
+    id: "tv",
+    emoji: "📺",
+    titleFr: "Offre TV",
+    titleEn: "TV plan",
+    descriptionFr: "Regardez les matchs en direct sur le site, sans restriction.",
+    descriptionEn: "Watch live matches on the site without restrictions.",
+    featuresFr: [
+      "Vidéos des matchs en direct",
+      "Tous les matchs, même hors de vos combinaisons",
+      "Scores et temps forts en temps réel",
+    ],
+    featuresEn: [
+      "Live match videos",
+      "Every match, even outside your combinations",
+      "Real-time scores and highlights",
+    ],
   },
   {
-    id: "premium",
-    popular: true,
+    id: "combinations",
+    emoji: "🎯",
+    titleFr: "Offre Combinaisons",
+    titleEn: "Combinations plan",
+    descriptionFr: `Générez jusqu’à ${COMBINATION_DAILY_LIMIT} combinaisons par jour.`,
+    descriptionEn: `Generate up to ${COMBINATION_DAILY_LIMIT} combinations per day.`,
+    featuresFr: [
+      `${COMBINATION_DAILY_LIMIT} combinaisons par jour`,
+      "Sélection par rencontres, par équipes ou IA",
+      "Suivi des résultats et export PDF",
+    ],
+    featuresEn: [
+      `${COMBINATION_DAILY_LIMIT} combinations per day`,
+      "Selection by fixtures, teams or AI",
+      "Result tracking and PDF export",
+    ],
   },
 ];
 
 export default function PaymentPage() {
-  const [loading, setLoading] = useState(false);
-  const { language, t, text } = useLanguage();
+  const { t, text } = useLanguage();
+  const { user, isAuthenticated, entitlements, setOffer } = useAuth();
+  const [busyOffer, setBusyOffer] = useState<SubscriptionOffer | null>(null);
+  const [notice, setNotice] = useState("");
 
-  const handleSubscribe = async (planId: string) => {
-    setLoading(true);
-    
-    setTimeout(() => {
-      setLoading(false);
-      alert(t("paymentSimulated"));
-    }, 1000);
+  const handleToggleOffer = async (offerId: SubscriptionOffer) => {
+    if (!isAuthenticated) return;
+    setBusyOffer(offerId);
+    setNotice("");
+    const wasActive = entitlements.offers.includes(offerId);
+    try {
+      await setOffer(offerId);
+      const offer = OFFERS.find(item => item.id === offerId)!;
+      setNotice(text(
+        wasActive
+          ? `${offer.titleFr} a été désactivée.`
+          : `${offer.titleFr} est maintenant active.`,
+        wasActive
+          ? `${offer.titleEn} has been turned off.`
+          : `${offer.titleEn} is now active.`
+      ));
+    } finally {
+      setBusyOffer(null);
+    }
   };
+
+  const isActive = (offerId: SubscriptionOffer) => entitlements.offers.includes(offerId);
 
   return (
     <div className="min-h-screen bg-black py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <div className="text-center mb-12">
           <h1 className="text-4xl font-extrabold text-white mb-4">
-            {t("choosePlan")}
+            {text("Choisissez votre offre", "Choose your plan")}
           </h1>
           <p className="text-xl text-gray-400 max-w-2xl mx-auto">
-            {t("pricingDescription")}
+            {text(
+              `Chaque offre coûte ${MONTHLY_PRICE_FCFA} FCFA par mois. Prenez-en une ou les deux.`,
+              `Each plan costs ${MONTHLY_PRICE_FCFA} XOF per month. Take one or both.`
+            )}
           </p>
         </div>
 
-        {/* Pricing Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16 max-w-4xl mx-auto">
-          {plans.map((plan, index) => (
-            <div
-              key={plan.id}
-              className={`relative bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden transition-all duration-300 hover:scale-105 hover:border-green-500 card-hover animate-slide-up stagger-${index + 1} ${
-                plan.popular ? "ring-2 ring-green-500 shadow-lg shadow-green-500/20" : ""
-              }`}
-            >
-              {plan.popular && (
-                <div className="absolute top-0 right-0 bg-gradient-to-r from-green-500 to-green-600 text-white px-4 py-1 text-sm font-semibold animate-pulse">
-                  {t("recommended")}
-                </div>
+        {!isAuthenticated && (
+          <div className="mx-auto mb-8 max-w-4xl rounded-2xl border border-green-800 bg-green-950/20 p-6 text-center">
+            <p className="text-sm text-green-100">
+              {text(
+                `${TRIAL_DAYS} jours d’essai gratuit vous sont offerts à la première connexion (${TRIAL_DAILY_LIMIT} combinaisons par jour + vidéos en direct).`,
+                `A ${TRIAL_DAYS}-day free trial is offered on your first sign-in (${TRIAL_DAILY_LIMIT} combinations per day + live videos).`
               )}
-              
-              <div className="p-8">
-                <h3 className="text-2xl font-bold text-white mb-2">
-                  {plan.id === "premium" ? t("premiumPlan") : t("standardPlan")}
-                </h3>
-                <p className="text-gray-400 mb-6">
-                  {plan.id === "premium" ? t("premiumDescription") : t("standardDescription")}
-                </p>
-                
-                <div className="mb-6">
-                  <span className="text-5xl font-bold text-white gradient-text">
-                    {plan.id === "premium" ? (language === "fr" ? "3 000 FCFA" : "3,000 XOF") : t("free")}
-                  </span>
-                  <span className="text-gray-400">
-                    {plan.id === "premium" ? t("perMonth") : ""}
-                  </span>
+            </p>
+            <Link
+              href="/login?next=%2Fpayment"
+              className="mt-4 inline-block rounded-lg bg-green-600 px-5 py-3 text-sm font-bold text-white hover:bg-green-500"
+            >
+              {text("Se connecter pour commencer l’essai", "Sign in to start the trial")}
+            </Link>
+          </div>
+        )}
+
+        {isAuthenticated && (
+          <div className="mx-auto mb-8 max-w-4xl rounded-2xl border border-gray-800 bg-gray-900 p-6">
+            <h2 className="text-lg font-bold text-white">
+              {text("Votre accès actuel", "Your current access")}
+            </h2>
+            <ul className="mt-3 space-y-2 text-sm text-gray-300">
+              <li>
+                {entitlements.trialActive
+                  ? text(
+                    `Essai gratuit : ${entitlements.trialDaysLeft} jour(s) restant(s).`,
+                    `Free trial: ${entitlements.trialDaysLeft} day(s) left.`
+                  )
+                  : text("Essai gratuit terminé.", "Free trial ended.")}
+              </li>
+              <li>
+                {text("Vidéos en direct : ", "Live videos: ")}
+                {entitlements.hasTvAccess
+                  ? text("accessibles", "available")
+                  : text("limitées aux matchs suivis dans le panier", "limited to matches tracked in your basket")}
+              </li>
+              <li>
+                {text("Combinaisons : ", "Combinations: ")}
+                {entitlements.hasCombinationAccess
+                  ? text(
+                    `${entitlements.remainingToday} restante(s) aujourd’hui (sur ${entitlements.dailyLimit}).`,
+                    `${entitlements.remainingToday} left today (out of ${entitlements.dailyLimit}).`
+                  )
+                  : text("aucune offre active", "no active plan")}
+              </li>
+            </ul>
+            {notice && (
+              <p role="status" className="mt-4 rounded-lg border border-green-800 bg-green-950/40 px-4 py-3 text-sm text-green-200">
+                {notice}
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10 max-w-4xl mx-auto">
+          {OFFERS.map(offer => {
+            const active = isActive(offer.id);
+            return (
+              <div
+                key={offer.id}
+                className={`relative bg-gray-900 border rounded-2xl overflow-hidden transition-all duration-300 hover:border-green-500 ${
+                  active ? "border-green-600 ring-2 ring-green-600/40" : "border-gray-800"
+                }`}
+              >
+                {active && (
+                  <div className="absolute top-0 right-0 bg-green-600 text-white px-4 py-1 text-sm font-semibold">
+                    {text("Active", "Active")}
+                  </div>
+                )}
+                <div className="p-8">
+                  <h3 className="text-2xl font-bold text-white mb-2">
+                    <span aria-hidden="true" className="mr-2">{offer.emoji}</span>
+                    {text(offer.titleFr, offer.titleEn)}
+                  </h3>
+                  <p className="text-gray-400 mb-6">{text(offer.descriptionFr, offer.descriptionEn)}</p>
+
+                  <div className="mb-6">
+                    <span className="text-5xl font-bold text-white gradient-text">
+                      {MONTHLY_PRICE_FCFA.toLocaleString("fr-FR")} FCFA
+                    </span>
+                    <span className="text-gray-400">{text(" / mois", " / month")}</span>
+                  </div>
+
+                  <ul className="space-y-4 mb-8">
+                    {(offer.featuresFr).map((feature, index) => (
+                      <li key={feature} className="flex items-start">
+                        <svg
+                          className="h-5 w-5 text-green-500 mr-3 mt-0.5 flex-shrink-0"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span className="text-gray-300">{text(feature, offer.featuresEn[index])}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleToggleOffer(offer.id)}
+                    disabled={!isAuthenticated || busyOffer !== null || entitlements.trialActive}
+                    className={`w-full py-3 px-4 rounded-lg font-semibold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${
+                      active
+                        ? "border-2 border-gray-700 text-gray-300 hover:border-red-600 hover:text-red-300"
+                        : "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-lg"
+                    }`}
+                  >
+                    {busyOffer === offer.id
+                      ? t("processing")
+                      : entitlements.trialActive
+                        ? text("Inclus dans votre essai", "Included in your trial")
+                        : active
+                          ? text("Désactiver l’offre", "Turn off this plan")
+                          : text("Choisir cette offre", "Choose this plan")}
+                  </button>
                 </div>
-
-                <ul className="space-y-4 mb-8">
-                  {(plan.id === "premium"
-                    ? [t("unlimitedProposals"), t("liveScores"), t("detailedAnalysis"), t("prioritySupport"), t("exclusiveLotteries")]
-                    : [t("threeProposals"), t("liveScores"), t("basicAnalysis")]
-                  ).map((feature, index) => (
-                    <li key={index} className="flex items-start">
-                      <svg
-                        className="h-5 w-5 text-green-500 mr-3 mt-0.5 flex-shrink-0"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
-                      <span className="text-gray-300">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                <button
-                  onClick={() => handleSubscribe(plan.id)}
-                  disabled={loading || plan.id === "standard"}
-                  className={`w-full py-3 px-4 rounded-lg font-semibold transition-all duration-300 ${
-                    plan.popular
-                      ? "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-lg hover-glow"
-                      : "border-2 border-gray-700 text-gray-300 hover:border-green-500 hover:text-green-500"
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  {loading ? t("processing") : plan.id === "premium" ? t("subscribe") : t("free")}
-                </button>
               </div>
-            </div>
-          ))}
+            );
+          })}
+        </div>
+
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 mb-10 max-w-4xl mx-auto">
+          <h2 className="text-lg font-bold text-white mb-2">
+            {text("Et si je n’ai aucune offre ?", "What if I have no plan?")}
+          </h2>
+          <p className="text-sm text-gray-400">
+            {text(
+              "Après votre essai gratuit, vous pouvez continuer à consulter le site. Les vidéos en direct restent accessibles uniquement pour les matchs suivis dans votre panier, et la génération de combinaisons est mise en pause jusqu’à la souscription d’une offre.",
+              "After your free trial you can keep browsing the site. Live videos remain available only for matches tracked in your basket, and combination generation is paused until you subscribe to a plan."
+            )}
+          </p>
         </div>
 
         {/* Lottery Section */}
@@ -163,15 +292,9 @@ export default function PaymentPage() {
               <span className="font-medium">{t("card")}</span>
             </div>
             <div className="flex items-center text-gray-400">
-              <svg className="h-8 w-8 mr-2" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-              </svg>
               <span className="font-medium">PayPal</span>
             </div>
             <div className="flex items-center text-gray-400">
-              <svg className="h-8 w-8 mr-2" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-              </svg>
               <span className="font-medium">Mobile Money</span>
             </div>
           </div>
@@ -188,7 +311,7 @@ export default function PaymentPage() {
                 {text("Puis-je annuler mon abonnement à tout moment ?", "Can I cancel my subscription at any time?")}
               </h3>
               <p className="text-gray-400">
-                {text("Oui, vous pouvez annuler votre abonnement à tout moment depuis votre compte. Aucun frais caché.", "Yes, you can cancel your subscription at any time from your account. No hidden fees.")}
+                {text("Oui, vous pouvez activer ou désactiver chaque offre à tout moment. Aucun frais caché.", "Yes, you can turn each plan on or off at any time. No hidden fees.")}
               </p>
             </div>
             <div className="border-b border-gray-800 pb-4">
@@ -196,15 +319,32 @@ export default function PaymentPage() {
                 {text("Y a-t-il une période d'essai ?", "Is there a free trial?")}
               </h3>
               <p className="text-gray-400">
-                {text("Oui, tous les plans incluent 7 jours d'essai gratuit sans engagement.", "Yes, all plans include a 7-day free trial with no commitment.")}
+                {text(
+                  `Oui : ${TRIAL_DAYS} jours d’essai gratuit à la première connexion, avec ${TRIAL_DAILY_LIMIT} combinaisons par jour et les vidéos en direct.`,
+                  `Yes: a ${TRIAL_DAYS}-day free trial on your first sign-in, with ${TRIAL_DAILY_LIMIT} combinations per day and live videos.`
+                )}
+              </p>
+            </div>
+            <div className="border-b border-gray-800 pb-4">
+              <h3 className="font-semibold text-white mb-2">
+                {text("Puis-je prendre les deux offres ?", "Can I take both plans?")}
+              </h3>
+              <p className="text-gray-400">
+                {text(
+                  `Oui. Les deux offres coûtent ${MONTHLY_PRICE_FCFA} FCFA chacune, soit ${(MONTHLY_PRICE_FCFA * 2).toLocaleString("fr-FR")} FCFA par mois si vous les prenez ensemble.`,
+                  `Yes. Each plan costs ${MONTHLY_PRICE_FCFA} XOF, so ${(MONTHLY_PRICE_FCFA * 2).toLocaleString("en-GB")} XOF per month for both.`
+                )}
               </p>
             </div>
             <div>
               <h3 className="font-semibold text-white mb-2">
-                {text("Comment fonctionnent les lotteries ?", "How do the lotteries work?")}
+                {text("Que se passe-t-il sans offre TV ?", "What happens without the TV plan?")}
               </h3>
               <p className="text-gray-400">
-                {text("Les membres Premium participent automatiquement aux tirages. Plus vous êtes actif, plus vous avez de chances de gagner !", "Premium members are automatically entered into the draws. The more active you are, the better your chances of winning!")}
+                {text(
+                  "Vous ne pouvez regarder que les matchs en direct qui figurent dans vos combinaisons (matchs suivis dans le panier).",
+                  "You can only watch live matches that are part of your combinations (matches tracked in your basket)."
+                )}
               </p>
             </div>
           </div>

@@ -90,7 +90,7 @@ function readPreferences(userId: string): UserPreferences {
 }
 
 export default function ProfilePage() {
-  const { user, updateProfile, isLoading } = useAuth();
+  const { user, updateProfile, isLoading, entitlements } = useAuth();
   const { t, text, language } = useLanguage();
   const { addNotification } = useNotifications();
   const [name, setName] = useState("");
@@ -358,7 +358,11 @@ export default function ProfilePage() {
             <div className="mb-5 flex items-center justify-between gap-3">
               <h2 className="text-xl font-semibold text-white">{t("personalInformation")}</h2>
               <span className="rounded-full border border-fuchsia-500/20 bg-fuchsia-500/10 px-3 py-1 text-xs font-semibold text-fuchsia-200">
-                {user.plan === "premium" ? t("premiumStatus") : t("standardStatus")}
+                {entitlements.trialActive
+                  ? text("Essai gratuit", "Free trial")
+                  : entitlements.hasTvAccess || entitlements.hasCombinationAccess
+                    ? text("Abonné", "Subscribed")
+                    : t("standardStatus")}
               </span>
             </div>
             <div className="grid gap-5 sm:grid-cols-2">
@@ -371,6 +375,43 @@ export default function ProfilePage() {
                 <input required type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-950 px-4 py-3 text-white" />
               </label>
             </div>
+          </section>
+
+          <section className="rounded-2xl border border-gray-800 bg-gray-900/70 p-6">
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <h2 className="text-xl font-semibold text-white">{text("Mon accès", "My access")}</h2>
+              <Link href="/payment" className="text-sm font-semibold text-fuchsia-300 hover:text-fuchsia-200">
+                {text("Gérer mes offres", "Manage plans")}
+              </Link>
+            </div>
+            <ul className="space-y-3 text-sm">
+              <li className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-800 bg-gray-950 px-4 py-3">
+                <span className="font-medium text-gray-200">{text("Offre TV (matchs en direct)", "TV plan (live matches)")}</span>
+                <span className={entitlements.hasTvAccess ? "font-semibold text-green-300" : "text-gray-500"}>
+                  {entitlements.hasTvAccess ? text("Active", "Active") : text("Inactive", "Inactive")}
+                </span>
+              </li>
+              <li className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-800 bg-gray-950 px-4 py-3">
+                <span className="font-medium text-gray-200">{text("Offre Combinaisons", "Combinations plan")}</span>
+                <span className={entitlements.hasCombinationAccess ? "font-semibold text-green-300" : "text-gray-500"}>
+                  {entitlements.hasCombinationAccess ? text("Active", "Active") : text("Inactive", "Inactive")}
+                </span>
+              </li>
+              <li className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-800 bg-gray-950 px-4 py-3">
+                <span className="font-medium text-gray-200">{text("Combinaisons restantes aujourd’hui", "Combinations left today")}</span>
+                <span className="font-semibold text-white">
+                  {entitlements.canGenerate ? `${entitlements.remainingToday}/${entitlements.dailyLimit}` : "0"}
+                </span>
+              </li>
+              {entitlements.trialActive && entitlements.trialEndsAt && (
+                <li className="rounded-lg border border-amber-800 bg-amber-950/30 px-4 py-3 text-amber-200">
+                  {text(
+                    `Essai gratuit jusqu’au ${new Date(entitlements.trialEndsAt).toLocaleDateString(language === "fr" ? "fr-FR" : "en-GB")}.`,
+                    `Free trial until ${new Date(entitlements.trialEndsAt).toLocaleDateString(language === "fr" ? "fr-FR" : "en-GB")}.`
+                  )}
+                </li>
+              )}
+            </ul>
           </section>
 
           <section className="rounded-2xl border border-gray-800 bg-gray-900/70 p-6">

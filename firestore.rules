@@ -1,15 +1,27 @@
 rules_version = '2';
 
-// Règles Firestore : chaque utilisateur ne peut lire/écrire que ses propres données.
+// Règles Firestore.
+//
+// Principes :
+//  - Chaque utilisateur ne peut accéder qu'à ses propres données.
+//  - Le document `users/{uid}/data/subscription` (essai, offres, quota journalier)
+//    est calculé et écrit par le serveur : le client ne peut PAS le modifier, sinon
+//    il pourrait réinitialiser son quota ou s'octroyer des offres gratuitement.
+//    Les activations d'offres passent par l'API /api/subscription/offer.
+//  - Les autres données applicatives de l'utilisateur (favoris, panier, sélections,
+//    combinaisons, préférences) restent librement modifiables par leur propriétaire.
 service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
 
-      // Données applicatives de l'utilisateur (application mobile) :
-      // users/{uid}/data/{clé} — favoris, panier, sélections, combinaisons, préférences.
       match /data/{key} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        // Données applicatives : accès complet au propriétaire…
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow write: if request.auth != null
+          && request.auth.uid == userId
+          // …sauf l'abonnement, qui est réservé au serveur (Admin SDK).
+          && key != 'subscription';
       }
     }
 

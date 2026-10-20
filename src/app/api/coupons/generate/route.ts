@@ -4,6 +4,11 @@ import { promisify } from "node:util";
 import { NextRequest, NextResponse } from "next/server";
 import { loadFixturesFromFotMobByIds } from "@/lib/fotmob";
 import { generateFotMobCoupons, isRiskLevel } from "@/lib/fotmobCoupons";
+import {
+  applyQuotaCookie,
+  commitCombinationUsage,
+  enforceCombinationQuota,
+} from "@/lib/server/quotaGuard";
 
 const execFileAsync = promisify(execFile);
 
@@ -40,6 +45,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Provide a valid risk level." }, { status: 400 });
   }
 
+  // Application du quota côté serveur (source de vérité).
+  const guard = await enforceCombinationQuota(request);
+  if ("response" in guard) return guard.response;
+  const { context } = guard;
+
   try {
     const fixtures = await loadFixturesFromFotMobByIds(fixtureIds);
     if (fixtures.length !== fixtureIds.length) {
@@ -72,7 +82,13 @@ export async function POST(request: NextRequest) {
     if (!Array.isArray(result.coupons) || typeof result.alreadyGenerated !== "boolean") {
       throw new Error("Coupon persistence service returned an invalid response.");
     }
-    return NextResponse.json(result);
+    // Une génération réelle consomme une unité du quota du jour ; rejouer une
+    // génération déjà enregistrée ne coûte rien.
+    if (result.alreadyGenerated) {
+      return applyQuotaCookie(NextResponse.json(result), context);
+    }
+    const entitlements = await commitCombinationUsage(context, 1);
+    return applyQuotaCookie(NextResponse.json({ ...result, entitlements }), context);
   } catch (error) {
     console.error("Coupon generation failed.", error);
     const message = error instanceof Error ? error.message : "Unable to generate coupons.";

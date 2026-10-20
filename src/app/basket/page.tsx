@@ -41,6 +41,8 @@ import {
   type CouponOutcome,
 } from "@/lib/couponSettlement";
 import { generateUUID } from "@/lib/uuid";
+import { recordCombinationUsage } from "@/lib/subscription";
+import { postJson } from "@/lib/apiClient";
 import { exportCombinationPdf } from "@/lib/exportCombinationPdf";
 import { MARKET_ESTIMATES, type MarketSelection } from "@/lib/marketEstimates";
 import {
@@ -54,7 +56,7 @@ const MAX_SELECTION_SIZE = 20;
 type BasketTab = "basket" | "generated" | "history" | "selections";
 
 export default function BasketPage() {
-  const { user, isAuthenticated, isLoading, remainingProposals, recordProposals } = useAuth();
+  const { user, isAuthenticated, isLoading, entitlements, refreshEntitlements } = useAuth();
   const { language, text } = useLanguage();
   const router = useRouter();
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
@@ -265,11 +267,16 @@ export default function BasketPage() {
       return;
     }
     if (fixtures.length === 0) return;
-    if (remainingProposals <= 0) {
-      setSaveError(text(
-        "Votre quota de sélections est épuisé. Passez à Premium pour continuer.",
-        "You have used all your selections. Upgrade to Premium to continue."
-      ));
+    if (!entitlements.canGenerate) {
+      setSaveError(entitlements.trialActive || entitlements.hasCombinationAccess
+        ? text(
+          `Vous avez atteint votre quota de ${entitlements.dailyLimit} combinaisons aujourd’hui. Revenez demain.`,
+          `You have reached your quota of ${entitlements.dailyLimit} combinations today. Come back tomorrow.`
+        )
+        : text(
+          "Aucune offre active : la génération de combinaisons est en pause. Choisissez l’offre Combinaisons pour continuer.",
+          "No active plan: combination generation is paused. Choose the Combinations plan to continue."
+        ));
       return;
     }
 
@@ -293,11 +300,17 @@ export default function BasketPage() {
     };
     try {
       writeSavedSelections(user.id, [...existingSelections, selection]);
-      if (recordProposals(1) === 0) {
+      const usage = recordCombinationUsage({
+        accountId: user.id,
+        isAuthenticated: true,
+        role: user.role,
+        guestRemaining: 0,
+      }, 1);
+      if (usage.accepted === 0) {
         writeSavedSelections(user.id, existingSelections);
         setSaveError(text(
-          "Votre quota de sélections est épuisé. Passez à Premium pour continuer.",
-          "You have used all your selections. Upgrade to Premium to continue."
+          "Votre quota de combinaisons est épuisé. Choisissez une offre pour continuer.",
+          "Your combination quota is used up. Choose a plan to continue."
         ));
         return;
       }
@@ -320,20 +333,23 @@ export default function BasketPage() {
     });
 
     try {
-      const response = await fetch("/api/coupons/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          selectionId: selection.id,
-          fixtureIds: selection.fixtures.map(fixture => fixture.id),
-        }),
+      const response = await postJson("/api/coupons/generate", {
+        userId: user.id,
+        selectionId: selection.id,
+        fixtureIds: selection.fixtures.map(fixture => fixture.id),
       });
       const payload = await response.json() as {
         coupons?: GeneratedCoupon[];
         alreadyGenerated?: boolean;
         error?: string;
+        code?: string;
       };
+      if (response.status === 402) {
+        throw new Error(payload.error || text(
+          "Votre quota de combinaisons du jour est épuisé. Choisissez une offre pour continuer.",
+          "Your daily combination quota is used up. Choose a plan to continue."
+        ));
+      }
       if (!response.ok) {
         throw new Error(payload.error || text("Impossible de générer les coupons.", "Unable to generate coupons."));
       }
@@ -351,6 +367,7 @@ export default function BasketPage() {
       );
       writeSavedSelections(user.id, updatedSelections);
       setSavedSelections(updatedSelections);
+      void refreshEntitlements();
     } catch (error) {
       setCouponErrors(current => ({
         ...current,
@@ -539,7 +556,7 @@ export default function BasketPage() {
   }
 
   const locale = language === "fr" ? "fr-FR" : "en-GB";
-  const remainingLabel = Number.isFinite(remainingProposals) ? `${remainingProposals}/3` : "∞";
+  const remainingLabel = Number.isFinite(entitlements.remainingToday) ? `${entitlements.remainingToday}/${entitlements.dailyLimit}` : "∞";
 
   return (
     <main className="min-h-screen bg-black px-4 py-8 sm:px-6 lg:px-8">
@@ -559,9 +576,9 @@ export default function BasketPage() {
         {saveError && (
           <div role="alert" className="mb-5 rounded-lg border border-amber-800 bg-amber-950/30 p-4 text-sm text-amber-200">
             <p>{saveError}</p>
-            {isAuthenticated && remainingProposals <= 0 && (
+            {isAuthenticated && !entitlements.canGenerate && (
               <Link href="/payment" className="mt-2 inline-block font-semibold underline">
-                {text("Voir les offres Premium", "View Premium plans")}
+                {text("Voir les offres", "View plans")}
               </Link>
             )}
           </div>
