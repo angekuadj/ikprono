@@ -16,7 +16,7 @@ export const BET_TYPES = {
   SECOND_HALF_CORNERS: "Corners en deuxième mi-temps",
   TOTAL_SHOTS: "Total de tirs",
   SHOTS_ON_TARGET: "Tirs cadrés",
-  SHOTS_OFF_TARGET: "Tirs non cadrés",
+  SHOTS_OFF_TARGET: "Tirs non cadrés", 
   TEAM_SHOTS: "Tirs par équipe",
   TEAM_SHOTS_ON_TARGET: "Tirs cadrés par équipe",
   PLAYER_SHOTS: "Tirs du joueur",
