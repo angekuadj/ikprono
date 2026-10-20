@@ -9,7 +9,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "admin:access": "node scripts/admin-access.mjs"
   },
   "dependencies": {
     "firebase": "^12.19.0",

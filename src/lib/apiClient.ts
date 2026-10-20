@@ -47,3 +47,16 @@ export async function getJson(url: string): Promise<Response> {
     cache: "no-store",
   });
 }
+
+/** Requête PUT JSON vers une API, authentifiée si l'utilisateur est connecté. */
+export async function putJson(
+  url: string,
+  body: unknown
+): Promise<Response> {
+  return fetch(url, {
+    method: "PUT",
+    headers: await authorizedHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+}

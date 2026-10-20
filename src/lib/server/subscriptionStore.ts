@@ -1,14 +1,8 @@
 import { getApps, initializeApp, applicationDefault, type App } from "firebase-admin/app";
 import { getFirestore, FieldValue, type Firestore } from "firebase-admin/firestore";
 import type { SubscriptionOffer } from "@/lib/subscription";
-import {
-  COMBINATION_DAILY_LIMIT,
-  GUEST_COMBINATION_LIMIT,
-  isTvDayValid,
-  TRIAL_DAILY_LIMIT,
-  TRIAL_DAYS,
-  TV_ACCESS_HOURS,
-} from "@/lib/subscription";
+import { isTvDayValid, TRIAL_DAYS, TV_ACCESS_HOURS } from "@/lib/subscription";
+import { defaultQuotaSettings, type QuotaSettings } from "@/lib/server/quotaSettings";
 
 /**
  * Stockage serveur des abonnements et des quotas journaliers (source de vérité).
@@ -162,7 +156,10 @@ async function readUserIdSet(
  *
  * Page réservée à l'administration : ne jamais exposer cette liste publiquement.
  */
-export async function listAdminAccounts(db: Firestore): Promise<AdminAccountSummary[]> {
+export async function listAdminAccounts(
+  db: Firestore,
+  quotas: QuotaSettings = defaultQuotaSettings()
+): Promise<AdminAccountSummary[]> {
   const [usersSnapshot, subscriptionsSnapshot, favorites, basket, network] = await Promise.all([
     db.collection("users").get(),
     db.collection(SUBSCRIPTIONS_COLLECTION).get(),
@@ -204,7 +201,7 @@ export async function listAdminAccounts(db: Firestore): Promise<AdminAccountSumm
       subscription: toSubscription(subscriptionByUid.get(uid)),
       usage: toUsage(usageSnapshot.data(), localDay()),
     };
-    const entitlements = computeEntitlements(state, role === "admin");
+    const entitlements = computeEntitlements(state, role === "admin", quotas);
 
     accounts.push({
       accountKey,
@@ -230,6 +227,23 @@ export async function listAdminAccounts(db: Firestore): Promise<AdminAccountSumm
     const secondDate = second.createdAt ? new Date(second.createdAt).getTime() : 0;
     return secondDate - firstDate;
   });
+}
+
+/**
+ * Change le plan d'un compte (`standard` ou `premium`).
+ *
+ * Les règles Firestore interdisent ce changement depuis le navigateur : seul le
+ * serveur, avec les droits Admin, peut le faire. Le rôle n'est jamais modifié ici
+ * (il reste réservé à la console Firebase).
+ */
+export async function setAccountPlan(
+  db: Firestore,
+  uid: string,
+  plan: "standard" | "premium"
+): Promise<"standard" | "premium"> {
+  const normalized = plan === "premium" ? "premium" : "standard";
+  await db.collection("users").doc(uid).set({ plan: normalized }, { merge: true });
+  return normalized;
 }
 
 /**
@@ -387,7 +401,11 @@ export interface ServerEntitlements {
 }
 
 /** Calcule les droits serveur (source de vérité) à partir de l'état stocké. */
-export function computeEntitlements(state: LoadedState, isAdmin: boolean): ServerEntitlements {
+export function computeEntitlements(
+  state: LoadedState,
+  isAdmin: boolean,
+  quotas: QuotaSettings = defaultQuotaSettings()
+): ServerEntitlements {
   const today = localDay();
   const subscription = state.subscription;
   const trialActive = !!subscription && today < subscription.trialEndsAt;
@@ -413,14 +431,14 @@ export function computeEntitlements(state: LoadedState, isAdmin: boolean): Serve
   }
 
   if (trialActive) {
-    const remaining = Math.max(0, TRIAL_DAILY_LIMIT - state.usage.count);
+    const remaining = Math.max(0, quotas.trialDailyLimit - state.usage.count);
     return {
       trialActive: true,
       trialEndsAt: subscription.trialEndsAt,
       offers,
       hasTvAccess: true,
       hasCombinationAccess: true,
-      dailyLimit: TRIAL_DAILY_LIMIT,
+      dailyLimit: quotas.trialDailyLimit,
       usedToday: state.usage.count,
       remainingToday: remaining,
       canGenerate: remaining > 0,
@@ -429,14 +447,14 @@ export function computeEntitlements(state: LoadedState, isAdmin: boolean): Serve
   }
 
   if (hasCombinationAccess) {
-    const remaining = Math.max(0, COMBINATION_DAILY_LIMIT - state.usage.count);
+    const remaining = Math.max(0, quotas.premiumDailyLimit - state.usage.count);
     return {
       trialActive: false,
       trialEndsAt: subscription.trialEndsAt,
       offers,
       hasTvAccess,
       hasCombinationAccess: true,
-      dailyLimit: COMBINATION_DAILY_LIMIT,
+      dailyLimit: quotas.premiumDailyLimit,
       usedToday: state.usage.count,
       remainingToday: remaining,
       canGenerate: remaining > 0,
@@ -459,15 +477,18 @@ export function computeEntitlements(state: LoadedState, isAdmin: boolean): Serve
 }
 
 /** Calcule les droits d'un visiteur non connecté à partir de son compteur invité. */
-export function computeGuestEntitlements(used: number): ServerEntitlements {
-  const remaining = Math.max(0, GUEST_COMBINATION_LIMIT - used);
+export function computeGuestEntitlements(
+  used: number,
+  quotas: QuotaSettings = defaultQuotaSettings()
+): ServerEntitlements {
+  const remaining = Math.max(0, quotas.guestLimit - used);
   return {
     trialActive: false,
     trialEndsAt: null,
     offers: [],
     hasTvAccess: false,
     hasCombinationAccess: false,
-    dailyLimit: GUEST_COMBINATION_LIMIT,
+    dailyLimit: quotas.guestLimit,
     usedToday: used,
     remainingToday: remaining,
     canGenerate: remaining > 0,
@@ -491,7 +512,8 @@ export async function consumeCombinations(
   db: Firestore,
   accountKey: string,
   requested: number,
-  isAdmin: boolean
+  isAdmin: boolean,
+  quotas: QuotaSettings = defaultQuotaSettings()
 ): Promise<ConsumeResult> {
   const today = localDay();
   const subscriptionRef = db.collection(SUBSCRIPTIONS_COLLECTION).doc(accountKey);
@@ -518,7 +540,7 @@ export async function consumeCombinations(
       state = { subscription, usage: state.usage };
     }
 
-    const entitlements = computeEntitlements(state, isAdmin);
+    const entitlements = computeEntitlements(state, isAdmin, quotas);
     if (!Number.isSafeInteger(requested) || requested <= 0) {
       return { accepted: 0, entitlements };
     }
@@ -533,7 +555,7 @@ export async function consumeCombinations(
     transaction.set(usageRef, { day: today, count: nextCount }, { merge: true });
 
     const updated: LoadedState = { subscription: state.subscription, usage: { day: today, count: nextCount } };
-    return { accepted: requested, entitlements: computeEntitlements(updated, isAdmin) };
+    return { accepted: requested, entitlements: computeEntitlements(updated, isAdmin, quotas) };
   });
 }
 
@@ -541,7 +563,8 @@ export async function consumeCombinations(
 export async function consumeGuestCombinations(
   db: Firestore,
   guestId: string,
-  requested: number
+  requested: number,
+  quotas: QuotaSettings = defaultQuotaSettings()
 ): Promise<ConsumeResult> {
   const today = localDay();
   const accountKey = `guest:${guestId}`;
@@ -550,7 +573,7 @@ export async function consumeGuestCombinations(
   return db.runTransaction(async transaction => {
     const usageSnapshot = await transaction.get(usageRef);
     const used = toUsage(usageSnapshot.data(), today).count;
-    const entitlements = computeGuestEntitlements(used);
+    const entitlements = computeGuestEntitlements(used, quotas);
 
     if (!Number.isSafeInteger(requested) || requested <= 0) {
       return { accepted: 0, entitlements };
@@ -561,6 +584,6 @@ export async function consumeGuestCombinations(
 
     const nextCount = used + requested;
     transaction.set(usageRef, { day: today, count: nextCount }, { merge: true });
-    return { accepted: requested, entitlements: computeGuestEntitlements(nextCount) };
+    return { accepted: requested, entitlements: computeGuestEntitlements(nextCount, quotas) };
   });
 }

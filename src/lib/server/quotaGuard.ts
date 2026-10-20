@@ -13,6 +13,7 @@ import {
   loadState,
   type ServerEntitlements,
 } from "@/lib/server/subscriptionStore";
+import { loadQuotaSettings, type QuotaSettings } from "@/lib/server/quotaSettings";
 
 /**
  * Garde serveur pour la génération de combinaisons.
@@ -32,6 +33,8 @@ export interface QuotaContext {
   /** Base Firestore Admin, ou null si les identifiants serveur sont absents. */
   db: ReturnType<typeof getAdminDb>;
   issuedGuestId: string | null;
+  /** Quotas effectifs, lus au début de la requête puis réutilisés à la validation. */
+  quotas: QuotaSettings;
 }
 
 export interface QuotaFailure {
@@ -48,23 +51,25 @@ export async function enforceCombinationQuota(
   const accountKey = principalKey(principal);
   // Le rôle admin est vérifié côté serveur dans Firestore, jamais depuis le client.
   const isAdmin = adminDb && principal.kind === "user" ? await isAdminUser(adminDb, accountKey) : false;
+  const quotas = await loadQuotaSettings(adminDb);
   const context: QuotaContext = {
     principal,
     accountKey,
     isAdmin,
     db: adminDb,
     issuedGuestId,
+    quotas,
   };
 
   // Sans identifiants serveur, le quota reste géré côté client (mode local).
   if (!adminDb) {
-    return { context, entitlements: computeGuestEntitlements(0) };
+    return { context, entitlements: computeGuestEntitlements(0, quotas) };
   }
 
   const db = adminDb;
   if (principal.kind === "guest") {
     const state = await loadState(db, context.accountKey);
-    const entitlements = computeGuestEntitlements(state.usage.count);
+    const entitlements = computeGuestEntitlements(state.usage.count, quotas);
     if (!entitlements.canGenerate) {
       return {
         response: applyGuestCookie(
@@ -86,7 +91,7 @@ export async function enforceCombinationQuota(
   }
 
   const state = await ensureTrial(db, context.accountKey, await loadState(db, context.accountKey));
-  const entitlements = computeEntitlements(state, context.isAdmin);
+  const entitlements = computeEntitlements(state, context.isAdmin, quotas);
   if (!entitlements.canGenerate) {
     return {
       response: NextResponse.json(
@@ -109,8 +114,8 @@ export async function commitCombinationUsage(
 ): Promise<ServerEntitlements | null> {
   if (!context.db || count <= 0) return null;
   const result = context.principal.kind === "guest"
-    ? await consumeGuestCombinations(context.db, context.principal.guestId, count)
-    : await consumeCombinations(context.db, context.accountKey, count, context.isAdmin);
+    ? await consumeGuestCombinations(context.db, context.principal.guestId, count, context.quotas)
+    : await consumeCombinations(context.db, context.accountKey, count, context.isAdmin, context.quotas);
   return result.entitlements;
 }
 

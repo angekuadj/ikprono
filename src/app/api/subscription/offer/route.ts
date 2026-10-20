@@ -11,6 +11,7 @@ import {
   setOffer as setStoredOffer,
 } from "@/lib/server/subscriptionStore";
 import type { SubscriptionOffer } from "@/lib/subscription";
+import { loadQuotaSettings } from "@/lib/server/quotaSettings";
 
 /**
  * Active ou désactive une offre pour l'utilisateur connecté.
@@ -59,13 +60,14 @@ export async function POST(request: NextRequest) {
 
   const accountKey = principalKey(principal);
   try {
+    const quotas = await loadQuotaSettings(db);
     const state = await ensureTrial(db, accountKey, await loadState(db, accountKey));
     const updated = await setStoredOffer(db, accountKey, offer, state);
     const isAdmin = await isAdminUser(db, accountKey);
     // Un visiteur qui vient de se connecter garde la trace de son compteur invité.
     if (issuedGuestId) await linkGuestToUser(db, issuedGuestId, accountKey);
     return NextResponse.json({
-      entitlements: computeEntitlements(updated, isAdmin),
+      entitlements: computeEntitlements(updated, isAdmin, quotas),
       serverEnforced: true,
     });
   } catch (error) {

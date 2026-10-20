@@ -94,6 +94,16 @@ const DEMO_PASSWORDS: Record<string, string> = {
   "admin@ikprono.com": "admin123"
 };
 
+/**
+ * Les comptes de démonstration ne servent qu'au développement local, quand
+ * Firebase n'est pas configuré. En production, leurs identifiants sont codés en
+ * dur dans le bundle : ils sont donc désactivés pour éviter tout accès non
+ * prévu (le compte de démo est administrateur).
+ *
+ * `NODE_ENV` vaut "production" pour tout build servi aux visiteurs.
+ */
+const DEMO_ACCOUNTS_ENABLED = process.env.NODE_ENV !== "production";
+
 const USERS_STORAGE_KEY = "ikprono_users";
 const SESSION_STORAGE_KEY = "ikprono_user";
 const PROPOSAL_COUNT_PREFIX = "ikprono_proposals_";
@@ -386,10 +396,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    const demoProfiles = readDemoProfileOverrides();
+    const demoProfiles = DEMO_ACCOUNTS_ENABLED ? readDemoProfileOverrides() : [];
     const demoUser = demoProfiles.find(
       candidate => candidate.email === normalizedEmail
     ) ?? DEMO_USERS.find(candidate =>
+      DEMO_ACCOUNTS_ENABLED &&
       candidate.email === normalizedEmail &&
       !demoProfiles.some(profile => profile.id === candidate.id)
     );
@@ -399,6 +410,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const storedDemoProfile = demoProfiles.find(candidate => candidate.id === demoUser?.id);
 
     if (
+      DEMO_ACCOUNTS_ENABLED &&
       demoUser &&
       !readAccounts().some(account => account.user.email === normalizedEmail) &&
       (storedDemoProfile ? storedDemoProfile.email === normalizedEmail : demoUser.email === normalizedEmail) &&
@@ -496,7 +508,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const registeredAccounts = readAccounts();
     if (
-      DEMO_USERS.some(account => account.email === normalizedEmail) ||
+      (DEMO_ACCOUNTS_ENABLED && DEMO_USERS.some(account => account.email === normalizedEmail)) ||
       registeredAccounts.some(account => account.user.email === normalizedEmail)
     ) {
       throw new Error("Un compte utilise déjà cette adresse email");
@@ -561,8 +573,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const duplicateAccount = accounts.some(
       account => account.user.id !== user.id && account.user.email === normalizedEmail
     );
-    const demoProfiles = readDemoProfileOverrides();
-    const duplicateDemo = DEMO_USERS.some(candidate => {
+    const demoProfiles = DEMO_ACCOUNTS_ENABLED ? readDemoProfileOverrides() : [];
+    const duplicateDemo = DEMO_ACCOUNTS_ENABLED && DEMO_USERS.some(candidate => {
       const currentDemoProfile = demoProfiles.find(profile => profile.id === candidate.id) ?? candidate;
       return currentDemoProfile.id !== user.id && currentDemoProfile.email === normalizedEmail;
     });
@@ -575,7 +587,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (accountIndex >= 0) {
       accounts[accountIndex] = { ...accounts[accountIndex], user: updatedUser };
       localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(accounts));
-    } else if (DEMO_USERS.some(candidate => candidate.id === user.id)) {
+    } else if (DEMO_ACCOUNTS_ENABLED && DEMO_USERS.some(candidate => candidate.id === user.id)) {
       const updatedOverrides = [
         ...demoProfiles.filter(profile => profile.id !== user.id),
         updatedUser,
