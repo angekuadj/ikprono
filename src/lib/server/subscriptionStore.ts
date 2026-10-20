@@ -47,12 +47,8 @@ function addDaysIso(isoDay: string, days: number): string {
 let adminApp: App | null = null;
 let adminDb: Firestore | null = null;
 
-/**
- * Instance Firestore via le SDK Admin. Renvoie null si les identifiants serveur
- * ne sont pas disponibles (développement local sans compte de service) : l'appelant
- * retombe alors sur le mode démo (quota géré côté client).
- */
 let adminUnavailable = false;
+let credentialsChecked = false;
 
 /**
  * Instance Firestore via le SDK Admin. Renvoie null si les identifiants serveur
@@ -78,19 +74,31 @@ export function getAdminDb(): Firestore | null {
 }
 
 /**
- * Vrai si le SDK Admin a déjà été initialisé avec succès, ou si des identifiants
- * par défaut sont configurés. Permet aux routes d'éviter des appels Firestore
- * voués à échouer en développement local.
+ * Vrai si des identifiants par défaut sont réellement disponibles. La vérification
+ * n'a lieu qu'une fois puis est mise en cache, afin de ne pas interroger Firestore
+ * en vain à chaque requête en développement local.
  */
-export function isAdminConfigured(): boolean {
+export async function isAdminConfigured(): Promise<boolean> {
   if (adminDb) return true;
   if (adminUnavailable) return false;
-  return Boolean(
-    process.env.GOOGLE_APPLICATION_CREDENTIALS ||
-    process.env.FIREBASE_CONFIG ||
-    process.env.K_SERVICE ||
-    process.env.FUNCTION_TARGET
-  );
+  if (!credentialsChecked) {
+    const db = getAdminDb();
+    if (!db) return false;
+    try {
+      // Requête triviale : échoue immédiatement si aucun identifiant n'est présent.
+      await db.collection(USAGE_COLLECTION).doc("__healthcheck__").get();
+      credentialsChecked = true;
+    } catch (error) {
+      adminUnavailable = true;
+      console.warn(
+        "Firebase Admin indisponible : le quota est géré côté client (mode local).",
+        error instanceof Error ? error.message : error
+      );
+      adminDb = null;
+      return false;
+    }
+  }
+  return true;
 }
 
 /** Indique si l'utilisateur a le rôle admin, d'après son profil Firestore. */

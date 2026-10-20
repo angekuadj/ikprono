@@ -5,6 +5,7 @@ import {
   computeGuestEntitlements,
   ensureTrial,
   getAdminDb,
+  isAdminConfigured,
   isAdminUser,
   loadState,
 } from "@/lib/server/subscriptionStore";
@@ -19,7 +20,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const { principal, issuedGuestId } = await identifyRequest(request);
   const accountKey = principalKey(principal);
-  const db = getAdminDb();
+  const db = (await isAdminConfigured()) ? getAdminDb() : null;
 
   // Sans identifiants serveur, le client calcule l'affichage localement.
   if (!db) {

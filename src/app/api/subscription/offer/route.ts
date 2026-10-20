@@ -4,6 +4,7 @@ import {
   computeEntitlements,
   ensureTrial,
   getAdminDb,
+  isAdminConfigured,
   isAdminUser,
   loadState,
   setOffer as setStoredOffer,
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Offre inconnue." }, { status: 400 });
   }
 
-  const db = getAdminDb();
+  const db = (await isAdminConfigured()) ? getAdminDb() : null;
   if (!db) {
     return NextResponse.json(
       { error: "Gestion des offres indisponible : identifiants serveur absents." },

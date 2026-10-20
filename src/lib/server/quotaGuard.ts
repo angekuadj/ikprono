@@ -43,7 +43,8 @@ export async function enforceCombinationQuota(
   request: NextRequest
 ): Promise<{ context: QuotaContext; entitlements: ServerEntitlements } | QuotaFailure> {
   const { principal, issuedGuestId } = await identifyRequest(request);
-  const adminDb = getAdminDb();
+  const configured = await isAdminConfigured();
+  const adminDb = configured ? getAdminDb() : null;
   const accountKey = principalKey(principal);
   // Le rôle admin est vérifié côté serveur dans Firestore, jamais depuis le client.
   const isAdmin = adminDb && principal.kind === "user" ? await isAdminUser(adminDb, accountKey) : false;
@@ -56,7 +57,7 @@ export async function enforceCombinationQuota(
   };
 
   // Sans identifiants serveur, le quota reste géré côté client (mode local).
-  if (!adminDb || !isAdminConfigured()) {
+  if (!adminDb) {
     return { context, entitlements: computeGuestEntitlements(0) };
   }
 
