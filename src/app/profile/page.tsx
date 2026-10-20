@@ -41,7 +41,7 @@ const leagues = [
 ];
 
 type RiskProfile = "prudent" | "balanced" | "bold";
-type ProfileTab = "profile" | "coupons" | "basket";
+type ProfileTab = "profile" | "coupons" | "basket" | "admin";
 
 interface UserPreferences {
   favoriteClub: string;
@@ -90,7 +90,7 @@ function readPreferences(userId: string): UserPreferences {
 }
 
 export default function ProfilePage() {
-  const { user, updateProfile, isLoading, entitlements } = useAuth();
+  const { user, updateProfile, isLoading, entitlements, refreshProfile } = useAuth();
   const { t, text, language } = useLanguage();
   const { addNotification } = useNotifications();
   const [name, setName] = useState("");
@@ -105,6 +105,7 @@ export default function ProfilePage() {
   const [activityError, setActivityError] = useState("");
   const [basketError, setBasketError] = useState("");
   const [refreshKey] = useAutoRefresh();
+  const [refreshingProfile, setRefreshingProfile] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -295,6 +296,18 @@ export default function ProfilePage() {
     }
   };
 
+  const handleRefreshProfile = async () => {
+    setRefreshingProfile(true);
+    try {
+      await refreshProfile();
+      addNotification(text("Profil rechargé depuis Firestore", "Profile reloaded from Firestore"), "success");
+    } catch (error) {
+      addNotification(error instanceof Error ? error.message : "Impossible de recharger le profil.", "error");
+    } finally {
+      setRefreshingProfile(false);
+    }
+  };
+
   if (isLoading) {
     return <div className="min-h-screen px-4 py-16 text-center text-gray-400">{t("processing")}</div>;
   }
@@ -333,11 +346,12 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <div className="mb-6 grid grid-cols-3 gap-2 rounded-xl border border-gray-800 bg-gray-900 p-2" role="tablist" aria-label={text("Sections du profil", "Profile sections")}>
+        <div className={`mb-6 grid gap-2 rounded-xl border border-gray-800 bg-gray-900 p-2 ${user?.role === "admin" ? "grid-cols-4" : "grid-cols-3"}`} role="tablist" aria-label={text("Sections du profil", "Profile sections")}>
           {([
             ["profile", text("Profil", "Profile")],
             ["coupons", text("Historique des coupons", "Coupon history")],
             ["basket", text("Mon panier", "My basket")],
+            ...(user?.role === "admin" ? [["admin", text("Administration", "Administration")] as const] : []),
           ] as const).map(([tab, label]) => (
             <button
               key={tab}
@@ -357,13 +371,23 @@ export default function ProfilePage() {
           <section className="rounded-2xl border border-gray-800 bg-gray-900/70 p-6">
             <div className="mb-5 flex items-center justify-between gap-3">
               <h2 className="text-xl font-semibold text-white">{t("personalInformation")}</h2>
-              <span className="rounded-full border border-fuchsia-500/20 bg-fuchsia-500/10 px-3 py-1 text-xs font-semibold text-fuchsia-200">
-                {entitlements.trialActive
-                  ? text("Essai gratuit", "Free trial")
-                  : entitlements.hasTvAccess || entitlements.hasCombinationAccess
-                    ? text("Abonné", "Subscribed")
-                    : t("standardStatus")}
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleRefreshProfile}
+                  disabled={refreshingProfile}
+                  className="rounded-lg border border-gray-700 bg-gray-950 px-3 py-1.5 text-xs font-semibold text-gray-300 transition hover:border-fuchsia-400 hover:text-white disabled:opacity-50"
+                >
+                  {refreshingProfile ? text("Chargement...", "Loading...") : text("Recharger le profil", "Reload profile")}
+                </button>
+                <span className="rounded-full border border-fuchsia-500/20 bg-fuchsia-500/10 px-3 py-1 text-xs font-semibold text-fuchsia-200">
+                  {entitlements.trialActive
+                    ? text("Essai gratuit", "Free trial")
+                    : entitlements.hasTvAccess || entitlements.hasCombinationAccess
+                      ? text("Abonné", "Subscribed")
+                      : t("standardStatus")}
+                </span>
+              </div>
             </div>
             <div className="grid gap-5 sm:grid-cols-2">
               <label className="block text-sm font-medium text-gray-300">
@@ -400,7 +424,10 @@ export default function ProfilePage() {
               <li className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-800 bg-gray-950 px-4 py-3">
                 <span className="font-medium text-gray-200">{text("Combinaisons restantes aujourd’hui", "Combinations left today")}</span>
                 <span className="font-semibold text-white">
-                  {entitlements.canGenerate ? `${entitlements.remainingToday}/${entitlements.dailyLimit}` : "0"}
+                  {entitlements.canGenerate
+                    ? `${Number.isFinite(entitlements.remainingToday) ? entitlements.remainingToday : "∞"}/${Number.isFinite(entitlements.dailyLimit) ? entitlements.dailyLimit : "∞"}`
+                    : "0"
+                  }
                 </span>
               </li>
               {entitlements.trialActive && entitlements.trialEndsAt && (
@@ -602,6 +629,85 @@ export default function ProfilePage() {
                 ))}
               </ul>
             )}
+          </section>
+        )}
+
+        {activeTab === "admin" && user?.role === "admin" && (
+          <section role="tabpanel" className="space-y-5">
+            <div className="rounded-2xl border border-fuchsia-800/50 bg-fuchsia-950/20 p-6">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="grid h-10 w-10 place-items-center rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10 text-fuchsia-200">
+                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-white">{text("Espace Administration", "Admin Space")}</h2>
+                  <p className="text-sm text-fuchsia-300">{text("Accès complet à la gestion de l'application", "Full access to application management")}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Link href="/admin" className="group rounded-2xl border border-gray-800 bg-gray-900/70 p-5 transition hover:border-fuchsia-500/50 hover:bg-fuchsia-950/20">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl border border-fuchsia-400/30 bg-fuchsia-500/10 text-fuchsia-200 group-hover:border-fuchsia-400 group-hover:bg-fuchsia-500/20 transition">
+                  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                    <path d="M3 3v18h18" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <h3 className="font-semibold text-white">{text("Vue d'ensemble", "Overview")}</h3>
+                <p className="mt-1 text-sm text-gray-400">{text("Statistiques générales et activité", "General statistics and activity")}</p>
+              </Link>
+
+              <Link href="/admin/users" className="group rounded-2xl border border-gray-800 bg-gray-900/70 p-5 transition hover:border-fuchsia-500/50 hover:bg-fuchsia-950/20">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl border border-fuchsia-400/30 bg-fuchsia-500/10 text-fuchsia-200 group-hover:border-fuchsia-400 group-hover:bg-fuchsia-500/20 transition">
+                  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    <circle cx="9" cy="7" r="4" strokeWidth="1.8" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <h3 className="font-semibold text-white">{text("Utilisateurs", "Users")}</h3>
+                <p className="mt-1 text-sm text-gray-400">{text("Gestion des comptes utilisateurs", "Manage user accounts")}</p>
+              </Link>
+
+              <Link href="/admin/offers" className="group rounded-2xl border border-gray-800 bg-gray-900/70 p-5 transition hover:border-fuchsia-500/50 hover:bg-fuchsia-950/20">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl border border-fuchsia-400/30 bg-fuchsia-500/10 text-fuchsia-200 group-hover:border-fuchsia-400 group-hover:bg-fuchsia-500/20 transition">
+                  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                    <path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M4 6v12c0 1.1.9 2 2 2h14v-4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M18 12a2 2 0 0 0 0 4h4v-4h-4z" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <h3 className="font-semibold text-white">{text("Offres", "Offers")}</h3>
+                <p className="mt-1 text-sm text-gray-400">{text("Gestion des offres et plans", "Manage offers and plans")}</p>
+              </Link>
+
+              <Link href="/admin/stats" className="group rounded-2xl border border-gray-800 bg-gray-900/70 p-5 transition hover:border-fuchsia-500/50 hover:bg-fuchsia-950/20">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl border border-fuchsia-400/30 bg-fuchsia-500/10 text-fuchsia-200 group-hover:border-fuchsia-400 group-hover:bg-fuchsia-500/20 transition">
+                  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                    <path d="M18 20V10" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M12 20V4" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M6 20v-6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <h3 className="font-semibold text-white">{text("Statistiques", "Statistics")}</h3>
+                <p className="mt-1 text-sm text-gray-400">{text("Analyses et rapports détaillés", "Analytics and detailed reports")}</p>
+              </Link>
+
+              <Link href="/admin/payments" className="group rounded-2xl border border-gray-800 bg-gray-900/70 p-5 transition hover:border-fuchsia-500/50 hover:bg-fuchsia-950/20">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl border border-fuchsia-400/30 bg-fuchsia-500/10 text-fuchsia-200 group-hover:border-fuchsia-400 group-hover:bg-fuchsia-500/20 transition">
+                  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                    <rect x="2" y="5" width="20" height="14" rx="2" strokeWidth="1.8" />
+                    <line x1="2" y1="10" x2="22" y2="10" strokeWidth="1.8" />
+                  </svg>
+                </div>
+                <h3 className="font-semibold text-white">{text("Paiements", "Payments")}</h3>
+                <p className="mt-1 text-sm text-gray-400">{text("Historique des transactions", "Transaction history")}</p>
+              </Link>
+            </div>
           </section>
         )}
       </div>

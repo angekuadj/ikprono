@@ -15,7 +15,7 @@ import {
   signInWithGooglePopup,
   translateFirebaseError,
 } from "@/lib/firebaseAuth";
-import { ensureUserProfile, updateUserProfile } from "@/lib/firestore";
+import { ensureUserProfile, updateUserProfile, getUserProfile } from "@/lib/firestore";
 import { generateUUID } from "@/lib/uuid";
 import { getJson, postJson } from "@/lib/apiClient";
 import {
@@ -41,6 +41,7 @@ export interface User {
   role: "user" | "admin";
   plan?: "standard" | "premium";
   createdAt: string;
+  phoneNumber?: string;
 }
 
 interface AuthContextType {
@@ -60,6 +61,8 @@ interface AuthContextType {
   setOffer: (offer: SubscriptionOffer) => Promise<void>;
   /** Recharge les droits depuis le serveur (source de vérité). */
   refreshEntitlements: () => Promise<void>;
+  /** Recharge le profil utilisateur depuis Firestore (pour mettre à jour le rôle admin). */
+  refreshProfile: () => Promise<void>;
   isAuthenticated: boolean;
   isLoading: boolean;
 }
@@ -81,17 +84,18 @@ const DEMO_USERS: User[] = [
     createdAt: "2026-10-01T00:00:00Z"
   },
   {
-    id: "2",
+    id: "gpD540FgRnM7rfR0EbC0zOO0xpf1",
     email: "admin@ikprono.com",
     name: "Administrateur",
     role: "admin",
+    plan: "premium",
     createdAt: "2026-09-01T00:00:00Z"
   }
 ];
 
 const DEMO_PASSWORDS: Record<string, string> = {
   "user@ikprono.com": "user123",
-  "admin@ikprono.com": "admin123"
+  "admin@ikprono.com": "Sfm3h%e-69*L?Pup-6r#"
 };
 
 /**
@@ -642,12 +646,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const payload = (await response.json()) as {
         entitlements?: ServerEntitlements;
         serverEnforced?: boolean;
+        isAdmin?: boolean;
       };
       setServerEntitlements(payload.serverEnforced && payload.entitlements ? payload.entitlements : null);
       setSubscriptionVersion(version => version + 1);
+
+      // Si l'utilisateur est admin selon le serveur, mettre à jour le rôle localement
+      if (payload.isAdmin && user && user.role !== "admin") {
+        const adminProfile: User = {
+          ...user,
+          role: "admin",
+          plan: "premium",
+        };
+        setUser(adminProfile);
+        setFirebaseUser(adminProfile);
+        const sessionStore = localStorage.getItem(SESSION_STORAGE_KEY) ? localStorage : sessionStorage;
+        sessionStore.setItem(SESSION_STORAGE_KEY, JSON.stringify(adminProfile));
+        console.log("Rôle admin appliqué depuis le serveur");
+      }
     } catch (error) {
       console.error("Impossible d'actualiser les droits depuis le serveur.", error);
     }
+  };
+
+  const refreshProfile = async () => {
+    // Utilise refreshEntitlements qui vérifie le rôle admin depuis le serveur
+    await refreshEntitlements();
   };
 
   const setOffer = async (offer: SubscriptionOffer) => {
@@ -716,6 +740,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         entitlements,
         setOffer,
         refreshEntitlements,
+        refreshProfile,
         isAuthenticated: !!user,
         isLoading
       }}

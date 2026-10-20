@@ -89,7 +89,10 @@ export async function isAdminConfigured(): Promise<boolean> {
     if (!db) return false;
     try {
       // Requête triviale : échoue immédiatement si aucun identifiant n'est présent.
-      await db.collection(USAGE_COLLECTION).doc("__healthcheck__").get();
+      // L'identifiant utilisé est un vrai document de la collection des quotas
+      // d'essai : Firestore refuse les identifiants réservés (« __...__ »), ce qui
+      // ferait passer un serveur pourtant correctement configuré en mode dégradé.
+      await db.collection(USAGE_COLLECTION).doc("healthcheck").get();
       credentialsChecked = true;
     } catch (error) {
       adminUnavailable = true;
@@ -431,14 +434,19 @@ export function computeEntitlements(
   }
 
   if (trialActive) {
-    const remaining = Math.max(0, quotas.trialDailyLimit - state.usage.count);
+    // Pendant l'essai, une offre payante déjà souscrite s'ajoute : l'utilisateur
+    // qui anticipe son abonnement cumule le quota d'essai et celui de l'offre.
+    const paidCombinationAccess = offers.includes("combinations") || offers.includes("pack");
+    const dailyLimit = quotas.trialDailyLimit
+      + (paidCombinationAccess ? quotas.premiumDailyLimit : 0);
+    const remaining = Math.max(0, dailyLimit - state.usage.count);
     return {
       trialActive: true,
       trialEndsAt: subscription.trialEndsAt,
       offers,
       hasTvAccess: true,
       hasCombinationAccess: true,
-      dailyLimit: quotas.trialDailyLimit,
+      dailyLimit,
       usedToday: state.usage.count,
       remainingToday: remaining,
       canGenerate: remaining > 0,

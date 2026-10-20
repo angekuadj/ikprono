@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   // Sans identifiants serveur, le client calcule l'affichage localement.
   if (!db) {
     return applyGuestCookie(
-      NextResponse.json({ entitlements: computeGuestEntitlements(0, quotas), serverEnforced: false }),
+      NextResponse.json({ entitlements: computeGuestEntitlements(0, quotas), serverEnforced: false, isAdmin: false }),
       issuedGuestId
     );
   }
@@ -39,18 +39,20 @@ export async function GET(request: NextRequest) {
         NextResponse.json({
           entitlements: computeGuestEntitlements(state.usage.count, quotas),
           serverEnforced: true,
+          isAdmin: false,
         }),
         issuedGuestId
       );
     }
 
+    const isAdmin = await isAdminUser(db, accountKey);
     const ensured = await ensureTrial(db, accountKey, await loadState(db, accountKey));
-    const entitlements = computeEntitlements(ensured, await isAdminUser(db, accountKey), quotas);
-    return NextResponse.json({ entitlements, serverEnforced: true });
+    const entitlements = computeEntitlements(ensured, isAdmin, quotas);
+    return NextResponse.json({ entitlements, serverEnforced: true, isAdmin });
   } catch (error) {
     console.error("Lecture des droits impossible.", error);
     return applyGuestCookie(
-      NextResponse.json({ entitlements: computeGuestEntitlements(0, quotas), serverEnforced: false }),
+      NextResponse.json({ entitlements: computeGuestEntitlements(0, quotas), serverEnforced: false, isAdmin: false }),
       issuedGuestId
     );
   }

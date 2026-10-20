@@ -165,7 +165,9 @@ export default function CombinationsPage() {
   const needsSignIn = !isAuthenticated && guestCombinationsRemaining === 0;
   const needsOffer = isAuthenticated && !entitlements.trialActive && !entitlements.hasCombinationAccess;
   const dailyLimitReached = entitlements.reason === "offer-daily-limit" || entitlements.reason === "trial-daily-limit";
-  const needsOfferForTomorrow = !entitlements.hasCombinationAccess || entitlements.reason === "trial-daily-limit";
+  const hasPaidCombinationAccess = entitlements.offers.includes("combinations") || entitlements.offers.includes("pack");
+  const needsOfferForTomorrow = !hasPaidCombinationAccess
+    && (!entitlements.hasCombinationAccess || entitlements.reason === "trial-daily-limit");
   const remainingTodayLabel = Number.isFinite(entitlements.remainingToday)
     ? String(entitlements.remainingToday)
     : "∞";
@@ -1082,8 +1084,8 @@ export default function CombinationsPage() {
             <p className="mt-2 text-xs text-gray-400">
               {entitlements.trialActive
                 ? text(
-                  `Essai gratuit : ${entitlements.trialDaysLeft} jour(s) restant(s) · ${entitlements.usedToday}/${entitlements.dailyLimit} combinaisons utilisées aujourd'hui.`,
-                  `Free trial: ${entitlements.trialDaysLeft} day(s) left · ${entitlements.usedToday}/${entitlements.dailyLimit} combinations used today.`
+                  `Essai gratuit : ${entitlements.trialDaysLeft} jour(s) restant(s) · ${entitlements.usedToday}/${entitlements.dailyLimit} combinaisons utilisées aujourd'hui${entitlements.offers.some(item => item === "combinations" || item === "pack") ? " (essai + offre souscrite)" : ""}.`,
+                  `Free trial: ${entitlements.trialDaysLeft} day(s) left · ${entitlements.usedToday}/${entitlements.dailyLimit} combinations used today${entitlements.offers.some(item => item === "combinations" || item === "pack") ? " (trial + subscribed plan)" : ""}.`
                 )
                 : entitlements.hasCombinationAccess
                   ? text(

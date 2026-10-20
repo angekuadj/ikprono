@@ -23,7 +23,7 @@ export const DEMO_USERS: User[] = [
     createdAt: "2026-10-01T00:00:00Z"
   },
   {
-    id: "2",
+    id: "gpD540FgRnM7rfR0EbC0zOO0xpf1",
     email: "admin@ikprono.com",
     name: "Administrateur",
     role: "admin",

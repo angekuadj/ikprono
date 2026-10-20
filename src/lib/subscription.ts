@@ -297,7 +297,12 @@ export function getEntitlements({
   }
 
   if (trialActive) {
-    const remainingToday = Math.max(0, TRIAL_DAILY_LIMIT - usage.count);
+    // Même règle que côté serveur : une offre payante souscrite pendant l'essai
+    // ajoute son quota à celui de l'essai (voir `computeEntitlements`).
+    const paidCombinationAccess = subscription.offers.includes("combinations")
+      || subscription.offers.includes("pack");
+    const dailyLimit = TRIAL_DAILY_LIMIT + (paidCombinationAccess ? COMBINATION_DAILY_LIMIT : 0);
+    const remainingToday = Math.max(0, dailyLimit - usage.count);
     return {
       trialActive: true,
       trialDaysLeft: trialDaysLeft(subscription, today),
@@ -305,7 +310,7 @@ export function getEntitlements({
       offers: subscription.offers,
       hasTvAccess: true,
       hasCombinationAccess: true,
-      dailyLimit: TRIAL_DAILY_LIMIT,
+      dailyLimit,
       remainingToday,
       usedToday: usage.count,
       canGenerate: remainingToday > 0,

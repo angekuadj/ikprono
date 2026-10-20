@@ -32,6 +32,11 @@ yarn-error.log*
 .env*
 !.env.example
 
+# Clés de compte de service : secrets, ne doivent jamais être versionnés.
+*service-account*.json
+*-service-account*.json
+firebase-adminsdk*.json
+
 # vercel
 .vercel
 .coupon-data/

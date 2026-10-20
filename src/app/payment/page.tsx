@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
+import { postJson } from "@/lib/apiClient";
+import { useFlutterwaveScript, type FlutterwaveCallbackResponse } from "@/lib/useFlutterwave";
+import { PaymentMethodsDisplay } from "@/components/PaymentMethodsDisplay";
 import {
   COMBINATION_DAILY_LIMIT,
   COMBINATIONS_MONTHLY_PRICE_FCFA,
@@ -99,31 +102,204 @@ const OFFERS: OfferDefinition[] = [
 
 export default function PaymentPage() {
   const { t, text } = useLanguage();
-  const { user, isAuthenticated, entitlements, setOffer } = useAuth();
+  const { user, isAuthenticated, entitlements, setOffer, refreshEntitlements } = useAuth();
+  const { state: flwState } = useFlutterwaveScript();
   const [busyOffer, setBusyOffer] = useState<SubscriptionOffer | null>(null);
   const [notice, setNotice] = useState("");
   const [offerError, setOfferError] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const recoveryAttempted = useRef(false);
 
-  const handleToggleOffer = async (offerId: SubscriptionOffer) => {
+  /**
+   * Reprise au chargement : si un paiement a été confirmé par Flutterwave mais que
+   * la page a été fermée avant la vérification, le serveur le détecte et active
+   * l'offre. Sans effet si aucun paiement n'est en attente.
+   */
+  const recoverPayments = useCallback(async () => {
     if (!isAuthenticated) return;
+    try {
+      const response = await postJson("/api/checkout/recover", {});
+      if (!response.ok) return;
+      const payload = await response.json().catch(() => ({})) as {
+        recovered?: SubscriptionOffer[];
+      };
+      if (payload.recovered && payload.recovered.length > 0) {
+        await refreshEntitlements();
+        const names = payload.recovered
+          .map(id => OFFERS.find(offer => offer.id === id))
+          .filter((offer): offer is (typeof OFFERS)[number] => !!offer)
+          .map(offer => text(offer.titleFr, offer.titleEn))
+          .join(", ");
+        setNotice(text(
+          `Paiement confirmé : ${names} ${payload.recovered.length > 1 ? "sont actives" : "est active"}.`,
+          `Payment confirmed: ${names} ${payload.recovered.length > 1 ? "are now active" : "is now active"}.`
+        ));
+      }
+    } catch {
+      // La reprise est un confort : en cas d'échec, on laisse l'utilisateur réessayer.
+    }
+  }, [isAuthenticated, refreshEntitlements, text]);
+
+  useEffect(() => {
+    if (!isAuthenticated || recoveryAttempted.current) return;
+    recoveryAttempted.current = true;
+    void recoverPayments();
+  }, [isAuthenticated, recoverPayments]);
+
+  /**
+   * Vérifie le paiement auprès du serveur et active l'offre.
+   *
+   * L'activation n'a lieu côté serveur qu'après confirmation auprès de Flutterwave :
+   * le navigateur ne fait que transmettre la référence et l'identifiant de transaction.
+   */
+  const confirmPayment = async (txRef: string, transactionId: string, offerId: SubscriptionOffer) => {
+    setVerifying(true);
+    setNotice("");
+    setOfferError("");
+    const offer = OFFERS.find(item => item.id === offerId);
+    try {
+      const response = await postJson("/api/checkout/verify", { txRef, transactionId });
+      const payload = await response.json().catch(() => ({})) as {
+        status?: string;
+        offer?: SubscriptionOffer;
+        error?: string;
+      };
+
+      if (response.status === 202 || payload.status === "pending") {
+        setOfferError(text(
+          "Le paiement est encore en cours de traitement. Patientez un instant puis rechargez la page : l’offre s’activera automatiquement dès la confirmation.",
+          "The payment is still being processed. Wait a moment and reload the page: the plan will activate automatically once confirmed."
+        ));
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(payload.error || text(
+          "Le paiement n’a pas pu être confirmé.",
+          "The payment could not be confirmed."
+        ));
+      }
+
+      await refreshEntitlements();
+      setNotice(text(
+        offerId === "tv"
+          ? `${offer?.titleFr ?? "L’offre TV"} est active pour les prochaines ${TV_ACCESS_HOURS} h.`
+          : `${offer?.titleFr ?? "Votre offre"} est maintenant active.`,
+        offerId === "tv"
+          ? `${offer?.titleEn ?? "The TV plan"} is active for the next ${TV_ACCESS_HOURS} hours.`
+          : `${offer?.titleEn ?? "Your plan"} is now active.`
+      ));
+    } catch (error) {
+      setOfferError(error instanceof Error
+        ? error.message
+        : text("Le paiement n’a pas pu être confirmé.", "The payment could not be confirmed."));
+    } finally {
+      setVerifying(false);
+      setBusyOffer(null);
+    }
+  };
+
+  /** Ouvre la modale Flutterwave pour l'offre demandée. */
+  const startPayment = async (offerId: SubscriptionOffer) => {
     setBusyOffer(offerId);
     setNotice("");
     setOfferError("");
-    const wasActive = entitlements.offers.includes(offerId);
+
+    if (flwState !== "ready" || !window.FlutterwaveCheckout) {
+      setOfferError(text(
+        "La fenêtre de paiement n’est pas encore prête. Réessayez dans un instant.",
+        "The payment window is not ready yet. Please try again in a moment."
+      ));
+      setBusyOffer(null);
+      return;
+    }
+
+    try {
+      // Le montant et l'offre sont fixés par le serveur, jamais par le client.
+      const response = await postJson("/api/checkout/start", {
+        offer: offerId,
+        email: user?.email,
+      });
+      const payload = await response.json().catch(() => ({})) as {
+        txRef?: string;
+        amount?: number;
+        currency?: string;
+        publicKey?: string;
+        error?: string;
+      };
+      if (!response.ok || !payload.txRef || !payload.publicKey || !payload.amount) {
+        throw new Error(payload.error || text(
+          "Impossible de préparer le paiement.",
+          "Unable to prepare the payment."
+        ));
+      }
+
+      const offer = OFFERS.find(item => item.id === offerId);
+      window.FlutterwaveCheckout({
+        public_key: payload.publicKey,
+        tx_ref: payload.txRef,
+        amount: payload.amount,
+        currency: payload.currency || "XOF",
+        // Options de paiement disponibles :
+        // - card : Carte bancaire (Visa, Mastercard)
+        // - mobilemoney : MTN Mobile Money, Orange Money, WAVE, Moov
+        // - ussd : Paiement par USSD
+        // - banktransfer : Virement bancaire
+        payment_options: "card,mobilemoney,ussd,banktransfer",
+        customer: {
+          email: user?.email || "client@ikprono.com",
+          name: user?.name,
+          phone_number: user?.phoneNumber,
+        },
+        customizations: {
+          title: "IkProno",
+          description: offer
+            ? text(`Abonnement ${offer.titleFr}`, `Subscription ${offer.titleEn}`)
+            : undefined,
+          logo: "/logo.png",
+        },
+        meta: { offer: offerId },
+        callback: (data: FlutterwaveCallbackResponse) => {
+          const transactionId = data.transaction_id !== undefined ? String(data.transaction_id) : "";
+          // La modale peut se fermer sans identifiant : dans ce cas on retombe sur
+          // le message d'échec, l'offre n'étant pas activée.
+          if (!transactionId) {
+            setOfferError(text(
+              "Le paiement n’a pas abouti. Aucun montant n’a été débité.",
+              "The payment did not go through. You have not been charged."
+            ));
+            setBusyOffer(null);
+            return;
+          }
+          void confirmPayment(
+            typeof data.tx_ref === "string" ? data.tx_ref : payload.txRef!,
+            transactionId,
+            offerId
+          );
+        },
+        onclose: () => {
+          // Fermeture sans paiement : on libère simplement le bouton.
+          setBusyOffer(current => (current === offerId ? null : current));
+        },
+      });
+    } catch (error) {
+      setOfferError(error instanceof Error
+        ? error.message
+        : text("Impossible de préparer le paiement.", "Unable to prepare the payment."));
+      setBusyOffer(null);
+    }
+  };
+
+  /** Désactive une offre déjà active (aucun paiement requis pour annuler). */
+  const cancelOffer = async (offerId: SubscriptionOffer) => {
+    setBusyOffer(offerId);
+    setNotice("");
+    setOfferError("");
+    const offer = OFFERS.find(item => item.id === offerId)!;
     try {
       await setOffer(offerId);
-      const offer = OFFERS.find(item => item.id === offerId)!;
       setNotice(text(
-        wasActive
-          ? `${offer.titleFr} a été désactivée.`
-          : offerId === "tv"
-            ? `${offer.titleFr} est active pour les prochaines ${TV_ACCESS_HOURS} h.`
-            : `${offer.titleFr} est maintenant active.`,
-        wasActive
-          ? `${offer.titleEn} has been turned off.`
-          : offerId === "tv"
-            ? `${offer.titleEn} is active for the next ${TV_ACCESS_HOURS} hours.`
-            : `${offer.titleEn} is now active.`
+        `${offer.titleFr} a été désactivée.`,
+        `${offer.titleEn} has been turned off.`
       ));
     } catch (error) {
       setOfferError(error instanceof Error
@@ -134,11 +310,13 @@ export default function PaymentPage() {
     }
   };
 
-  const isActive = (offerId: SubscriptionOffer) =>
-    offerId === "tv"
-      // L'offre TV n'est « active » que pendant la journée payée.
-      ? entitlements.offers.includes("tv") && (entitlements.trialActive || entitlements.hasTvAccess)
-      : entitlements.offers.includes(offerId);
+  const handleOfferAction = (offerId: SubscriptionOffer) =>
+    entitlements.offers.includes(offerId) ? cancelOffer(offerId) : startPayment(offerId);
+
+  // « Actif » signifie ici « offre souscrite et rattachée au compte » : c'est ce
+  // qui détermine l'action proposée (paiement ou désactivation). L'accès effectif
+  // (essai inclus) reste décrit par `entitlements`.
+  const isActive = (offerId: SubscriptionOffer) => entitlements.offers.includes(offerId);
 
   return (
     <div className="min-h-screen bg-black py-12 px-4 sm:px-6 lg:px-8">
@@ -172,6 +350,17 @@ export default function PaymentPage() {
           </div>
         )}
 
+        {isAuthenticated && entitlements.trialActive && (
+          <div className="mx-auto mb-8 max-w-4xl rounded-2xl border border-green-800 bg-green-950/20 p-6 text-center">
+            <p className="text-sm text-green-100">
+              {text(
+                `Votre essai gratuit est en cours (${entitlements.trialDaysLeft} jour(s) restant(s)). Vous pouvez déjà souscrire à une offre : le quota souscrit s’ajoute à celui de l’essai pendant la période restante, puis prend le relais automatiquement.`,
+                `Your free trial is running (${entitlements.trialDaysLeft} day(s) left). You can already subscribe to a plan: the plan’s quota is added to your trial quota for the remaining period, then takes over automatically.`
+              )}
+            </p>
+          </div>
+        )}
+
         {isAuthenticated && (
           <div className="mx-auto mb-8 max-w-4xl rounded-2xl border border-gray-800 bg-gray-900 p-6">
             <h2 className="text-lg font-bold text-white">
@@ -196,8 +385,8 @@ export default function PaymentPage() {
                 {text("Combinaisons : ", "Combinations: ")}
                 {entitlements.hasCombinationAccess
                   ? text(
-                    `${entitlements.remainingToday} restante(s) aujourd’hui (sur ${entitlements.dailyLimit}).`,
-                    `${entitlements.remainingToday} left today (out of ${entitlements.dailyLimit}).`
+                    `${entitlements.remainingToday} restante(s) aujourd’hui (sur ${entitlements.dailyLimit}${entitlements.trialActive && entitlements.offers.some(item => item === "combinations" || item === "pack") ? " = essai + offre" : ""}).`,
+                    `${entitlements.remainingToday} left today (out of ${entitlements.dailyLimit}${entitlements.trialActive && entitlements.offers.some(item => item === "combinations" || item === "pack") ? " = trial + plan" : ""}).`
                   )
                   : text("aucune offre active", "no active plan")}
               </li>
@@ -266,31 +455,59 @@ export default function PaymentPage() {
                   </ul>
 
                   {(() => {
-                    // Cliquable uniquement si l'utilisateur est connecté, hors essai
-                    // et que l'offre n'est pas déjà active (sinon : bouton grisé).
-                    const canSubscribe = isAuthenticated
-                      && !entitlements.trialActive
-                      && !active
-                      && busyOffer === null;
+                    // Deux actions distinctes :
+                    //  - offrir une offre non souscrite → paiement Flutterwave ;
+                    //  - offre déjà souscrite → désactivation (aucun paiement).
+                    // Pendant l'essai, la souscription reste possible : le quota
+                    // souscrit s'ajoute alors à celui de l'essai.
+                    const subscribed = entitlements.offers.includes(offer.id);
+                    const isAnticipation = !subscribed && entitlements.trialActive;
+                    const canPay = isAuthenticated && !subscribed && busyOffer === null && !verifying;
+                    const disabled = !isAuthenticated || busyOffer !== null || verifying;
+                    const busy = busyOffer === offer.id || verifying;
                     return (
-                      <button
-                        type="button"
-                        onClick={() => void handleToggleOffer(offer.id)}
-                        disabled={!canSubscribe}
-                        className={`w-full py-3 px-4 rounded-lg font-semibold transition-all duration-300 disabled:cursor-not-allowed ${
-                          canSubscribe
-                            ? "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-lg"
-                            : "border-2 border-gray-700 bg-gray-800/60 text-gray-400 opacity-70"
-                        }`}
-                      >
-                        {busyOffer === offer.id
-                          ? t("processing")
-                          : entitlements.trialActive
-                            ? text("Inclus dans votre essai", "Included in your trial")
-                            : active
-                              ? text("Abonnement actif", "Subscription active")
-                              : text("Choisir cette offre", "Choose this plan")}
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => void handleOfferAction(offer.id)}
+                          disabled={disabled}
+                          className={`w-full py-3 px-4 rounded-lg font-semibold transition-all duration-300 disabled:cursor-not-allowed ${
+                            disabled
+                              ? "border-2 border-gray-700 bg-gray-800/60 text-gray-400 opacity-70"
+                              : subscribed
+                                ? "border-2 border-red-700 bg-red-950/30 text-red-200 hover:bg-red-900/40"
+                                : isAnticipation
+                                  ? "border-2 border-green-500 bg-green-950/30 text-green-200 hover:bg-green-500/20"
+                                  : canPay
+                                    ? "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-lg"
+                                    : "border-2 border-gray-700 bg-gray-800/60 text-gray-400"
+                          }`}
+                        >
+                          {busy
+                            ? (verifying ? text("Vérification…", "Verifying…") : t("processing"))
+                            : subscribed
+                              ? text("Désactiver cette offre", "Turn off this plan")
+                              : isAnticipation
+                                ? text("Anticiper l’abonnement", "Subscribe now")
+                                : text("Payer avec Flutterwave", "Pay with Flutterwave")}
+                        </button>
+                        {subscribed && (
+                          <p className="mt-3 text-center text-xs text-gray-400">
+                            {text(
+                              "Vous pouvez continuer à utiliser cette offre. La désactivation coupe son renouvellement et son accès.",
+                              "You can keep using this plan. Turning it off stops its renewal and access."
+                            )}
+                          </p>
+                        )}
+                        {isAnticipation && (
+                          <p className="mt-3 text-center text-xs text-gray-400">
+                            {text(
+                              `Votre essai couvre déjà cette offre (${entitlements.trialDaysLeft} jour(s) restant(s)) : en souscrivant maintenant, l’abonnement prendra le relais dès la fin de l’essai, sans coupure.`,
+                              `Your trial already covers this plan (${entitlements.trialDaysLeft} day(s) left): subscribing now means the plan takes over as soon as the trial ends, with no interruption.`
+                            )}
+                          </p>
+                        )}
+                      </>
                     );
                   })()}
                   {!isAuthenticated && (
@@ -301,15 +518,7 @@ export default function PaymentPage() {
                       )}
                     </p>
                   )}
-                  {isAuthenticated && entitlements.trialActive && !active && (
-                    <p className="mt-3 text-center text-xs text-gray-400">
-                      {text(
-                        `Votre essai gratuit (${entitlements.trialDaysLeft} jour(s) restant(s)) inclut déjà cette offre : la souscription sera possible à la fin de l’essai.`,
-                        `Your free trial (${entitlements.trialDaysLeft} day(s) left) already includes this plan: you can subscribe once the trial ends.`
-                      )}
-                    </p>
-                  )}
-                  {offerError && (
+                  {isAuthenticated && offerError && (
                     <p role="alert" className="mt-3 text-center text-xs text-red-300">
                       {offerError}
                     </p>
@@ -318,6 +527,11 @@ export default function PaymentPage() {
               </div>
             );
           })}
+        </div>
+
+        {/* Affichage des méthodes de paiement */}
+        <div className="max-w-4xl mx-auto mb-10">
+          <PaymentMethodsDisplay />
         </div>
 
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 mb-10 max-w-4xl mx-auto">
@@ -415,6 +629,17 @@ export default function PaymentPage() {
                 {text(
                   `Oui : ${TRIAL_DAYS} jours d’essai gratuit à la première connexion, avec ${TRIAL_DAILY_LIMIT} combinaisons par jour et les vidéos en direct.`,
                   `Yes: a ${TRIAL_DAYS}-day free trial on your first sign-in, with ${TRIAL_DAILY_LIMIT} combinations per day and live videos.`
+                )}
+              </p>
+            </div>
+            <div className="border-b border-gray-800 pb-4">
+              <h3 className="font-semibold text-white mb-2">
+                {text("Puis-je souscrire pendant mon essai gratuit ?", "Can I subscribe during my free trial?")}
+              </h3>
+              <p className="text-gray-400">
+                {text(
+                  "Oui. Vous pouvez souscrire à une offre à tout moment, même pendant l’essai. Le quota de l’offre s’ajoute alors à celui de l’essai pour les jours restants, puis l’abonnement prend le relais automatiquement à la fin de l’essai.",
+                  "Yes. You can subscribe to a plan at any time, even during the trial. The plan’s quota is then added to your trial quota for the remaining days, and the subscription takes over automatically when the trial ends."
                 )}
               </p>
             </div>

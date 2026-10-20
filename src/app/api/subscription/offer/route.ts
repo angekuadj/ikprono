@@ -14,11 +14,12 @@ import type { SubscriptionOffer } from "@/lib/subscription";
 import { loadQuotaSettings } from "@/lib/server/quotaSettings";
 
 /**
- * Active ou désactive une offre pour l'utilisateur connecté.
+ * Désactivation d'une offre, ou relecture des droits.
  *
- * SÉCURITÉ : il s'agit d'une simulation de paiement — aucun prestataire n'est
- * appelé et l'offre est appliquée gratuitement. En production, cette route doit
- * vérifier le paiement (webhook opérateur) avant d'activer l'offre.
+ * SÉCURITÉ : l'**activation** d'une offre payante n'est plus possible ici. Elle
+ * passe obligatoirement par `/api/checkout/verify` (ou le webhook Flutterwave),
+ * après vérification d'un paiement réellement encaissé. Seule la désactivation
+ * reste ouverte, car annuler un abonnement ne nécessite aucun paiement.
  */
 
 export const dynamic = "force-dynamic";
@@ -49,10 +50,9 @@ export async function POST(request: NextRequest) {
 
   const db = (await isAdminConfigured()) ? getAdminDb() : null;
   if (!db) {
-    // Sans identifiants serveur, la route GET /api/subscription bascule déjà en
-    // mode local : on applique la même dégradation ici au lieu de bloquer la
-    // souscription. Le serveur reprend la main dès que les identifiants sont présents.
-    console.warn("Firebase Admin absent : offre appliquée en mode local (stockage navigateur).");
+    // Sans identifiants serveur, la route GET /api/subscription bascule en mode
+    // local : la dégradation est conservée pour la déconnexion uniquement.
+    console.warn("Firebase Admin absent : offre gérée en mode local (stockage navigateur).");
     // Le client vient de basculer localement : on enregistre le rattachement invité.
     if (issuedGuestId) await linkGuestToUser(null, issuedGuestId, principalKey(principal));
     return NextResponse.json({ entitlements: null, serverEnforced: false });
@@ -62,6 +62,18 @@ export async function POST(request: NextRequest) {
   try {
     const quotas = await loadQuotaSettings(db);
     const state = await ensureTrial(db, accountKey, await loadState(db, accountKey));
+
+    // Une activation demandée directement est refusée : elle exige un paiement vérifié.
+    if (!state.subscription?.offers.includes(offer)) {
+      return NextResponse.json(
+        {
+          error: "Cette offre s'active après un paiement confirmé.",
+          code: "payment-required",
+        },
+        { status: 402 }
+      );
+    }
+
     const updated = await setStoredOffer(db, accountKey, offer, state);
     const isAdmin = await isAdminUser(db, accountKey);
     // Un visiteur qui vient de se connecter garde la trace de son compteur invité.
