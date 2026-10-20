@@ -21,11 +21,14 @@ import { getJson, postJson } from "@/lib/apiClient";
 import {
   GUEST_COMBINATION_COUNT_KEY,
   GUEST_COMBINATION_LIMIT,
+  clearSubscription,
   ensureTrialStarted,
   entitlementsFromServer,
   getEntitlements,
+  readSubscription,
   subscribeToSubscriptionChanges,
   toggleOffer,
+  writeSubscription,
   type Entitlements,
   type ServerEntitlements,
   type SubscriptionOffer,
@@ -282,7 +285,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (storedUser) {
         const parsed: unknown = JSON.parse(storedUser);
         if (isUser(parsed)) {
-          const restoredUser = { ...parsed, plan: parsed.plan ?? "standard" };
+          const restoredUser = {
+            ...parsed,
+            // Premium à vie : le rôle admin porte toujours le plan premium.
+            plan: parsed.role === "admin" ? "premium" : parsed.plan ?? "standard",
+          };
           setUser(restoredUser);
           setProposalCount(readProposalCount(restoredUser.id));
         } else {
@@ -412,7 +419,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error("Email ou mot de passe incorrect");
     }
 
-    const accountUser = { ...foundUser, plan: foundUser.plan ?? "standard" };
+    const accountUser = {
+      ...foundUser,
+      plan: foundUser.role === "admin" ? "premium" : foundUser.plan ?? "standard",
+    };
     saveSession(accountUser, rememberMe);
     return accountUser;
   };
@@ -630,19 +640,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const setOffer = async (offer: SubscriptionOffer) => {
     const accountId = user?.id ?? "guest";
-    if (!user) return;
+    if (!user) {
+      throw new Error("Connectez-vous pour gérer vos offres.");
+    }
     // Met à jour le stockage local (affichage immédiat) puis le serveur (source de vérité).
+    const previous = readSubscription(accountId);
     ensureTrialStarted(accountId);
     toggleOffer(accountId, offer);
     setSubscriptionVersion(version => version + 1);
     try {
       const response = await postJson("/api/subscription/offer", { offer });
       if (response.ok) {
-        const payload = (await response.json()) as { entitlements?: ServerEntitlements };
+        const payload = (await response.json()) as { entitlements?: ServerEntitlements | null };
         if (payload.entitlements) setServerEntitlements(payload.entitlements);
+        return;
       }
+      const failure = await response.json().catch(() => ({})) as { error?: string };
+      throw new Error(failure.error || "Impossible d'enregistrer l'offre pour le moment.");
     } catch (error) {
+      // Le serveur a refusé : on annule le changement local pour ne pas afficher
+      // une offre qui ne sera jamais active.
+      if (previous) {
+        writeSubscription(accountId, previous);
+      } else {
+        clearSubscription(accountId);
+      }
+      setSubscriptionVersion(version => version + 1);
       console.error("Impossible d'enregistrer l'offre côté serveur.", error);
+      throw error instanceof Error ? error : new Error("Impossible d'enregistrer l'offre pour le moment.");
     }
   };
 

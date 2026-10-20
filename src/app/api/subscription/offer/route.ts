@@ -47,10 +47,11 @@ export async function POST(request: NextRequest) {
 
   const db = (await isAdminConfigured()) ? getAdminDb() : null;
   if (!db) {
-    return NextResponse.json(
-      { error: "Gestion des offres indisponible : identifiants serveur absents." },
-      { status: 503 }
-    );
+    // Sans identifiants serveur, la route GET /api/subscription bascule déjà en
+    // mode local : on applique la même dégradation ici au lieu de bloquer la
+    // souscription. Le serveur reprend la main dès que les identifiants sont présents.
+    console.warn("Firebase Admin absent : offre appliquée en mode local (stockage navigateur).");
+    return NextResponse.json({ entitlements: null, serverEnforced: false });
   }
 
   const accountKey = principalKey(principal);

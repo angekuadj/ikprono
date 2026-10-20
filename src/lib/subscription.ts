@@ -120,6 +120,13 @@ export function writeSubscription(accountId: string, subscription: StoredSubscri
   window.dispatchEvent(new Event(SUBSCRIPTION_EVENT));
 }
 
+/** Supprime l'abonnement local (annulation d'une tentative d'offre refusée). */
+export function clearSubscription(accountId: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(storageKey(SUBSCRIPTION_PREFIX, accountId));
+  window.dispatchEvent(new Event(SUBSCRIPTION_EVENT));
+}
+
 /**
  * Démarre l'essai à la première connexion si aucun abonnement n'existe encore.
  * Le compteur de combinaisons invité (non connecté uniquement) est alors remis à zéro.

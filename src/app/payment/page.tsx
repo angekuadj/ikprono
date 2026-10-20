@@ -102,11 +102,13 @@ export default function PaymentPage() {
   const { user, isAuthenticated, entitlements, setOffer } = useAuth();
   const [busyOffer, setBusyOffer] = useState<SubscriptionOffer | null>(null);
   const [notice, setNotice] = useState("");
+  const [offerError, setOfferError] = useState("");
 
   const handleToggleOffer = async (offerId: SubscriptionOffer) => {
     if (!isAuthenticated) return;
     setBusyOffer(offerId);
     setNotice("");
+    setOfferError("");
     const wasActive = entitlements.offers.includes(offerId);
     try {
       await setOffer(offerId);
@@ -123,6 +125,10 @@ export default function PaymentPage() {
             ? `${offer.titleEn} is active for the next ${TV_ACCESS_HOURS} hours.`
             : `${offer.titleEn} is now active.`
       ));
+    } catch (error) {
+      setOfferError(error instanceof Error
+        ? error.message
+        : text("Impossible de modifier l'offre pour le moment.", "Unable to update the plan right now."));
     } finally {
       setBusyOffer(null);
     }

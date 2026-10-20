@@ -31,13 +31,17 @@ export function getFirestoreDb(): Firestore | null {
 const USERS_COLLECTION = "users";
 
 function toUser(id: string, data: DocumentData): User {
+  const role: User["role"] = data.role === "admin" ? "admin" : "user";
   return {
     id,
     email: typeof data.email === "string" ? data.email : "",
     name: typeof data.name === "string" ? data.name : "",
-    role: data.role === "admin" ? "admin" : "user",
-    plan:
-      data.plan === "premium" || data.plan === "standard" ? data.plan : "standard",
+    role,
+    // Premium à vie : le rôle admin implique toujours le plan premium,
+    // quel que soit le champ stocké (les quotas illimités viennent du rôle).
+    plan: role === "admin" || data.plan === "premium" ? "premium"
+      : data.plan === "standard" ? "standard"
+      : "standard",
     createdAt:
       typeof data.createdAt === "string" ? data.createdAt : new Date().toISOString(),
   };
