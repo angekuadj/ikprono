@@ -207,6 +207,11 @@ export default function PaymentPage() {
                 {notice}
               </p>
             )}
+            {offerError && (
+              <p role="alert" className="mt-4 rounded-lg border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-200">
+                {offerError}
+              </p>
+            )}
           </div>
         )}
 
@@ -278,6 +283,27 @@ export default function PaymentPage() {
                           ? text("Désactiver l’offre", "Turn off this plan")
                           : text("Choisir cette offre", "Choose this plan")}
                   </button>
+                  {!isAuthenticated && (
+                    <p className="mt-3 text-center text-xs text-gray-400">
+                      {text(
+                        "Connectez-vous pour souscrire à une offre.",
+                        "Sign in to subscribe to a plan."
+                      )}
+                    </p>
+                  )}
+                  {isAuthenticated && entitlements.trialActive && !active && (
+                    <p className="mt-3 text-center text-xs text-gray-400">
+                      {text(
+                        `Votre essai gratuit (${entitlements.trialDaysLeft} jour(s) restant(s)) inclut déjà cette offre : la souscription sera possible à la fin de l’essai.`,
+                        `Your free trial (${entitlements.trialDaysLeft} day(s) left) already includes this plan: you can subscribe once the trial ends.`
+                      )}
+                    </p>
+                  )}
+                  {offerError && (
+                    <p role="alert" className="mt-3 text-center text-xs text-red-300">
+                      {offerError}
+                    </p>
+                  )}
                 </div>
               </div>
             );

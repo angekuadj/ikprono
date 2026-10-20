@@ -150,6 +150,7 @@ export default function CombinationsPage() {
   const [statisticCoupon, setStatisticCoupon] = useState<GeneratedStatisticCoupon | null>(null);
   const [scorerCoupon, setScorerCoupon] = useState<GeneratedScorerCoupon | null>(null);
   const [savedStatisticCombinations, setSavedStatisticCombinations] = useState<SavedStatisticCombination[]>([]);
+  const [scorerSaveNotice, setScorerSaveNotice] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
