@@ -9,12 +9,18 @@ import {
   suggestFotMobCoupon,
   suggestFotMobSafeCoupon,
 } from "@/lib/fotmobCoupons";
-import type { StatisticMarket } from "@/lib/coupons";
+import type { GeneratedCoupon, GeneratedStatisticCoupon, StatisticMarket } from "@/lib/coupons";
 import {
   applyQuotaCookie,
   commitCombinationUsage,
   enforceCombinationQuota,
 } from "@/lib/server/quotaGuard";
+import {
+  filterCouponForLive,
+  filterStatisticCouponForLive,
+  loadLiveMatchStates,
+  type LiveMatchState,
+} from "@/lib/liveCoupons";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +38,34 @@ function errorStatus(error: unknown): number {
     ? 422
     : 502;
 }
+
+/**
+ * En direct : retire du résultat généré les événements déjà gagnés, perdus ou
+ * inatteignables dans le temps restant. Renvoie null si plus rien d'ouvert ne
+ * reste (aucun crédit ne doit alors être consommé).
+ */
+function filterLiveResult(
+  result: Record<string, unknown>,
+  liveStates: Map<string, LiveMatchState>
+): Record<string, unknown> | null {
+  if (liveStates.size === 0) return result;
+  const coupon = result.coupon as GeneratedCoupon | GeneratedStatisticCoupon | undefined;
+  if (!coupon || !Array.isArray(coupon.matches) || coupon.matches.length === 0) return result;
+  const first: unknown = coupon.matches[0];
+  if (typeof first === "object" && first !== null && "picks" in first) {
+    const filtered = filterCouponForLive(coupon as GeneratedCoupon, liveStates);
+    return filtered ? { ...result, coupon: filtered } : null;
+  }
+  if (typeof first === "object" && first !== null && "line" in first && "market" in first) {
+    const filtered = filterStatisticCouponForLive(coupon as GeneratedStatisticCoupon, liveStates);
+    return filtered ? { ...result, coupon: filtered } : null;
+  }
+  // Combinaisons de buteurs : non évaluables sur le score live, conservées telles quelles.
+  return result;
+}
+
+const LIVE_EVENTS_EXHAUSTED_ERROR =
+  "All live events for these matches are already decided, lost or unreachable. Try other matches or markets.";
 
 export async function POST(request: NextRequest) {
   let payload: unknown;
@@ -146,6 +180,14 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // En direct : on ne propose que des événements encore ouverts.
+      const liveStates = await loadLiveMatchStates(uniqueFixtures);
+      const filteredResult = filterLiveResult(result, liveStates);
+      if (!filteredResult) {
+        return NextResponse.json({ error: LIVE_EVENTS_EXHAUSTED_ERROR }, { status: 422 });
+      }
+      result = filteredResult;
+
       const entitlements = await commitCombinationUsage(context, 1);
       return applyQuotaCookie(
         NextResponse.json({ ...result, entitlements }),
@@ -160,7 +202,7 @@ export async function POST(request: NextRequest) {
 
   if (!Array.isArray(payload.fixtureIds) || payload.fixtureIds.length < 1 || payload.fixtureIds.length > 20
     || !payload.fixtureIds.every(id => typeof id === "string" && id.length > 0 && id.length <= 128)) {
-    return NextResponse.json({ error: "Choose between 1 and 20 upcoming fixtures." }, { status: 400 });
+    return NextResponse.json({ error: "Choose between 1 and 20 live or upcoming fixtures." }, { status: 400 });
   }
   const fixtureIds = payload.fixtureIds as string[];
   if (new Set(fixtureIds).size !== fixtureIds.length) {
@@ -188,16 +230,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "One or more fixtures were not found." }, { status: 404 });
     }
     const today = new Date().toISOString().slice(0, 10);
-    if (fixtures.some(fixture => fixture.date < today || fixture.status !== "Prévu")) {
+    // Combinaisons possibles sur un match en direct OU un match à venir planifié.
+    const isIneligible = (fixture: Fixture) =>
+      fixture.status !== "En direct" && (fixture.date < today || fixture.status !== "Prévu");
+    if (fixtures.some(isIneligible)) {
       return NextResponse.json(
-        { error: "Combinations can only be suggested for upcoming scheduled fixtures." },
+        { error: "Combinations can only be suggested for live or upcoming scheduled fixtures." },
         { status: 400 }
       );
     }
     const coupons = await generateFotMobCoupons(fixtures, riskLevel, couponCount, regenerate);
+    // En direct : on ne propose que des événements encore ouverts (score live,
+    // durée restante et statistiques en cours), jamais déjà gagnés ou perdus.
+    const liveStates = await loadLiveMatchStates(fixtures);
+    const openCoupons = liveStates.size > 0
+      ? coupons
+        .map(coupon => filterCouponForLive(coupon, liveStates))
+        .filter((coupon): coupon is GeneratedCoupon => coupon !== null)
+      : coupons;
+    if (openCoupons.length === 0) {
+      return NextResponse.json({ error: LIVE_EVENTS_EXHAUSTED_ERROR }, { status: 422 });
+    }
     // Une génération réussie consomme une unité du quota du jour.
     const entitlements = await commitCombinationUsage(context, 1);
-    return applyQuotaCookie(NextResponse.json({ coupons, entitlements }), context);
+    return applyQuotaCookie(NextResponse.json({ coupons: openCoupons, entitlements }), context);
   } catch (error) {
     console.error("Combination suggestion failed.", error);
     const message = error instanceof Error ? error.message : "Unable to suggest combinations.";

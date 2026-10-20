@@ -235,7 +235,7 @@ function percent(hits: number, total: number): number {
 }
 
 /** Produit de taux en % (hypothèse d'indépendance), arrondi à 2 décimales. */
-function combineRates(rates: number[]): number {
+export function combineRates(rates: number[]): number {
   if (rates.length === 0) return 0;
   return Number(rates.reduce((acc, rate) => (acc * rate) / 100, 100).toFixed(2));
 }
@@ -466,7 +466,7 @@ function firstStatTotal(details: FotMobDetails, labels: string[]): number | null
   return null;
 }
 
-function statisticTotal(details: FotMobDetails, market: StatisticMarket): number | null {
+export function statisticTotal(details: FotMobDetails, market: StatisticMarket): number | null {
   switch (market) {
     case "shots":
       return firstStatTotal(details, ["total shots", "shots", "tirs totaux", "tirs"]);
@@ -859,7 +859,7 @@ function arePicksCompatible(first: CouponPick, second: CouponPick): boolean {
  * Taux d'un match (en %), ou null s'il n'a aucun pick statistique.
  * Les picks d'un même match sont corrélés : on retient le MINIMUM (borne prudente).
  */
-function matchRate(picks: CouponPick[]): number | null {
+export function matchRate(picks: CouponPick[]): number | null {
   const rates = picks
     .filter(pick => pick.selection !== null && pick.historicalRate !== null && STATISTICAL_MARKETS.has(pick.market))
     .map(pick => pick.historicalRate as number);
@@ -867,7 +867,7 @@ function matchRate(picks: CouponPick[]): number | null {
 }
 
 /** Estimation indicative : minimum par match, puis produit entre matchs (indépendance supposée). */
-function estimateCombinedRate(matches: CouponFixturePrediction[]): number {
+export function estimateCombinedRate(matches: CouponFixturePrediction[]): number {
   return combineRates(matches.map(match => matchRate(match.picks)).filter((rate): rate is number => rate !== null));
 }
 

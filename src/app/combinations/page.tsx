@@ -11,6 +11,7 @@ import { readFixtureBasket, writeFixtureBasket } from "@/lib/fixtureBasket";
 import { readGeneratedCombinations, writeGeneratedCombinations } from "@/lib/generatedCombinations";
 import { uniqueGeneratedCoupons, type GeneratedCoupon, type GeneratedStatisticCoupon, type GeneratedScorerCoupon, type CouponPick, type StatisticMarket } from "@/lib/coupons";
 import type { Fixture, FixtureResponse } from "@/lib/fixtures";
+import type { LiveMatchAnalysis } from "@/lib/liveAnalysis";
 import {
   COMBINATION_DAILY_LIMIT,
   COMBINATIONS_MONTHLY_PRICE_FCFA,
@@ -43,6 +44,15 @@ import {
 const MAX_FIXTURES = 20;
 const DEFAULT_LOOKAHEAD_DAYS = 7;
 const PAGE_SIZE = 12;
+
+/**
+ * Statuts considérés comme « en direct » par les API (`fotmob.ts` produit
+ * « En direct » ; « mi-temps » et « en live » sont tolérés par sécurité).
+ */
+function isLiveFixtureStatus(status: string | undefined): boolean {
+  const normalized = status?.trim().toLocaleLowerCase("fr-FR") ?? "";
+  return normalized === "en direct" || normalized === "mi-temps" || normalized === "en live";
+}
 
 type RiskLevel = "very-safe" | "safe" | "medium" | "bold" | "very-risky";
 type CombinationsTab = "fixtures" | "ai";
@@ -154,6 +164,9 @@ export default function CombinationsPage() {
   const [scorerCoupon, setScorerCoupon] = useState<GeneratedScorerCoupon | null>(null);
   const [savedStatisticCombinations, setSavedStatisticCombinations] = useState<SavedStatisticCombination[]>([]);
   const [scorerSaveNotice, setScorerSaveNotice] = useState("");
+  const [aiAnalyses, setAiAnalyses] = useState<LiveMatchAnalysis[]>([]);
+  const [aiAnalysing, setAiAnalysing] = useState(false);
+  const [aiError, setAiError] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -332,9 +345,7 @@ export default function CombinationsPage() {
           );
 
         const live = livePayload.fixtures
-          .filter(fixture =>
-            ["en live", "mi-temps"].includes(fixture.status?.trim().toLocaleLowerCase("fr-FR") ?? "")
-          )
+          .filter(fixture => isLiveFixtureStatus(fixture.status))
           .sort((first, second) =>
             `${first.date}T${first.time}`.localeCompare(`${second.date}T${second.time}`)
           );
@@ -365,7 +376,7 @@ export default function CombinationsPage() {
   );
   const locale = language === "fr" ? "fr-FR" : "en-GB";
   const relevantFixtures = liveOnly
-    ? fixtures.filter(fixture => ["en live", "mi-temps"].includes(fixture.status?.trim().toLocaleLowerCase("fr-FR") ?? ""))
+    ? fixtures.filter(fixture => isLiveFixtureStatus(fixture.status))
     : fixtures;
   const normalizedFixtureQuery = normalizeSearchText(fixtureQuery);
   const searchedFixtures = normalizedFixtureQuery
@@ -460,6 +471,41 @@ export default function CombinationsPage() {
         : text("Impossible de proposer les combinaisons.", "Unable to suggest combinations."));
     } finally {
       setGenerating(false);
+    }
+  };
+
+  /** Analyse IA (moteur expert local) des matchs en direct sélectionnés. */
+  const analyseLiveWithAI = async () => {
+    const liveIds = fixturesForCombination
+      .filter(fixture => isLiveFixtureStatus(fixture.status))
+      .map(fixture => fixture.id)
+      .slice(0, 8);
+    if (liveIds.length === 0) {
+      setAiAnalyses([]);
+      setAiError(text(
+        "Sélectionnez au moins un match en direct pour lancer l'analyse IA.",
+        "Select at least one live match to start the AI analysis."
+      ));
+      return;
+    }
+    setAiAnalysing(true);
+    setAiError("");
+    try {
+      const response = await postJson("/api/live/analysis", { fixtureIds: liveIds });
+      const payload = await response.json() as { analyses?: LiveMatchAnalysis[]; error?: string };
+      if (!response.ok || !Array.isArray(payload.analyses) || payload.analyses.length === 0) {
+        throw new Error(payload.error || text(
+          "Analyse impossible pour le moment.",
+          "Analysis unavailable right now."
+        ));
+      }
+      setAiAnalyses(payload.analyses);
+    } catch (error) {
+      setAiError(error instanceof Error
+        ? error.message
+        : text("Analyse impossible pour le moment.", "Analysis unavailable right now."));
+    } finally {
+      setAiAnalysing(false);
     }
   };
 
@@ -1500,13 +1546,26 @@ export default function CombinationsPage() {
             </button>
             <button
               type="button"
-              onClick={() => setShowAutoRiskOptions(current => !current)}
+              onClick={() => {
+                setShowAutoRiskOptions(false);
+                void generateAutoCombination(riskLevel);
+              }}
               disabled={authLoading || !canGenerateCombination || loading || generating || relevantFixtures.length === 0}
               className="rounded-lg bg-green-600 px-5 py-3 text-sm font-bold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {generating
                 ? text("Recherche de la combinaison…", "Finding a combination…")
                 : text("Trouver ma combinaison", "Find my combination")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAutoRiskOptions(current => !current)}
+              disabled={generating}
+              className="rounded-lg border border-gray-700 px-5 py-3 text-sm font-semibold text-gray-200 hover:border-green-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {showAutoRiskOptions
+                ? text("Masquer les risques", "Hide risk levels")
+                : text("Niveau de risque", "Risk level")}
             </button>
           </div>
         </div>
@@ -1560,7 +1619,10 @@ export default function CombinationsPage() {
         <div className="mt-4 flex flex-wrap gap-3">
           <button
             type="button"
-            onClick={() => setShowRiskOptions(current => !current)}
+            onClick={() => {
+              setShowRiskOptions(false);
+              void generateCombinations(false, suggestionCount || 3, riskLevel);
+            }}
             disabled={authLoading || !canGenerateCombination || fixturesForCombination.length === 0 || generating}
             className="rounded-lg bg-green-600 px-5 py-3 text-sm font-bold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -1569,6 +1631,26 @@ export default function CombinationsPage() {
               : suggestionCount < 3
                 ? text(`Proposer ${suggestionCount} combinaison(s)`, `Suggest ${suggestionCount} combination(s)`)
                 : text("Proposer 3 combinaisons", "Suggest 3 combinations")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowRiskOptions(current => !current)}
+            disabled={generating}
+            className="rounded-lg border border-gray-700 px-5 py-3 text-sm font-semibold text-gray-200 hover:border-green-600 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {showRiskOptions
+              ? text("Masquer les risques", "Hide risk levels")
+              : text("Niveau de risque", "Risk level")}
+          </button>
+          <button
+            type="button"
+            onClick={() => void analyseLiveWithAI()}
+            disabled={aiAnalysing || generating}
+            className="rounded-lg border border-purple-700 bg-purple-950/30 px-5 py-3 text-sm font-semibold text-purple-200 hover:border-purple-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {aiAnalysing
+              ? text("Analyse IA en cours…", "AI analysis running…")
+              : text("🧠 Analyse IA (live)", "🧠 AI analysis (live)")}
           </button>
           <button
             type="button"
@@ -1705,6 +1787,116 @@ export default function CombinationsPage() {
                 getCouponPickStatuses(safeCoupon)
               )}
             </footer>
+          </section>
+        )}
+
+        {(aiAnalyses.length > 0 || aiError) && (
+          <section className="mt-10 rounded-2xl border border-purple-800/70 bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 p-4 shadow-xl shadow-black/30 sm:p-6" aria-label={text("Analyse IA des matchs en direct", "AI analysis of live matches")}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-xl font-bold text-white">
+                <span aria-hidden="true">🧠</span>
+                {text("Analyse IA — matchs en direct", "AI analysis — live matches")}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setAiAnalyses([])}
+                className="rounded-lg border border-gray-700 px-3 py-1.5 text-xs font-semibold text-gray-300 hover:border-purple-600"
+              >
+                {text("Masquer", "Hide")}
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-gray-400">
+              {text(
+                "Moteur expert local : croise score, temps restant, rythme et statistiques en direct. Seuls les événements encore ouverts sont proposés (jamais déjà gagnés ni perdus).",
+                "Local expert engine: cross-checks score, remaining time, pace and live stats. Only still-open events are suggested (never already won or lost)."
+              )}
+            </p>
+            {aiError && (
+              <p role="alert" className="mt-3 rounded-lg border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">{aiError}</p>
+            )}
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              {aiAnalyses.map(analysis => {
+                const expectedGoals = analysis.expectedGoalsRemaining.toFixed(1).replace(".", ",");
+                const expectedLabel = analysis.expectedGoalsRemaining < 2
+                  ? text("but attendu d'ici la fin", "goal expected until full time")
+                  : text("buts attendus d'ici la fin", "goals expected until full time");
+                return (
+                  <article key={analysis.fixtureId} className="flex flex-col rounded-xl border border-gray-800 bg-gray-950/70 p-4">
+                    <header className="flex items-start justify-between gap-3">
+                      <h3 className="text-sm font-bold leading-snug text-white">{`${analysis.homeTeam} — ${analysis.awayTeam}`}</h3>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <span className="rounded-md border border-green-700 bg-green-950/50 px-2 py-1 text-xs font-bold text-green-300">{analysis.score}</span>
+                        <span className="rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-xs font-semibold text-gray-300">{`${analysis.minute}'`}</span>
+                      </div>
+                    </header>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                        analysis.tempo === "offensive"
+                          ? "border border-orange-700 bg-orange-950/40 text-orange-300"
+                          : analysis.tempo === "closed"
+                            ? "border border-sky-800 bg-sky-950/40 text-sky-300"
+                            : "border border-gray-700 bg-gray-900 text-gray-300"
+                      }`}>
+                        {analysis.tempo === "offensive"
+                          ? text("⚡ Rythme offensif", "⚡ Offensive pace")
+                          : analysis.tempo === "closed"
+                            ? text("🛡️ Match fermé", "🛡️ Closed match")
+                            : text("⚖️ Rythme équilibré", "⚖️ Balanced pace")}
+                      </span>
+                      <span className="rounded-full border border-purple-800 bg-purple-950/30 px-2.5 py-1 text-[11px] font-semibold text-purple-200">
+                        {`≈ ${expectedGoals} ${expectedLabel}`}
+                      </span>
+                      <span className="rounded-full border border-gray-700 bg-gray-900 px-2.5 py-1 text-[11px] font-semibold text-gray-300">
+                        {text(`${analysis.remainingMinutes} min restantes`, `${analysis.remainingMinutes} min remaining`)}
+                      </span>
+                    </div>
+                    <ul className="mt-3 space-y-1.5">
+                      {analysis.insights.map((insight, index) => (
+                        <li key={index} className="flex gap-2 text-xs leading-relaxed text-gray-300">
+                          <span aria-hidden="true" className="mt-0.5 shrink-0 text-green-500">●</span>
+                          <span>{text(insight.fr, insight.en)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {analysis.recommendations.length > 0 && (
+                      <div className="mt-4 border-t border-gray-800 pt-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-green-300">
+                          {text("Événements les plus réalistes", "Most realistic events")}
+                        </p>
+                        <ul className="mt-2 space-y-2">
+                          {analysis.recommendations.map((recommendation, index) => {
+                            const chance = Math.round(recommendation.probability * 100);
+                            const chanceStyle = chance >= 70
+                              ? "border-green-800 bg-green-950/50 text-green-300"
+                              : chance >= 45
+                                ? "border-amber-800 bg-amber-950/40 text-amber-300"
+                                : "border-gray-700 bg-gray-900 text-gray-300";
+                            return (
+                              <li key={index} className="rounded-lg border border-gray-800 bg-gray-900/80 p-3">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="flex items-center gap-2 text-xs font-semibold text-white">
+                                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-800 text-[10px] font-bold text-gray-300">{index + 1}</span>
+                                    {text(recommendation.label.fr, recommendation.label.en)}
+                                  </span>
+                                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-bold ${chanceStyle}`}>{`${chance} %`}</span>
+                                </div>
+                                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-800">
+                                  <div
+                                    className={`h-full rounded-full ${chance >= 70 ? "bg-gradient-to-r from-green-600 to-green-400" : chance >= 45 ? "bg-gradient-to-r from-amber-600 to-amber-400" : "bg-gradient-to-r from-gray-600 to-gray-400"}`}
+                                    style={{ width: `${chance}%` }}
+                                  />
+                                </div>
+                                <p className="mt-2 text-[11px] leading-relaxed text-gray-400">{text(recommendation.rationale.fr, recommendation.rationale.en)}</p>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
           </section>
         )}
 
