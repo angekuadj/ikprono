@@ -585,6 +585,107 @@ export default function CombinationsPage() {
     }
   };
 
+  /**
+   * Convertit une combinaison de buteurs en combinaison standard afin de la
+   * ranger dans le panier (onglet « Déjà générées »), comme les autres
+   * combinaisons. Aucune probabilité n'est fournie : le taux reste indéfini.
+   */
+  const scorerCouponToGeneratedCoupon = (coupon: GeneratedScorerCoupon): GeneratedCoupon => ({
+    level: "medium",
+    title: coupon.title,
+    description: [
+      coupon.description,
+      ...coupon.matches.map(match =>
+        `${match.homeTeam} — ${match.homeScorer?.name ?? text("Aucun buteur", "No scorer")} · ` +
+        `${match.awayTeam} — ${match.awayScorer?.name ?? text("Aucun buteur", "No scorer")}`
+      ),
+    ].join(" · "),
+    matches: coupon.matches.map(match => ({
+      fixtureId: match.fixtureId,
+      homeTeam: match.homeTeam,
+      awayTeam: match.awayTeam,
+      picks: [
+        ...(match.homeScorer
+          ? [{ market: "scorer" as const, selection: "home-scorer" as const, historicalRate: null, sampleSize: 0 }]
+          : []),
+        ...(match.awayScorer
+          ? [{ market: "scorer" as const, selection: "away-scorer" as const, historicalRate: null, sampleSize: 0 }]
+          : []),
+      ],
+    })),
+  });
+
+  const saveScorerCombination = () => {
+    setActionError("");
+    setActionNotice("");
+    setScorerSaveNotice("");
+    if (!scorerCoupon) return;
+    try {
+      // 1. Enregistrement local de la combinaison statistique (historique de l'appareil).
+      const saved = readSavedStatisticCombinations();
+      const newSaved: SavedStatisticCombination = {
+        id: generateUUID(),
+        createdAt: new Date().toISOString(),
+        coupon: {
+          ...scorerCoupon,
+          matches: scorerCoupon.matches.map(match => ({
+            fixtureId: match.fixtureId,
+            homeTeam: match.homeTeam,
+            awayTeam: match.awayTeam,
+            market: "scorers" as StatisticMarket,
+            selection: "over" as const,
+            line: 0.5,
+            historicalRate: 70,
+            sampleSize: 100,
+          })),
+          estimatedCombinedRate: 70,
+          riskLevel: "medium",
+        },
+      };
+      writeSavedStatisticCombinations([...saved, newSaved]);
+      setSavedStatisticCombinations([...saved, newSaved]);
+
+      // 2. Ajout au panier, onglet « Déjà générées ».
+      const fixturesById = new Map(fixtures.map(fixture => [fixture.id, fixture]));
+      const matchedFixtures = scorerCoupon.matches
+        .map(match => fixturesById.get(match.fixtureId))
+        .filter((fixture): fixture is Fixture => fixture !== undefined);
+      if (matchedFixtures.length === 0) {
+        throw new Error(text(
+          "Les rencontres de cette combinaison ne sont plus disponibles.",
+          "This combination's fixtures are no longer available."
+        ));
+      }
+      const generatedCoupon = scorerCouponToGeneratedCoupon(scorerCoupon);
+      const stored = readGeneratedCombinations();
+      const duplicate = stored.some(combination => JSON.stringify(combination.coupon) === JSON.stringify(generatedCoupon));
+      if (!duplicate) {
+        writeGeneratedCombinations([
+          ...stored,
+          {
+            id: generateUUID(),
+            createdAt: new Date().toISOString(),
+            coupon: generatedCoupon,
+            fixtures: matchedFixtures,
+          },
+        ]);
+      }
+      setScorerSaveNotice(duplicate
+        ? text(
+          "Cette combinaison figure déjà dans le panier (onglet « Déjà générées »).",
+          "This combination is already in your basket (“Already generated” tab)."
+        )
+        : text(
+          "Combinaison ajoutée au panier (onglet « Déjà générées »).",
+          "Combination added to your basket (“Already generated” tab)."
+        ));
+    } catch (error) {
+      setActionError(error instanceof Error
+        ? error.message
+        : text("Impossible d'enregistrer la combinaison.", "Unable to save combination."));
+    }
+  };
+
   const addFixturesToBasket = (fixturesToAdd: Fixture[]) => {
     setActionError("");
     try {
@@ -1852,41 +1953,19 @@ export default function CombinationsPage() {
                 <div className="mt-4 space-y-3">
                   <button
                     type="button"
-                    onClick={() => {
-                      setActionError("");
-                      setActionNotice("");
-                      try {
-                        const saved = readSavedStatisticCombinations();
-                        const newSaved: SavedStatisticCombination = {
-                          id: generateUUID(),
-                          createdAt: new Date().toISOString(),
-                          coupon: {
-                            ...scorerCoupon,
-                            matches: scorerCoupon.matches.map(match => ({
-                              fixtureId: match.fixtureId,
-                              homeTeam: match.homeTeam,
-                              awayTeam: match.awayTeam,
-                              market: "scorers" as StatisticMarket,
-                              selection: "over" as const,
-                              line: 0.5,
-                              historicalRate: 70,
-                              sampleSize: 100,
-                            })),
-                            estimatedCombinedRate: 70,
-                            riskLevel: "medium",
-                          },
-                        };
-                        writeSavedStatisticCombinations([...saved, newSaved]);
-                        setSavedStatisticCombinations([...saved, newSaved]);
-                        setActionNotice(text("La combinaison a été enregistrée.", "Combination saved."));
-                      } catch (error) {
-                        setActionError(error instanceof Error ? error.message : text("Impossible d'enregistrer la combinaison.", "Unable to save combination."));
-                      }
-                    }}
+                    onClick={saveScorerCombination}
                     className="rounded-lg border border-green-700 bg-green-950/40 px-3 py-2 text-xs font-semibold text-green-200 transition hover:bg-green-900/50"
                   >
                     {text("Enregistrer", "Save")}
                   </button>
+                  {scorerSaveNotice && (
+                    <p role="status" className="rounded-lg border border-green-800 bg-green-950/30 px-3 py-2 text-xs text-green-200">
+                      {scorerSaveNotice}{" "}
+                      <Link href="/basket" className="font-semibold underline hover:text-green-100">
+                        {text("Ouvrir le panier →", "Open basket →")}
+                      </Link>
+                    </p>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -1896,6 +1975,22 @@ export default function CombinationsPage() {
                 >
                   {generating ? text("Génération…", "Generating…") : text("Proposer une autre", "Suggest another")}
                 </button>
+                {!authLoading && !canGenerateCombination && (
+                  <p className="mt-2 text-xs text-amber-300">
+                    {text(
+                      "Quota de combinaisons du jour atteint. Souscrivez à une offre depuis la page Abonnement pour continuer.",
+                      "You have reached today's combination quota. Subscribe from the Plans page to continue."
+                    )}{" "}
+                    <Link href="/payment" className="font-semibold underline hover:text-amber-200">
+                      {text("Voir les offres →", "See plans →")}
+                    </Link>
+                  </p>
+                )}
+                {!authLoading && canGenerateCombination && generating && (
+                  <p className="mt-2 text-xs text-gray-400">
+                    {text("Génération en cours, veuillez patienter.", "Generating, please wait.")}
+                  </p>
+                )}
               </section>
             )}
 
