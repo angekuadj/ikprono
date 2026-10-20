@@ -52,6 +52,14 @@ export function settleCouponPick(pick: CouponPick, score: [number, number]): boo
       case "under-1.5": return homeGoals + awayGoals <= 1;
       case "under-2.5": return homeGoals + awayGoals <= 2;
       case "under-3.5": return homeGoals + awayGoals <= 3;
+      case "home-over-1.5": return homeGoals >= 2;
+      case "away-over-1.5": return awayGoals >= 2;
+      case "home-under-1.5": return homeGoals <= 1;
+      case "away-under-1.5": return awayGoals <= 1;
+      case "home-0-1": return homeGoals >= 0 && homeGoals <= 1;
+      case "home-1-3": return homeGoals >= 1 && homeGoals <= 3;
+      case "away-0-1": return awayGoals >= 0 && awayGoals <= 1;
+      case "away-1-3": return awayGoals >= 1 && awayGoals <= 3;
       default: return null;
     }
   }
@@ -63,6 +71,8 @@ export function settleCouponPick(pick: CouponPick, score: [number, number]): boo
       case "away-1.5": return goalDiff <= -2;
       case "home-2.5": return goalDiff >= 3;
       case "away-2.5": return goalDiff <= -3;
+      case "home+1.5": return goalDiff >= -1;
+      case "away+1.5": return goalDiff <= 1;
       default: return null;
     }
   }
