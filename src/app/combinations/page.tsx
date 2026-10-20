@@ -12,10 +12,12 @@ import { uniqueGeneratedCoupons, type GeneratedCoupon, type GeneratedStatisticCo
 import type { Fixture, FixtureResponse } from "@/lib/fixtures";
 import {
   COMBINATION_DAILY_LIMIT,
+  COMBINATIONS_MONTHLY_PRICE_FCFA,
   GUEST_COMBINATION_COUNT_KEY,
   GUEST_COMBINATION_LIMIT,
-  MONTHLY_PRICE_FCFA,
+  PACK_MONTHLY_PRICE_FCFA,
   TRIAL_DAILY_LIMIT,
+  TV_DAILY_PRICE_FCFA,
   recordCombinationUsage,
   type ServerEntitlements,
 } from "@/lib/subscription";
@@ -1034,8 +1036,8 @@ export default function CombinationsPage() {
                 )
                 : needsOffer
                   ? text(
-                    `Votre essai gratuit est terminé. Choisissez une offre à ${MONTHLY_PRICE_FCFA} FCFA/mois : TV, Combinaisons (${COMBINATION_DAILY_LIMIT}/jour) ou les deux.`,
-                    `Your free trial is over. Choose a plan at ${MONTHLY_PRICE_FCFA} XOF/month: TV, Combinations (${COMBINATION_DAILY_LIMIT}/day) or both.`
+                    `Votre essai gratuit est terminé. Choisissez une offre : Combinaisons à ${COMBINATIONS_MONTHLY_PRICE_FCFA} FCFA/mois (${COMBINATION_DAILY_LIMIT}/jour), TV à ${TV_DAILY_PRICE_FCFA} FCFA/jour, ou le pack Combi + TV à ${PACK_MONTHLY_PRICE_FCFA} FCFA/mois.`,
+                    `Your free trial is over. Choose a plan: Combinations at ${COMBINATIONS_MONTHLY_PRICE_FCFA} XOF/month (${COMBINATION_DAILY_LIMIT}/day), TV at ${TV_DAILY_PRICE_FCFA} XOF/day, or the Combi + TV bundle at ${PACK_MONTHLY_PRICE_FCFA} XOF/month.`
                   )
                   : dailyLimitReached
                     ? text(

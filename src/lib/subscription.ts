@@ -5,12 +5,20 @@
  *  - Un visiteur non connecté génère 2 combinaisons gratuites, puis doit se connecter.
  *  - À la première connexion, un essai de 3 jours démarre : accès complet (live + combinaisons),
  *    plafonné à 4 générations de combinaisons par jour.
- *  - Après l'essai : l'offre TV (vidéos en direct) et l'offre Combinaisons (5 générations/jour)
- *    coûtent chacune 2 000 FCFA/mois, séparément ou ensemble.
+ *  - Après l'essai : l'offre TV (vidéos en direct) se paie 300 FCFA par jour (accès 24 h),
+ *    l'offre Combinaisons (5 générations/jour) 1 500 FCFA/mois, et le pack Combinaisons + TV
+ *    3 000 FCFA/mois donne les deux accès.
  *  - Sans offre TV, l'accès aux vidéos en direct est limité aux matchs suivis dans le panier.
  */
 
-export const MONTHLY_PRICE_FCFA = 2000;
+/** Prix de l'offre TV, payé à la journée (accès aux vidéos pendant 24 h). */
+export const TV_DAILY_PRICE_FCFA = 300;
+/** Durée d'accès TV ouverte par un paiement à la journée. */
+export const TV_ACCESS_HOURS = 24;
+/** Prix de l'offre Combinaisons (mensuel). */
+export const COMBINATIONS_MONTHLY_PRICE_FCFA = 1500;
+/** Prix du pack Combinaisons + TV (mensuel). */
+export const PACK_MONTHLY_PRICE_FCFA = 3000;
 
 export const OFFER_LABELS = {
   tv: { fr: "Offre TV", en: "TV plan" },
@@ -31,7 +39,7 @@ const SUBSCRIPTION_PREFIX = "ikprono_subscription_";
 const USAGE_PREFIX = "ikprono_combination_usage_";
 const SUBSCRIPTION_EVENT = "ikprono-subscription-change";
 
-export type SubscriptionOffer = "tv" | "combinations";
+export type SubscriptionOffer = "tv" | "combinations" | "pack";
 
 /** Date au format YYYY-MM-DD dans le fuseau local. */
 export function localDay(date: Date = new Date()): string {
@@ -53,6 +61,8 @@ interface StoredSubscription {
   trialStartedAt: string;
   trialEndsAt: string;
   offers: SubscriptionOffer[];
+  /** Fin de l'accès TV ouvert par un paiement à la journée (ISO 8601). */
+  tvAccessUntil?: string;
   updatedAt?: string;
 }
 
@@ -63,7 +73,17 @@ interface StoredUsage {
 }
 
 function isOffer(value: unknown): value is SubscriptionOffer {
-  return value === "tv" || value === "combinations";
+  return value === "tv" || value === "combinations" || value === "pack";
+}
+
+/** Fin de l'accès TV ouverte par un nouveau paiement à la journée. */
+function nextTvAccessUntil(): string {
+  return new Date(Date.now() + TV_ACCESS_HOURS * 3_600_000).toISOString();
+}
+
+/** Vrai si l'accès TV payé à la journée est encore valable. */
+export function isTvDayValid(subscription: { tvAccessUntil?: string } | null | undefined): boolean {
+  return !!subscription?.tvAccessUntil && Date.now() < new Date(subscription.tvAccessUntil).getTime();
 }
 
 function parseSubscription(value: string | null): StoredSubscription | null {
@@ -121,10 +141,27 @@ export function ensureTrialStarted(accountId: string): StoredSubscription {
 export function toggleOffer(accountId: string, offer: SubscriptionOffer): StoredSubscription | null {
   const subscription = readSubscription(accountId);
   if (!subscription) return null;
-  const offers = subscription.offers.includes(offer)
-    ? subscription.offers.filter(item => item !== offer)
-    : [...subscription.offers, offer];
-  const next = { ...subscription, offers };
+  const tvDayValid = isTvDayValid(subscription);
+  let offers = subscription.offers;
+  let tvAccessUntil = subscription.tvAccessUntil;
+
+  if (subscription.offers.includes(offer)) {
+    if (offer === "tv" && tvDayValid) {
+      // Désactivation de l'accès TV en cours de journée.
+      offers = offers.filter(item => item !== offer);
+      tvAccessUntil = undefined;
+    } else if (offer === "tv") {
+      // Journée TV expirée : nouveau paiement pour une nouvelle journée.
+      tvAccessUntil = nextTvAccessUntil();
+    } else {
+      offers = offers.filter(item => item !== offer);
+    }
+  } else {
+    offers = [...offers, offer];
+    if (offer === "tv") tvAccessUntil = nextTvAccessUntil();
+  }
+
+  const next: StoredSubscription = { ...subscription, offers, tvAccessUntil };
   writeSubscription(accountId, next);
   return next;
 }
@@ -214,8 +251,11 @@ export function getEntitlements({
   const usage = readUsage(accountId, today);
   const subscription = isAuthenticated ? readSubscription(accountId) : null;
   const trialActive = !!subscription && today < subscription.trialEndsAt;
-  const hasTvAccess = !!subscription && (trialActive || subscription.offers.includes("tv"));
-  const hasCombinationAccess = !!subscription && (trialActive || subscription.offers.includes("combinations"));
+  const hasTvAccess = !!subscription
+    && (trialActive || subscription.offers.includes("pack")
+      || (subscription.offers.includes("tv") && isTvDayValid(subscription)));
+  const hasCombinationAccess = !!subscription
+    && (trialActive || subscription.offers.includes("combinations") || subscription.offers.includes("pack"));
 
   if (role === "admin") {
     return {

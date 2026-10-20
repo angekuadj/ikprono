@@ -22,7 +22,7 @@ import type { SubscriptionOffer } from "@/lib/subscription";
 export const dynamic = "force-dynamic";
 
 function isOffer(value: unknown): value is SubscriptionOffer {
-  return value === "tv" || value === "combinations";
+  return value === "tv" || value === "combinations" || value === "pack";
 }
 
 export async function POST(request: NextRequest) {

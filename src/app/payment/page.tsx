@@ -6,7 +6,10 @@ import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
 import {
   COMBINATION_DAILY_LIMIT,
-  MONTHLY_PRICE_FCFA,
+  COMBINATIONS_MONTHLY_PRICE_FCFA,
+  PACK_MONTHLY_PRICE_FCFA,
+  TV_ACCESS_HOURS,
+  TV_DAILY_PRICE_FCFA,
   TRIAL_DAYS,
   TRIAL_DAILY_LIMIT,
   type SubscriptionOffer,
@@ -19,6 +22,10 @@ interface OfferDefinition {
   titleEn: string;
   descriptionFr: string;
   descriptionEn: string;
+  price: number;
+  periodFr: string;
+  periodEn: string;
+  recommended?: boolean;
   featuresFr: string[];
   featuresEn: string[];
 }
@@ -31,15 +38,18 @@ const OFFERS: OfferDefinition[] = [
     titleEn: "TV plan",
     descriptionFr: "Regardez les matchs en direct sur le site, sans restriction.",
     descriptionEn: "Watch live matches on the site without restrictions.",
+    price: TV_DAILY_PRICE_FCFA,
+    periodFr: " / jour",
+    periodEn: " / day",
     featuresFr: [
       "Vidéos des matchs en direct",
+      "Accès valable 24 h à partir du paiement",
       "Tous les matchs, même hors de vos combinaisons",
-      "Scores et temps forts en temps réel",
     ],
     featuresEn: [
       "Live match videos",
+      "24-hour access from payment",
       "Every match, even outside your combinations",
-      "Real-time scores and highlights",
     ],
   },
   {
@@ -49,6 +59,9 @@ const OFFERS: OfferDefinition[] = [
     titleEn: "Combinations plan",
     descriptionFr: `Générez jusqu’à ${COMBINATION_DAILY_LIMIT} combinaisons par jour.`,
     descriptionEn: `Generate up to ${COMBINATION_DAILY_LIMIT} combinations per day.`,
+    price: COMBINATIONS_MONTHLY_PRICE_FCFA,
+    periodFr: " / mois",
+    periodEn: " / month",
     featuresFr: [
       `${COMBINATION_DAILY_LIMIT} combinaisons par jour`,
       "Sélection par rencontres, par équipes ou IA",
@@ -58,6 +71,28 @@ const OFFERS: OfferDefinition[] = [
       `${COMBINATION_DAILY_LIMIT} combinations per day`,
       "Selection by fixtures, teams or AI",
       "Result tracking and PDF export",
+    ],
+  },
+  {
+    id: "pack",
+    emoji: "🎁",
+    titleFr: "Pack Combinaisons + TV",
+    titleEn: "Combinations + TV bundle",
+    descriptionFr: `Les deux offres ensemble : ${COMBINATION_DAILY_LIMIT} combinaisons par jour et toutes les vidéos en direct.`,
+    descriptionEn: `Both plans together: ${COMBINATION_DAILY_LIMIT} combinations per day and every live video.`,
+    price: PACK_MONTHLY_PRICE_FCFA,
+    periodFr: " / mois",
+    periodEn: " / month",
+    recommended: true,
+    featuresFr: [
+      `${COMBINATION_DAILY_LIMIT} combinaisons par jour`,
+      "Vidéos des matchs en direct, sans restriction",
+      "Moins cher que les deux offres séparées",
+    ],
+    featuresEn: [
+      `${COMBINATION_DAILY_LIMIT} combinations per day`,
+      "Unrestricted live match videos",
+      "Cheaper than both plans separately",
     ],
   },
 ];
@@ -79,17 +114,25 @@ export default function PaymentPage() {
       setNotice(text(
         wasActive
           ? `${offer.titleFr} a été désactivée.`
-          : `${offer.titleFr} est maintenant active.`,
+          : offerId === "tv"
+            ? `${offer.titleFr} est active pour les prochaines ${TV_ACCESS_HOURS} h.`
+            : `${offer.titleFr} est maintenant active.`,
         wasActive
           ? `${offer.titleEn} has been turned off.`
-          : `${offer.titleEn} is now active.`
+          : offerId === "tv"
+            ? `${offer.titleEn} is active for the next ${TV_ACCESS_HOURS} hours.`
+            : `${offer.titleEn} is now active.`
       ));
     } finally {
       setBusyOffer(null);
     }
   };
 
-  const isActive = (offerId: SubscriptionOffer) => entitlements.offers.includes(offerId);
+  const isActive = (offerId: SubscriptionOffer) =>
+    offerId === "tv"
+      // L'offre TV n'est « active » que pendant la journée payée.
+      ? entitlements.offers.includes("tv") && (entitlements.trialActive || entitlements.hasTvAccess)
+      : entitlements.offers.includes(offerId);
 
   return (
     <div className="min-h-screen bg-black py-12 px-4 sm:px-6 lg:px-8">
@@ -100,8 +143,8 @@ export default function PaymentPage() {
           </h1>
           <p className="text-xl text-gray-400 max-w-2xl mx-auto">
             {text(
-              `Chaque offre coûte ${MONTHLY_PRICE_FCFA} FCFA par mois. Prenez-en une ou les deux.`,
-              `Each plan costs ${MONTHLY_PRICE_FCFA} XOF per month. Take one or both.`
+              `Offres à la carte : TV ${TV_DAILY_PRICE_FCFA} FCFA/jour, Combinaisons ${COMBINATIONS_MONTHLY_PRICE_FCFA} FCFA/mois, ou le pack Combi + TV à ${PACK_MONTHLY_PRICE_FCFA} FCFA/mois.`,
+              `Pick what fits you: TV ${TV_DAILY_PRICE_FCFA} XOF/day, Combinations ${COMBINATIONS_MONTHLY_PRICE_FCFA} XOF/month, or the Combi + TV bundle at ${PACK_MONTHLY_PRICE_FCFA} XOF/month.`
             )}
           </p>
         </div>
@@ -161,7 +204,7 @@ export default function PaymentPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10 max-w-4xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-10 max-w-6xl mx-auto">
           {OFFERS.map(offer => {
             const active = isActive(offer.id);
             return (
@@ -176,6 +219,11 @@ export default function PaymentPage() {
                     {text("Active", "Active")}
                   </div>
                 )}
+                {!active && offer.recommended && (
+                  <div className="absolute top-0 left-0 bg-gradient-to-r from-green-600 to-emerald-700 text-white px-4 py-1 text-xs font-semibold uppercase tracking-wide">
+                    {text("Recommandé", "Recommended")}
+                  </div>
+                )}
                 <div className="p-8">
                   <h3 className="text-2xl font-bold text-white mb-2">
                     <span aria-hidden="true" className="mr-2">{offer.emoji}</span>
@@ -185,9 +233,9 @@ export default function PaymentPage() {
 
                   <div className="mb-6">
                     <span className="text-5xl font-bold text-white gradient-text">
-                      {MONTHLY_PRICE_FCFA.toLocaleString("fr-FR")} FCFA
+                      {offer.price.toLocaleString("fr-FR")} FCFA
                     </span>
-                    <span className="text-gray-400">{text(" / mois", " / month")}</span>
+                    <span className="text-gray-400">{text(offer.periodFr, offer.periodEn)}</span>
                   </div>
 
                   <ul className="space-y-4 mb-8">
@@ -331,8 +379,19 @@ export default function PaymentPage() {
               </h3>
               <p className="text-gray-400">
                 {text(
-                  `Oui. Les deux offres coûtent ${MONTHLY_PRICE_FCFA} FCFA chacune, soit ${(MONTHLY_PRICE_FCFA * 2).toLocaleString("fr-FR")} FCFA par mois si vous les prenez ensemble.`,
-                  `Yes. Each plan costs ${MONTHLY_PRICE_FCFA} XOF, so ${(MONTHLY_PRICE_FCFA * 2).toLocaleString("en-GB")} XOF per month for both.`
+                  `Oui : prenez le pack Combinaisons + TV à ${PACK_MONTHLY_PRICE_FCFA} FCFA/mois. Il coûte moins cher que l'offre Combinaisons (${COMBINATIONS_MONTHLY_PRICE_FCFA} FCFA/mois) suivie de l'offre TV à ${TV_DAILY_PRICE_FCFA} FCFA/jour.`,
+                  `Yes: get the Combinations + TV bundle at ${PACK_MONTHLY_PRICE_FCFA} XOF/month. It costs less than the Combinations plan (${COMBINATIONS_MONTHLY_PRICE_FCFA} XOF/month) plus the TV plan at ${TV_DAILY_PRICE_FCFA} XOF/day.`
+                )}
+              </p>
+            </div>
+            <div className="border-b border-gray-800 pb-4">
+              <h3 className="font-semibold text-white mb-2">
+                {text("Comment est facturée l'offre TV ?", "How is the TV plan billed?")}
+              </h3>
+              <p className="text-gray-400">
+                {text(
+                  `L'offre TV se paie à la journée : ${TV_DAILY_PRICE_FCFA} FCFA par paiement, et chaque paiement ouvre l'accès aux vidéos en direct pendant 24 h.`,
+                  `The TV plan is billed daily: ${TV_DAILY_PRICE_FCFA} XOF per payment, and each payment unlocks live videos for 24 hours.`
                 )}
               </p>
             </div>

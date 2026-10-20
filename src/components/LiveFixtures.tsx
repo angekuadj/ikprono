@@ -18,6 +18,7 @@ import {
   getFixtureCompetitionDisplay,
   isPinnedCompetition,
 } from "@/lib/competitionPriority";
+import { TV_DAILY_PRICE_FCFA } from "@/lib/subscription";
 import type { Fixture } from "@/lib/fixtures";
 
 interface MatchoraLiveMatch {
@@ -361,12 +362,12 @@ export default function LiveFixtures() {
           <p role="status" className="mb-5 rounded-lg border border-amber-700/60 bg-amber-950/40 p-4 text-sm text-amber-200">
             {isAuthenticated
               ? text(
-                "Votre accès aux vidéos en direct est limité aux matchs suivis dans votre panier. Prenez l’offre TV à 2 000 FCFA/mois pour regarder tous les matchs.",
-                "Your live video access is limited to matches tracked in your basket. Get the TV plan at 2,000 XOF/month to watch every match."
+                `Votre accès aux vidéos en direct est limité aux matchs suivis dans votre panier. Prenez l’offre TV à ${TV_DAILY_PRICE_FCFA} FCFA/jour pour regarder tous les matchs.`,
+                `Your live video access is limited to matches tracked in your basket. Get the TV plan at ${TV_DAILY_PRICE_FCFA} XOF/day to watch every match.`
               )
               : text(
-                "Connectez-vous pour profiter de 3 jours d’essai gratuit avec les vidéos en direct, puis choisissez l’offre TV à 2 000 FCFA/mois.",
-                "Sign in to enjoy a 3-day free trial with live videos, then choose the TV plan at 2,000 XOF/month."
+                `Connectez-vous pour profiter de 3 jours d’essai gratuit avec les vidéos en direct, puis choisissez l’offre TV à ${TV_DAILY_PRICE_FCFA} FCFA/jour.`,
+                `Sign in to enjoy a 3-day free trial with live videos, then choose the TV plan at ${TV_DAILY_PRICE_FCFA} XOF/day.`
               )}
             {" "}
             <Link href={isAuthenticated ? "/payment" : "/login?next=%2Flive"} className="font-semibold underline hover:text-amber-100">

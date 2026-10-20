@@ -1,6 +1,11 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
+import {
+  COMBINATIONS_MONTHLY_PRICE_FCFA,
+  PACK_MONTHLY_PRICE_FCFA,
+  TV_DAILY_PRICE_FCFA,
+} from "@/lib/subscription";
 
 export type Language = "fr" | "en";
 
@@ -45,7 +50,7 @@ const translations = {
     quotaTitle: "Vos 3 propositions gratuites sont utilisées",
     quotaDescription: "Passez à Premium pour continuer à générer des propositions sans limite.",
     premiumOffer: "Passer en Premium",
-    premiumPrice: "3 000 FCFA / mois",
+    premiumPrice: `Pack Combi + TV : ${PACK_MONTHLY_PRICE_FCFA} FCFA / mois`,
     later: "Plus tard",
     invalidOdds: "Veuillez entrer une cote valide (minimum 1.0)",
     tips: "Conseils d'utilisation",
@@ -82,7 +87,7 @@ const translations = {
     heroDescription: "Parcourez les rencontres de football, basketball et tennis par jour, semaine ou mois.",
     accessIkProno: "Accéder à IkProno",
     viewPredictions: "Voir les rencontres",
-    freeAccount: "Votre compte Standard inclut 3 sélections gratuites. Passez en Premium à 3 000 FCFA/mois pour davantage de sélections.",
+    freeAccount: `Votre compte Standard inclut 3 sélections gratuites. Passez au pack Combi + TV à ${PACK_MONTHLY_PRICE_FCFA} FCFA/mois, ou choisissez Combinaisons (${COMBINATIONS_MONTHLY_PRICE_FCFA} FCFA/mois) ou TV (${TV_DAILY_PRICE_FCFA} FCFA/jour).`,
     newAccountPlan: "À l'inscription, votre compte commence gratuitement avec 3 sélections de rencontres.",
     onboardingIntroEyebrow: "CALENDRIER · 3 SPORTS",
     onboardingIntroTitle: "Votre calendrier sportif personnalisé.",
@@ -191,7 +196,7 @@ const translations = {
     quotaTitle: "You have used your 3 free picks",
     quotaDescription: "Upgrade to Premium to keep generating unlimited picks.",
     premiumOffer: "Upgrade to Premium",
-    premiumPrice: "3,000 XOF / month",
+    premiumPrice: `Combi + TV bundle: ${PACK_MONTHLY_PRICE_FCFA} XOF / month`,
     later: "Maybe later",
     invalidOdds: "Please enter valid odds (minimum 1.0)",
     tips: "Tips",
@@ -228,7 +233,7 @@ const translations = {
     heroDescription: "Browse football, basketball, and tennis fixtures by day, week, or month.",
     accessIkProno: "Get started with IkProno",
     viewPredictions: "Browse fixtures",
-    freeAccount: "Your Standard account includes 3 free selections. Upgrade to Premium for 3,000 XOF/month for more selections.",
+    freeAccount: `Your Standard account includes 3 free selections. Get the Combi + TV bundle at ${PACK_MONTHLY_PRICE_FCFA} XOF/month, or choose Combinations (${COMBINATIONS_MONTHLY_PRICE_FCFA} XOF/month) or TV (${TV_DAILY_PRICE_FCFA} XOF/day).`,
     newAccountPlan: "Sign up for a free account with 3 fixture selections included.",
     onboardingIntroEyebrow: "CALENDAR · 3 SPORTS",
     onboardingIntroTitle: "Your personalized sports calendar.",

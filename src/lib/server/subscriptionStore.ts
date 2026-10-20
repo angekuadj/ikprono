@@ -1,7 +1,14 @@
 import { getApps, initializeApp, applicationDefault, type App } from "firebase-admin/app";
-import { getFirestore, type Firestore } from "firebase-admin/firestore";
+import { getFirestore, FieldValue, type Firestore } from "firebase-admin/firestore";
 import type { SubscriptionOffer } from "@/lib/subscription";
-import { COMBINATION_DAILY_LIMIT, GUEST_COMBINATION_LIMIT, TRIAL_DAILY_LIMIT, TRIAL_DAYS } from "@/lib/subscription";
+import {
+  COMBINATION_DAILY_LIMIT,
+  GUEST_COMBINATION_LIMIT,
+  isTvDayValid,
+  TRIAL_DAILY_LIMIT,
+  TRIAL_DAYS,
+  TV_ACCESS_HOURS,
+} from "@/lib/subscription";
 
 /**
  * Stockage serveur des abonnements et des quotas journaliers (source de vérité).
@@ -25,6 +32,8 @@ export interface ServerSubscription {
   trialStartedAt: string;
   trialEndsAt: string;
   offers: SubscriptionOffer[];
+  /** Fin de l'accès TV ouvert par un paiement à la journée (ISO 8601). */
+  tvAccessUntil?: string;
 }
 
 export interface ServerUsage {
@@ -115,7 +124,7 @@ export async function isAdminUser(db: Firestore, accountKey: string): Promise<bo
 }
 
 function isOffer(value: unknown): value is SubscriptionOffer {
-  return value === "tv" || value === "combinations";
+  return value === "tv" || value === "combinations" || value === "pack";
 }
 
 function toSubscription(data: Record<string, unknown> | undefined): ServerSubscription | null {
@@ -124,7 +133,8 @@ function toSubscription(data: Record<string, unknown> | undefined): ServerSubscr
   const trialEndsAt = typeof data.trialEndsAt === "string" ? data.trialEndsAt : null;
   if (!trialStartedAt || !trialEndsAt) return null;
   const offers = Array.isArray(data.offers) ? data.offers.filter(isOffer) : [];
-  return { trialStartedAt, trialEndsAt, offers };
+  const tvAccessUntil = typeof data.tvAccessUntil === "string" ? data.tvAccessUntil : undefined;
+  return { trialStartedAt, trialEndsAt, offers, tvAccessUntil };
 }
 
 function toUsage(data: Record<string, unknown> | undefined, today: string): ServerUsage {
@@ -174,7 +184,11 @@ export async function ensureTrial(
   return { subscription, usage: state.usage };
 }
 
-/** Active ou désactive une offre, en démarrant l'essai au besoin. */
+/** Active ou désactive une offre, en démarrant l'essai au besoin.
+ *
+ * L'offre TV est payée à la journée : son activation ouvre un accès de
+ * `TV_ACCESS_HOURS` heures ; une TV expirée se rachète pour une nouvelle journée.
+ */
 export async function setOffer(
   db: Firestore,
   accountKey: string,
@@ -184,12 +198,35 @@ export async function setOffer(
   const ensured = await ensureTrial(db, accountKey, state);
   const subscription = ensured.subscription;
   if (!subscription) return ensured;
-  const offers = subscription.offers.includes(offer)
-    ? subscription.offers.filter(item => item !== offer)
-    : [...subscription.offers, offer];
-  const next: ServerSubscription = { ...subscription, offers };
-  await db.collection(SUBSCRIPTIONS_COLLECTION).doc(accountKey).set({ offers }, { merge: true });
-  return { subscription: next, usage: ensured.usage };
+
+  const update: Record<string, unknown> = {};
+  let offers = subscription.offers;
+  let tvAccessUntil = subscription.tvAccessUntil;
+
+  if (subscription.offers.includes(offer)) {
+    if (offer === "tv" && isTvDayValid(subscription)) {
+      // Désactivation de l'accès TV en cours de journée.
+      offers = offers.filter(item => item !== offer);
+      update.tvAccessUntil = FieldValue.delete();
+      tvAccessUntil = undefined;
+    } else if (offer === "tv") {
+      // Journée TV expirée : nouveau paiement pour une nouvelle journée.
+      tvAccessUntil = new Date(Date.now() + TV_ACCESS_HOURS * 3_600_000).toISOString();
+      update.tvAccessUntil = tvAccessUntil;
+    } else {
+      offers = offers.filter(item => item !== offer);
+    }
+  } else {
+    offers = [...offers, offer];
+    if (offer === "tv") {
+      tvAccessUntil = new Date(Date.now() + TV_ACCESS_HOURS * 3_600_000).toISOString();
+      update.tvAccessUntil = tvAccessUntil;
+    }
+  }
+
+  update.offers = offers;
+  await db.collection(SUBSCRIPTIONS_COLLECTION).doc(accountKey).set(update, { merge: true });
+  return { subscription: { ...subscription, offers, tvAccessUntil }, usage: ensured.usage };
 }
 
 export interface ServerEntitlements {
@@ -211,8 +248,10 @@ export function computeEntitlements(state: LoadedState, isAdmin: boolean): Serve
   const subscription = state.subscription;
   const trialActive = !!subscription && today < subscription.trialEndsAt;
   const offers = subscription?.offers ?? [];
-  const hasTvAccess = !!subscription && (trialActive || offers.includes("tv"));
-  const hasCombinationAccess = !!subscription && (trialActive || offers.includes("combinations"));
+  const hasTvAccess = !!subscription
+    && (trialActive || offers.includes("pack") || (offers.includes("tv") && isTvDayValid(subscription)));
+  const hasCombinationAccess = !!subscription
+    && (trialActive || offers.includes("combinations") || offers.includes("pack"));
 
   if (isAdmin) {
     return {
