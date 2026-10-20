@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { hasAdminAccess } from "@/lib/adminAccess";
 
 const links = [
   { href: "/admin", label: "Vue d’ensemble" },
@@ -26,13 +27,16 @@ export default function AdminSection({
   const router = useRouter();
   const pathname = usePathname();
 
+  // Seul le compte administrateur autorisé (e-mail dédié) accède aux pages admin.
+  const adminAllowed = hasAdminAccess(user);
+
   useEffect(() => {
-    if (!isLoading && (!isAuthenticated || user?.role !== "admin")) {
+    if (!isLoading && (!isAuthenticated || !adminAllowed)) {
       router.replace("/login");
     }
-  }, [isAuthenticated, isLoading, router, user]);
+  }, [isAuthenticated, isLoading, router, adminAllowed]);
 
-  if (isLoading || !isAuthenticated || user?.role !== "admin") {
+  if (isLoading || !isAuthenticated || !adminAllowed) {
     return (
       <div className="admin-shell flex min-h-screen items-center justify-center">
         <div className="admin-spinner h-12 w-12 rounded-full border-2 border-white/10" />

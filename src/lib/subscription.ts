@@ -1,7 +1,13 @@
 /**
  * Gestion client des offres, de l'essai gratuit de 3 jours et des quotas journaliers.
  *
- * Sémantique métier (v2) :
+ * Phase d'essai globale (jusqu'au 3 novembre 2026 inclus) :
+ *  - tout compte connecté a un accès COMPLET et ILLIMITÉ aux combinaisons et
+ *    aux matchs (aucun quota journalier) ;
+ *  - les visiteurs non connectés génèrent aussi des combinaisons illimitées ;
+ *  - la seule contrainte : il faut être connecté pour regarder une vidéo.
+ *
+ * Règles habituelles (appliquées après la phase d'essai) :
  *  - Un visiteur non connecté génère 2 combinaisons gratuites, puis doit se connecter.
  *  - À la première connexion, un essai de 3 jours démarre : accès complet (live + combinaisons),
  *    plafonné à 4 générations de combinaisons par jour.
@@ -33,6 +39,27 @@ export const TRIAL_DAYS = 3;
 export const TRIAL_DAILY_LIMIT = 4;
 /** Nombre de combinaisons par jour avec l'offre Combinaisons. */
 export const COMBINATION_DAILY_LIMIT = 5;
+
+/**
+ * Phase d'essai globale : jusqu'au 3 novembre 2026 inclus, TOUS les comptes
+ * connectés ont un accès complet et illimité aux combinaisons et aux matchs
+ * (vidéos en direct comprises). La seule contrainte : il faut être connecté
+ * pour regarder une vidéo. Après cette date, les règles habituelles reprennent.
+ */
+export const GLOBAL_TRIAL_PHASE_END_DAY = "2026-11-03";
+
+/** Vrai si la phase d'essai globale est encore en cours (AAAA-MM-JJ local). */
+export function isGlobalTrialPhaseActive(today: string = localDay()): boolean {
+  return today <= GLOBAL_TRIAL_PHASE_END_DAY;
+}
+
+/** Jours restants de la phase d'essai globale (0 si terminée). */
+export function globalTrialPhaseDaysLeft(today: string = localDay()): number {
+  if (!isGlobalTrialPhaseActive(today)) return 0;
+  const end = new Date(`${GLOBAL_TRIAL_PHASE_END_DAY}T00:00:00.000Z`).getTime();
+  const start = new Date(`${today}T00:00:00.000Z`).getTime();
+  return Math.max(0, Math.round((end - start) / 86_400_000));
+}
 
 export const GUEST_COMBINATION_COUNT_KEY = "ikprono_guest_combination_count";
 const SUBSCRIPTION_PREFIX = "ikprono_subscription_";
@@ -225,13 +252,22 @@ export interface ServerEntitlements {
   reason: "trial-daily-limit" | "offer-daily-limit" | "no-offer" | null;
 }
 
-/** Convertit des droits serveur en droits client (ajoute les jours d'essai restants). */
+/**
+ * Convertit des droits serveur en droits client (ajoute les jours d'essai restants).
+ *
+ * `Infinity` est sérialisé en `null` par JSON : une valeur non finie est donc
+ * réinterprétée comme « illimité » (phase d'essai globale, compte admin).
+ */
 export function entitlementsFromServer(
   server: ServerEntitlements,
   today: string = localDay()
 ): Entitlements {
+  const unbounded = (value: number): number =>
+    typeof value === "number" && Number.isFinite(value) ? value : Number.POSITIVE_INFINITY;
   return {
     ...server,
+    dailyLimit: unbounded(server.dailyLimit),
+    remainingToday: unbounded(server.remainingToday),
     trialDaysLeft: server.trialActive && server.trialEndsAt
       ? Math.max(0, Math.round(
         (new Date(`${server.trialEndsAt}T00:00:00.000Z`).getTime()
@@ -258,6 +294,7 @@ export function getEntitlements({
   const usage = readUsage(accountId, today);
   const subscription = isAuthenticated ? readSubscription(accountId) : null;
   const trialActive = !!subscription && today < subscription.trialEndsAt;
+  const phaseActive = isGlobalTrialPhaseActive(today);
   const hasTvAccess = !!subscription
     && (trialActive || subscription.offers.includes("pack")
       || (subscription.offers.includes("tv") && isTvDayValid(subscription)));
@@ -281,6 +318,23 @@ export function getEntitlements({
   }
 
   if (!isAuthenticated) {
+    // Phase d'essai globale : combinaisons illimitées même sans compte,
+    // mais les vidéos en direct exigent d'être connecté.
+    if (phaseActive) {
+      return {
+        trialActive: true,
+        trialDaysLeft: globalTrialPhaseDaysLeft(today),
+        trialEndsAt: GLOBAL_TRIAL_PHASE_END_DAY,
+        offers: [],
+        hasTvAccess: false,
+        hasCombinationAccess: true,
+        dailyLimit: Number.POSITIVE_INFINITY,
+        remainingToday: Number.POSITIVE_INFINITY,
+        usedToday: 0,
+        canGenerate: true,
+        reason: null,
+      };
+    }
     return {
       trialActive: false,
       trialDaysLeft: 0,
@@ -293,6 +347,23 @@ export function getEntitlements({
       usedToday: guestRemaining > 0 ? 0 : GUEST_COMBINATION_LIMIT,
       canGenerate: guestRemaining > 0,
       reason: guestRemaining > 0 ? null : "no-offer",
+    };
+  }
+
+  // Phase d'essai globale : accès complet et illimité pour tout compte connecté.
+  if (phaseActive) {
+    return {
+      trialActive: true,
+      trialDaysLeft: globalTrialPhaseDaysLeft(today),
+      trialEndsAt: GLOBAL_TRIAL_PHASE_END_DAY,
+      offers: subscription?.offers ?? [],
+      hasTvAccess: true,
+      hasCombinationAccess: true,
+      dailyLimit: Number.POSITIVE_INFINITY,
+      remainingToday: Number.POSITIVE_INFINITY,
+      usedToday: usage.count,
+      canGenerate: true,
+      reason: null,
     };
   }
 

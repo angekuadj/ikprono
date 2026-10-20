@@ -29,7 +29,7 @@ function isFixture(value: unknown): value is Fixture {
     (value.competition === undefined || typeof value.competition === "string");
 }
 
-function isStoredGeneratedCombination(value: unknown): value is StoredGeneratedCombination {
+export function isStoredGeneratedCombination(value: unknown): value is StoredGeneratedCombination {
   return isRecord(value) &&
     typeof value.id === "string" &&
     typeof value.createdAt === "string" &&

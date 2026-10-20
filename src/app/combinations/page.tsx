@@ -16,9 +16,11 @@ import {
   COMBINATIONS_MONTHLY_PRICE_FCFA,
   GUEST_COMBINATION_COUNT_KEY,
   GUEST_COMBINATION_LIMIT,
+  GLOBAL_TRIAL_PHASE_END_DAY,
   PACK_MONTHLY_PRICE_FCFA,
   TRIAL_DAILY_LIMIT,
   TV_DAILY_PRICE_FCFA,
+  isGlobalTrialPhaseActive,
   recordCombinationUsage,
   type ServerEntitlements,
 } from "@/lib/subscription";
@@ -161,6 +163,7 @@ export default function CombinationsPage() {
   const [guestCombinationsUsed, setGuestCombinationsUsed] = useState(0);
   const [refreshKey, refreshNow] = useAutoRefresh();
   const guestCombinationsRemaining = Math.max(0, GUEST_COMBINATION_LIMIT - guestCombinationsUsed);
+  const trialPhaseActive = isGlobalTrialPhaseActive();
   const canGenerateCombination = entitlements.canGenerate;
   const combinationLimitReached = !entitlements.canGenerate && !authLoading;
   const needsSignIn = !isAuthenticated && guestCombinationsRemaining === 0;
@@ -1122,7 +1125,12 @@ export default function CombinationsPage() {
           </p>
           {!authLoading && (
             <p className="mt-2 text-xs text-gray-400">
-              {entitlements.trialActive
+              {trialPhaseActive
+                ? text(
+                  `Phase d'essai en cours (jusqu'au ${GLOBAL_TRIAL_PHASE_END_DAY.split("-").reverse().join("/")}) : combinaisons illimitées.${!isAuthenticated ? " Connectez-vous pour regarder les vidéos en direct." : ""}`,
+                  `Free trial phase running until ${GLOBAL_TRIAL_PHASE_END_DAY}: unlimited combinations.${!isAuthenticated ? " Sign in to watch live videos." : ""}`
+                )
+                : entitlements.trialActive
                 ? text(
                   `Essai gratuit : ${entitlements.trialDaysLeft} jour(s) restant(s) · ${entitlements.usedToday}/${entitlements.dailyLimit} combinaisons utilisées aujourd'hui${entitlements.offers.some(item => item === "combinations" || item === "pack") ? " (essai + offre souscrite)" : ""}.`,
                   `Free trial: ${entitlements.trialDaysLeft} day(s) left · ${entitlements.usedToday}/${entitlements.dailyLimit} combinations used today${entitlements.offers.some(item => item === "combinations" || item === "pack") ? " (trial + subscribed plan)" : ""}.`
@@ -1144,12 +1152,17 @@ export default function CombinationsPage() {
 
         {!authLoading && !isAuthenticated && (
           <section className={`mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4 ${
-            guestCombinationsRemaining === 0
-              ? "border-amber-700 bg-amber-950/30"
-              : "border-green-800 bg-green-950/20"
+            trialPhaseActive || guestCombinationsRemaining > 0
+              ? "border-green-800 bg-green-950/20"
+              : "border-amber-700 bg-amber-950/30"
           }`}>
             <p className="text-sm text-green-100">
-              {guestCombinationsRemaining === 0
+              {trialPhaseActive
+                ? text(
+                  "Phase d'essai en cours : générez autant de combinaisons que vous voulez. Connectez-vous pour regarder les vidéos en direct.",
+                  "Free trial phase: generate as many combinations as you want. Sign in to watch live videos."
+                )
+                : guestCombinationsRemaining === 0
                 ? text(
                   `Vous avez atteint la limite de ${GUEST_COMBINATION_LIMIT} combinaisons gratuites. Connectez-vous pour continuer.`,
                   `You have reached the limit of ${GUEST_COMBINATION_LIMIT} free combinations. Sign in to continue.`
@@ -1159,7 +1172,11 @@ export default function CombinationsPage() {
                   `Generate up to ${GUEST_COMBINATION_LIMIT} combinations for free without an account (${guestCombinationsUsed}/${GUEST_COMBINATION_LIMIT} used).`
                 )}
             </p>
-            {guestCombinationsRemaining === 0 && (
+            {trialPhaseActive ? (
+              <Link href="/login?next=%2Fcombinations" className="rounded-lg border border-green-600 px-3 py-2 text-sm font-semibold text-green-100 hover:bg-green-900/40">
+                {text("Se connecter pour les vidéos", "Sign in for videos")}
+              </Link>
+            ) : guestCombinationsRemaining === 0 && (
               <Link href="/login?next=%2Fcombinations" className="rounded-lg border border-amber-600 px-3 py-2 text-sm font-semibold text-amber-100 hover:bg-amber-900/40">
                 {text("Se connecter pour continuer", "Sign in to continue")}
               </Link>

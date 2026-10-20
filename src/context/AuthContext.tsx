@@ -16,6 +16,7 @@ import {
   translateFirebaseError,
 } from "@/lib/firebaseAuth";
 import { ensureUserProfile, updateUserProfile, getUserProfile } from "@/lib/firestore";
+import { startBasketSync } from "@/lib/basketSync";
 import { generateUUID } from "@/lib/uuid";
 import { getJson, postJson } from "@/lib/apiClient";
 import {
@@ -355,6 +356,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSubscriptionVersion(version => version + 1);
     }
   }, [user]);
+
+  // Synchronise le panier (localStorage ↔ Firestore) pour les comptes connectés :
+  // le panier est ainsi retrouvé sur tous les appareils de l'utilisateur.
+  const syncedAccountId = user?.id.startsWith("firebase:") ? user.id : null;
+  useEffect(() => {
+    if (!syncedAccountId) return;
+    return startBasketSync(syncedAccountId);
+  }, [syncedAccountId]);
 
   // Récupère les droits calculés par le serveur (source de vérité) : essai,
   // offres actives et quota du jour. Rechargé à chaque changement de compte.

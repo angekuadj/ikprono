@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
+import { hasAdminAccess } from "@/lib/adminAccess";
 import { useNotifications } from "@/context/NotificationContext";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { readSavedSelections, type SavedSelection } from "@/lib/savedSelections";
@@ -94,6 +95,7 @@ function readPreferences(userId: string): UserPreferences {
 
 export default function ProfilePage() {
   const { user, updateProfile, isLoading, entitlements, refreshProfile } = useAuth();
+  const adminAccess = hasAdminAccess(user);
   const { t, text, language } = useLanguage();
   const { addNotification } = useNotifications();
   const [name, setName] = useState("");
@@ -351,12 +353,12 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <div className={`mb-6 grid gap-2 rounded-xl border border-gray-800 bg-gray-900 p-2 ${user?.role === "admin" ? "grid-cols-4" : "grid-cols-3"}`} role="tablist" aria-label={text("Sections du profil", "Profile sections")}>
+        <div className={`mb-6 grid gap-2 rounded-xl border border-gray-800 bg-gray-900 p-2 ${adminAccess ? "grid-cols-4" : "grid-cols-3"}`} role="tablist" aria-label={text("Sections du profil", "Profile sections")}>
           {([
             ["profile", text("Profil", "Profile")],
             ["coupons", text("Historique des coupons", "Coupon history")],
             ["basket", text("Mon panier", "My basket")],
-            ...(user?.role === "admin" ? [["admin", text("Administration", "Administration")] as const] : []),
+            ...(adminAccess ? [["admin", text("Administration", "Administration")] as const] : []),
           ] as const).map(([tab, label]) => (
             <button
               key={tab}
@@ -637,7 +639,7 @@ export default function ProfilePage() {
           </section>
         )}
 
-        {activeTab === "admin" && user?.role === "admin" && (
+        {activeTab === "admin" && adminAccess && (
           <section role="tabpanel" className="space-y-5">
             <div className="rounded-2xl border border-fuchsia-800/50 bg-fuchsia-950/20 p-6">
               <div className="mb-4 flex items-center gap-3">

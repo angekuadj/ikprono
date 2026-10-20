@@ -1,6 +1,7 @@
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import type { SubscriptionOffer } from "@/lib/subscription";
-import { isTvDayValid, TRIAL_DAYS, TV_ACCESS_HOURS } from "@/lib/subscription";
+import { isTvDayValid, isGlobalTrialPhaseActive, GLOBAL_TRIAL_PHASE_END_DAY, TRIAL_DAYS, TV_ACCESS_HOURS } from "@/lib/subscription";
+import { ADMIN_EMAIL } from "@/lib/adminAccess";
 import { defaultQuotaSettings, type QuotaSettings } from "@/lib/server/quotaSettings";
 import { getAdminDb, isAdminConfigured } from "./firebaseAdminConfig";
 
@@ -47,13 +48,20 @@ function addDaysIso(isoDay: string, days: number): string {
   return next.toISOString().slice(0, 10);
 }
 
-/** Indique si l'utilisateur a le rôle admin, d'après son profil Firestore. */
+/**
+ * Indique si l'utilisateur a le rôle admin, d'après son profil Firestore.
+ *
+ * Le rôle seul ne suffit pas : l'e-mail du profil doit aussi correspondre à
+ * l'adresse administrateur autorisée (`admin@ikprono.com`).
+ */
 export async function isAdminUser(db: Firestore, accountKey: string): Promise<boolean> {
   if (!accountKey.startsWith("firebase:")) return false;
   const uid = accountKey.slice("firebase:".length);
   try {
     const snapshot = await db.collection("users").doc(uid).get();
-    return snapshot.data()?.role === "admin";
+    const profile = snapshot.data();
+    const email = typeof profile?.email === "string" ? profile.email.trim().toLowerCase() : "";
+    return profile?.role === "admin" && email === ADMIN_EMAIL;
   } catch (error) {
     console.error("Lecture du rôle impossible.", error);
     return false;
@@ -373,6 +381,23 @@ export function computeEntitlements(
     };
   }
 
+  // Phase d'essai globale (jusqu'au 3 novembre 2026 inclus) : tous les comptes
+  // connectés ont un accès complet et illimité aux combinaisons et aux vidéos.
+  if (isGlobalTrialPhaseActive(today)) {
+    return {
+      trialActive: true,
+      trialEndsAt: GLOBAL_TRIAL_PHASE_END_DAY,
+      offers,
+      hasTvAccess: true,
+      hasCombinationAccess: true,
+      dailyLimit: Number.POSITIVE_INFINITY,
+      usedToday: state.usage.count,
+      remainingToday: Number.POSITIVE_INFINITY,
+      canGenerate: true,
+      reason: null,
+    };
+  }
+
   if (trialActive) {
     // Pendant l'essai, une offre payante déjà souscrite s'ajoute : l'utilisateur
     // qui anticipe son abonnement cumule le quota d'essai et celui de l'offre.
@@ -429,6 +454,22 @@ export function computeGuestEntitlements(
   used: number,
   quotas: QuotaSettings = defaultQuotaSettings()
 ): ServerEntitlements {
+  // Phase d'essai globale : combinaisons illimitées, mais la vidéo en direct
+  // reste réservée aux comptes connectés.
+  if (isGlobalTrialPhaseActive()) {
+    return {
+      trialActive: true,
+      trialEndsAt: GLOBAL_TRIAL_PHASE_END_DAY,
+      offers: [],
+      hasTvAccess: false,
+      hasCombinationAccess: true,
+      dailyLimit: Number.POSITIVE_INFINITY,
+      usedToday: used,
+      remainingToday: Number.POSITIVE_INFINITY,
+      canGenerate: true,
+      reason: null,
+    };
+  }
   const remaining = Math.max(0, quotas.guestLimit - used);
   return {
     trialActive: false,

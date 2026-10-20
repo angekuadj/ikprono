@@ -6,6 +6,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
+import { hasAdminAccess } from "@/lib/adminAccess";
 import logo from "../../assets/ikprono-logo.png";
 
 export default function Navigation() {
@@ -13,6 +14,7 @@ export default function Navigation() {
   const pathname = usePathname();
   const isAdminPage = pathname.startsWith("/admin");
   const { user, isAuthenticated, logout } = useAuth();
+  const adminAccess = hasAdminAccess(user);
   const { language, setLanguage, t } = useLanguage();
   const toggleLanguage = () => setLanguage(language === "fr" ? "en" : "fr");
 
@@ -47,7 +49,7 @@ export default function Navigation() {
                     <Link href="/dashboard" className="text-gray-300 hover:text-white transition font-medium hover-lift text-xs">
                       {t("dashboard")}
                     </Link>
-                    {user?.role === "admin" && (
+                    {adminAccess && (
                       <Link href="/admin" className="text-purple-400 hover:text-purple-300 transition font-medium hover-lift text-xs">
                         {t("admin")}
                       </Link>
@@ -167,7 +169,7 @@ export default function Navigation() {
                   <Link href="/dashboard" onClick={() => setIsOpen(false)} className="text-gray-300 hover:text-white transition font-medium py-2">
                     {t("dashboard")}
                   </Link>
-                  {user?.role === "admin" && (
+                  {adminAccess && (
                     <Link href="/admin" onClick={() => setIsOpen(false)} className="text-purple-400 hover:text-purple-300 transition font-medium py-2">
                       {t("admin")}
                     </Link>

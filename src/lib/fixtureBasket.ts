@@ -3,7 +3,7 @@ import type { Fixture } from "@/lib/fixtures";
 const BASKET_STORAGE_KEY = "ikprono_fixture_basket";
 const BASKET_UPDATED_EVENT = "ikprono:fixture-basket-updated";
 
-function isFixture(value: unknown): value is Fixture {
+export function isFixture(value: unknown): value is Fixture {
   if (typeof value !== "object" || value === null) return false;
   const fixture = value as Partial<Fixture>;
   return (

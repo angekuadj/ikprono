@@ -162,7 +162,8 @@ export default function LiveFixtures() {
 
   const locale = language === "fr" ? "fr-FR" : "en-GB";
   const normalizedSearchQuery = normalizeTeamName(searchQuery);
-  // Sans offre TV (hors essai), seules les vidéos des matchs suivis dans le panier restent accessibles.
+  // Regarder une vidéo exige d'être connecté. Sans offre TV (hors phase d'essai),
+  // seules les vidéos des matchs suivis dans le panier restent accessibles.
   const trackedTeamKeys = new Set(
     basketFixtures.flatMap(fixture => [
       normalizeTeamName(fixture.homeTeam),
@@ -170,6 +171,7 @@ export default function LiveFixtures() {
     ])
   );
   const isWatchableMatchoraMatch = (match: MatchoraLiveMatch) => {
+    if (!isAuthenticated) return false;
     if (entitlements.hasTvAccess) return true;
     return trackedTeamKeys.has(normalizeTeamName(match.homeTeam))
       && trackedTeamKeys.has(normalizeTeamName(match.awayTeam));
@@ -366,8 +368,8 @@ export default function LiveFixtures() {
                 `Your live video access is limited to matches tracked in your basket. Get the TV plan at ${TV_DAILY_PRICE_FCFA} XOF/day to watch every match.`
               )
               : text(
-                `Connectez-vous pour profiter de 3 jours d’essai gratuit avec les vidéos en direct, puis choisissez l’offre TV à ${TV_DAILY_PRICE_FCFA} FCFA/jour.`,
-                `Sign in to enjoy a 3-day free trial with live videos, then choose the TV plan at ${TV_DAILY_PRICE_FCFA} XOF/day.`
+                `Connectez-vous pour regarder les vidéos en direct (phase d'essai en cours : accès complet offert). Puis choisissez l'offre TV à ${TV_DAILY_PRICE_FCFA} FCFA/jour.`,
+                `Sign in to watch live videos (free trial phase: full access included). Then choose the TV plan at ${TV_DAILY_PRICE_FCFA} XOF/day.`
               )}
             {" "}
             <Link href={isAuthenticated ? "/payment" : "/login?next=%2Flive"} className="font-semibold underline hover:text-amber-100">

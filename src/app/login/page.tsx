@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { getSafeReturnPath } from "@/lib/returnPath";
+import { hasAdminAccess } from "@/lib/adminAccess";
 import SocialAuthButtons from "@/components/SocialAuthButtons";
 
 export default function LoginPage() {
@@ -36,7 +37,7 @@ export default function LoginPage() {
       const user = await login(email, password, rememberMe);
       const returnPath = getSafeReturnPath(window.location.search);
 
-      if (user.role === "admin") {
+      if (hasAdminAccess(user)) {
         router.replace("/admin");
       } else if (returnPath) {
         router.replace(returnPath);
