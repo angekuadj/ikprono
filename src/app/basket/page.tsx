@@ -867,11 +867,9 @@ export default function BasketPage() {
                                   </span>
                                   <span className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${outcomeStyle(pickOutcome)}`}>
                                     <span aria-hidden="true">{outcomeIcon(pickOutcome)}</span>
-                                    {score || finished
+                                    {pick.market === "scorer" || score || finished
                                       ? outcomeLabel(pickOutcome)
-                                      : pick.market === "scorer"
-                                        ? text("Buteur sélectionné", "Scorer selected")
-                                        : pick.historicalRate === null
+                                      : pick.historicalRate === null
                                         ? text("Pas de données", "No data")
                                         : `${pick.historicalRate}% (${pick.sampleSize} ${text("match(s)", "matches")})`}
                                   </span>
@@ -1030,11 +1028,9 @@ export default function BasketPage() {
                                   </span>
                                   <span className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${outcomeStyle(pickOutcome)}`}>
                                     <span aria-hidden="true">{outcomeIcon(pickOutcome)}</span>
-                                    {score || finished
+                                    {pick.market === "scorer" || score || finished
                                       ? outcomeLabel(pickOutcome)
-                                      : pick.market === "scorer"
-                                        ? text("Buteur sélectionné", "Scorer selected")
-                                        : pick.historicalRate === null
+                                      : pick.historicalRate === null
                                         ? text("Pas de données", "No data")
                                         : `${pick.historicalRate}% (${pick.sampleSize} ${text("match(s)", "matches")})`}
                                   </span>
@@ -1232,11 +1228,9 @@ export default function BasketPage() {
                                         </span>
                                         <span className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-1 ${outcomeStyle(pickOutcome)}`}>
                                           <span aria-hidden="true">{outcomeIcon(pickOutcome)}</span>
-                                          {score || finished
+                                          {pick.market === "scorer" || score || finished
                                             ? outcomeLabel(pickOutcome)
-                                            : pick.market === "scorer"
-                                              ? text("Buteur sélectionné", "Scorer selected")
-                                              : pick.historicalRate === null
+                                            : pick.historicalRate === null
                                               ? text("Pas de données", "No data")
                                               : text(
                                                 `${pick.historicalRate}% sur ${pick.sampleSize} match(s)`,
