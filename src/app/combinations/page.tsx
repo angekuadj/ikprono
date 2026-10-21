@@ -523,7 +523,7 @@ export default function CombinationsPage() {
         count: requestedCount,
         riskLevel: selectedRiskLevel,
         excludeFixtureIds,
-        includeLive: liveOnly,
+        includeLive: false,
         randomSelection,
       });
       const payload = await response.json() as { coupon?: GeneratedCoupon; error?: string; code?: string; entitlements?: ServerEntitlements };
@@ -544,7 +544,6 @@ export default function CombinationsPage() {
       setSafeCoupon(payload.coupon);
       recordGuestCombinations(1);
       applyServerEntitlements(payload);
-      saveCouponsForTracking([payload.coupon]);
     } catch (error) {
       setActionError(error instanceof Error
         ? error.message
@@ -781,8 +780,12 @@ export default function CombinationsPage() {
       console.log("📦 Combinations actuelles dans localStorage:", stored.length);
       const additions = couponsToSave
         .map(coupon => {
+          const fixturesById = new Map<string, Fixture>([
+            ...fixtures.map(fixture => [fixture.id, fixture] as const),
+            ...Object.entries(refreshedCouponFixtures),
+          ]);
           const matchedFixtures = coupon.matches
-            .map(match => fixtures.find(fixture => fixture.id === match.fixtureId))
+            .map(match => fixturesById.get(match.fixtureId))
             .filter((fixture): fixture is Fixture => fixture !== undefined);
           if (matchedFixtures.length !== coupon.matches.length) {
             throw new Error(text(
@@ -830,6 +833,13 @@ export default function CombinationsPage() {
       console.log("➕ Nouvelles combinaisons à ajouter:", additions.length);
       if (additions.length > 0) {
         writeGeneratedCombinations([...stored, ...additions]);
+        const savedIds = new Set(readGeneratedCombinations().map(combination => combination.id));
+        if (additions.some(combination => !savedIds.has(combination.id))) {
+          throw new Error(text(
+            "La combinaison n’a pas pu être confirmée dans le panier. Réessayez.",
+            "The combination could not be confirmed in the basket. Please try again."
+          ));
+        }
         console.log("✅ Écriture réussie dans localStorage");
       } else {
         console.log("⚠️ Aucune nouvelle combinaison (doublon)");
@@ -1089,10 +1099,20 @@ export default function CombinationsPage() {
       "away-2.5": text("Extérieur -2.5", "Away -2.5"),
       "home+1.5": text("Domicile +1.5", "Home +1.5"),
       "away+1.5": text("Extérieur +1.5", "Away +1.5"),
+      "home+2.5": text("Domicile +2.5", "Home +2.5"),
+      "away+2.5": text("Extérieur +2.5", "Away +2.5"),
+      "home-over-0.5": text("Domicile plus de 0,5 but", "Home over 0.5 goals"),
       "home-over-1.5": text("Domicile plus de 1,5 but", "Home over 1.5 goals"),
+      "home-over-2.5": text("Domicile plus de 2,5 buts", "Home over 2.5 goals"),
+      "away-over-0.5": text("Extérieur plus de 0,5 but", "Away over 0.5 goals"),
       "away-over-1.5": text("Extérieur plus de 1,5 but", "Away over 1.5 goals"),
+      "away-over-2.5": text("Extérieur plus de 2,5 buts", "Away over 2.5 goals"),
+      "home-under-0.5": text("Domicile moins de 0,5 but", "Home under 0.5 goals"),
       "home-under-1.5": text("Domicile moins de 1,5 but", "Home under 1.5 goals"),
+      "home-under-2.5": text("Domicile moins de 2,5 buts", "Home under 2.5 goals"),
+      "away-under-0.5": text("Extérieur moins de 0,5 but", "Away under 0.5 goals"),
       "away-under-1.5": text("Extérieur moins de 1,5 but", "Away under 1.5 goals"),
+      "away-under-2.5": text("Extérieur moins de 2,5 buts", "Away under 2.5 goals"),
       "home-0-1": text("Domicile entre 0 et 1 but", "Home 0 to 1 goals"),
       "home-1-3": text("Domicile entre 1 et 3 buts", "Home 1 to 3 goals"),
       "away-0-1": text("Extérieur entre 0 et 1 but", "Away 0 to 1 goals"),
@@ -1166,6 +1186,14 @@ export default function CombinationsPage() {
             actionError ? "border-red-800 bg-red-950/40 text-red-200" : "border-green-800 bg-green-950/30 text-green-200"
           }`} role={actionError ? "alert" : "status"}>
             {actionError || actionNotice}
+            {!actionError && actionNotice === text(
+              "Cette combinaison est enregistrée et son résultat est suivi dans le panier.",
+              "This combination is saved and its result is tracked in your basket."
+            ) && (
+              <Link href="/basket" className="ml-2 inline-flex font-semibold underline underline-offset-2 hover:text-white">
+                {text("Ouvrir le panier", "Open basket")}
+              </Link>
+            )}
           </p>
         )}
         <header className="page-intro combinations-hero mb-5">
@@ -1545,35 +1573,15 @@ export default function CombinationsPage() {
             <span className="mt-1 block text-xs font-normal text-gray-400">
               {text(
                 randomSelection
-                  ? liveOnly
-                    ? "L’IA choisira au hasard parmi les matchs actuellement en direct."
-                    : `L’IA choisira au hasard parmi les matchs du ${startDate} au ${endDate}.`
-                  : liveOnly
-                    ? "L’IA choisira les matchs en direct les mieux notés."
-                    : `L’IA choisira les événements les mieux notés entre le ${startDate} et le ${endDate}.`,
+                  ? `L’IA choisira au hasard parmi les matchs du ${startDate} au ${endDate}.`
+                  : `L’IA choisira les événements les mieux notés entre le ${startDate} et le ${endDate}.`,
                 randomSelection
-                  ? liveOnly
-                    ? "AI will choose randomly from currently live matches."
-                    : `AI will choose randomly from matches between ${startDate} and ${endDate}.`
-                  : liveOnly
-                    ? "AI will select the highest-rated live matches."
-                    : `AI will select the highest-rated events between ${startDate} and ${endDate}.`
+                  ? `AI will choose randomly from matches between ${startDate} and ${endDate}.`
+                  : `AI will select the highest-rated events between ${startDate} and ${endDate}.`
               )}
             </span>
           </label>
           <div className="combination-auto-preferences flex flex-wrap items-center justify-start gap-2 sm:justify-end">
-            <button
-              type="button"
-              onClick={() => setLiveOnly(current => !current)}
-              aria-pressed={liveOnly}
-              className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
-                liveOnly
-                  ? "border-red-700 bg-red-950/30 text-red-200"
-                  : "border-gray-700 bg-gray-950 text-gray-300 hover:border-gray-500"
-              }`}
-            >
-              {liveOnly ? text("Matchs en direct", "Live matches") : text("Matchs à venir", "Upcoming matches")}
-            </button>
             <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-gray-700 bg-gray-950 px-3 text-sm text-gray-300">
               <input
                 type="checkbox"
@@ -1591,7 +1599,7 @@ export default function CombinationsPage() {
                 setShowAutoRiskOptions(false);
                 void generateAutoCombination(riskLevel);
               }}
-              disabled={authLoading || !canGenerateCombination || loading || generating || relevantFixtures.length === 0}
+              disabled={authLoading || !canGenerateCombination || loading || generating || fixtures.length === 0}
               className="rounded-lg bg-green-600 px-5 py-3 text-sm font-bold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {generating
@@ -1617,19 +1625,11 @@ export default function CombinationsPage() {
             <p className="mt-1 text-xs text-gray-400">
               {text(
                 randomSelection
-                  ? liveOnly
-                    ? `L’IA choisira au hasard ${requestedCount} rencontre(s) parmi les matchs en direct.`
-                    : `L’IA choisira au hasard ${requestedCount} rencontre(s) entre le ${startDate} et le ${endDate}.`
-                  : liveOnly
-                    ? `L’IA choisira les ${requestedCount} rencontre(s) les mieux notées parmi les matchs en direct.`
-                    : `L’IA choisira les ${requestedCount} rencontre(s) les mieux notées entre le ${startDate} et le ${endDate}.`,
+                  ? `L’IA choisira au hasard ${requestedCount} rencontre(s) entre le ${startDate} et le ${endDate}.`
+                  : `L’IA choisira les ${requestedCount} rencontre(s) les mieux notées entre le ${startDate} et le ${endDate}.`,
                 randomSelection
-                  ? liveOnly
-                    ? `AI will randomly choose ${requestedCount} fixture(s) from live matches.`
-                    : `AI will randomly choose ${requestedCount} fixture(s) between ${startDate} and ${endDate}.`
-                  : liveOnly
-                    ? `AI will choose the ${requestedCount} highest-rated fixtures from live matches.`
-                    : `AI will choose the ${requestedCount} highest-rated fixtures between ${startDate} and ${endDate}.`
+                  ? `AI will randomly choose ${requestedCount} fixture(s) between ${startDate} and ${endDate}.`
+                  : `AI will choose the ${requestedCount} highest-rated fixtures between ${startDate} and ${endDate}.`
               )}
             </p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
