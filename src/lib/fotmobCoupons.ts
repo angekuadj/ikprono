@@ -110,6 +110,7 @@ const RANDOM_POOL_MARGIN = 3;
 const STATISTICAL_MARKETS = new Set<CouponPick["market"]>(["result", "goals", "corners", "handicap"]);
 
 const STRIKER_PATTERN = /\b(forward|striker|attacker|avant-centre|avant|attaquant|buteur|fw|cf|st|forward-center|centre-forward)\b/;
+const DEFENSIVE_POSITION_PATTERN = /\b(defender|defense|defence|defenseur|defensive|centre back|center back|full back|fullback|left back|right back|wing back|sweeper|holding midfielder|goalkeeper|keeper|gardien|lateral|arriere|stoppeur)\b|\b(cb|lb|rb|lwb|rwb|dm|cdm|dmc|gk)\b/;
 /** Passeurs : milieux et ailiers uniquement. */
 const PLAYMAKER_PATTERN = /(midfield|winger|milieu|ailier|offensif)/;
 
@@ -272,6 +273,11 @@ function selectPool(fixtures: Fixture[], excludeIds: string[] = []): Fixture[] {
 
 function isStriker(position: string | null | undefined): boolean {
   return STRIKER_PATTERN.test(normalize(position));
+}
+
+function isDefensivePlayer(position: string | null | undefined): boolean {
+  const normalizedPosition = normalize(position);
+  return normalizedPosition === "d" || DEFENSIVE_POSITION_PATTERN.test(normalizedPosition);
 }
 
 function ratingOf(player: { rating?: string | null }): number {
@@ -1207,7 +1213,8 @@ export async function generateFotMobScorerCoupon(
         const topNames = topScorerNamesFor(details, teamName);
         const isRecent = (player: ScorerCandidate) => recentCandidates.scorers.has(normalize(player.name));
         const isTop = (player: ScorerCandidate) => topNames.has(normalize(player.name));
-        const strikers = teamPlayers
+        const eligiblePlayers = teamPlayers.filter(player => !isDefensivePlayer(player.position));
+        const strikers = eligiblePlayers
           .filter(player => isStriker(player.position))
           .sort((first, second) => ratingOf(second) - ratingOf(first));
 
@@ -1217,8 +1224,8 @@ export async function generateFotMobScorerCoupon(
           strikers.find(isRecent) ??
           strikers.find(isTop) ??
           strikers[0] ??
-          teamPlayers.find(isRecent) ??
-          teamPlayers.find(isTop)
+          eligiblePlayers.find(isRecent) ??
+          eligiblePlayers.find(isTop)
         );
       };
 
