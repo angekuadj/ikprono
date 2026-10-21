@@ -111,8 +111,8 @@ const RISK_LEVELS: Record<RiskLevel, { label: string; labelEn: string; descripti
   "medium": {
     label: "Moyen",
     labelEn: "Medium",
-    description: "Résultat le plus fréquent et au moins 2 buts",
-    descriptionEn: "Most frequent result and at least 2 goals",
+    description: "",
+    descriptionEn: "",
   },
   "bold": {
     label: "Audacieux",
@@ -1649,7 +1649,9 @@ export default function CombinationsPage() {
                     }`}
                   >
                     <span className="block text-sm font-semibold text-white">{text(option.label, option.labelEn)}</span>
-                    <span className="mt-1 block text-xs text-gray-400">{text(option.description, option.descriptionEn)}</span>
+                    {(option.description || option.descriptionEn) && (
+                      <span className="mt-1 block text-xs text-gray-400">{text(option.description, option.descriptionEn)}</span>
+                    )}
                   </button>
                 );
               })}
@@ -1730,7 +1732,9 @@ export default function CombinationsPage() {
                     }`}
                   >
                     <span className="block text-sm font-semibold text-white">{text(option.label, option.labelEn)}</span>
-                    <span className="mt-1 block text-xs text-gray-400">{text(option.description, option.descriptionEn)}</span>
+                    {(option.description || option.descriptionEn) && (
+                      <span className="mt-1 block text-xs text-gray-400">{text(option.description, option.descriptionEn)}</span>
+                    )}
                   </button>
                 );
               })}

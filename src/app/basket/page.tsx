@@ -755,7 +755,6 @@ export default function BasketPage() {
                                 </span>
                               )}
                             </div>
-                            <p className="mt-1 text-xs text-gray-400">{combination.coupon.description}</p>
                             <p className="mt-1.5 text-[11px] text-gray-500">{new Date(combination.createdAt).toLocaleString(locale)}</p>
                           </div>
                         </button>
