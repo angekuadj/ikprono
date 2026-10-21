@@ -14,7 +14,7 @@ import {
   writeGeneratedCombinations,
   type StoredGeneratedCombination,
 } from "@/lib/generatedCombinations";
-import type { CouponLevel } from "@/lib/coupons";
+import { formatTheoreticalOdds, type CouponLevel } from "@/lib/coupons";
 
 /**
  * Tiroir (drawer) du panier : les combinaisons **déjà générées**, en direct.
@@ -203,9 +203,10 @@ export default function BasketDrawer({ open, onClose }: { open: boolean; onClose
                     </ul>
                     <p className="mt-1.5 text-[11px] text-gray-400">
                       {matches.length} {text("match(s)", "match(es)")}
-                      {typeof combination.coupon.estimatedCombinedRate === "number" && (
+                      {typeof combination.coupon.estimatedCombinedRate === "number" &&
+                        formatTheoreticalOdds(combination.coupon.estimatedCombinedRate) !== null && (
                         <> · {text("Cote théorique", "Theoretical odds")}{" "}
-                          <span className="font-semibold text-green-400">{combination.coupon.estimatedCombinedRate.toFixed(2)}</span>
+                          <span className="font-semibold text-green-400">{formatTheoreticalOdds(combination.coupon.estimatedCombinedRate)}</span>
                         </>
                       )}
                     </p>

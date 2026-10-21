@@ -29,7 +29,7 @@ import {
   type SavedSelection,
 } from "@/lib/savedSelections";
 import { useFixtureStatuses } from "@/hooks/useFixtureStatuses";
-import { uniqueGeneratedCoupons, type GeneratedCoupon, type CouponPick, type CouponFixturePrediction } from "@/lib/coupons";
+import { formatTheoreticalOdds, uniqueGeneratedCoupons, type GeneratedCoupon, type CouponPick, type CouponFixturePrediction } from "@/lib/coupons";
 import type { Fixture } from "@/lib/fixtures";
 import {
   isFixtureFinished,
@@ -763,7 +763,14 @@ export default function BasketPage() {
                       <div className="flex flex-wrap items-center justify-end gap-2">
                         {typeof combination.coupon.estimatedCombinedRate === "number" && (
                           <span className="rounded-full border border-green-800 bg-green-950/60 px-3 py-1 text-xs font-semibold text-green-200">
-                            {text("Estimation indicative", "Indicative estimate")} {combination.coupon.estimatedCombinedRate}%
+                            {text("Estimation combinée indicative", "Indicative combined estimate")} {combination.coupon.estimatedCombinedRate}%
+                          </span>
+                        )}
+                        {typeof combination.coupon.estimatedCombinedRate === "number" &&
+                          formatTheoreticalOdds(combination.coupon.estimatedCombinedRate) !== null && (
+                          <span className="rounded-full border border-green-800 bg-green-950/60 px-3 py-1 text-xs font-semibold text-green-200">
+                            {text("Cote théorique", "Theoretical odds")}{" "}
+                            <span className="text-green-400">{formatTheoreticalOdds(combination.coupon.estimatedCombinedRate)}</span>
                           </span>
                         )}
                         <button
@@ -844,6 +851,9 @@ export default function BasketPage() {
                           </div>
                           <ul className="mt-2 space-y-1.5">
                             {match.picks.map(pick => {
+                              const theoreticalOdds = pick.historicalRate === null
+                                ? null
+                                : formatTheoreticalOdds(pick.historicalRate);
                               const pickOutcomeValue = score ? settleCouponPick(pick, score) : null;
                               const pickOutcome: CouponOutcome = score
                                 ? pickOutcomeValue === null ? "unavailable" : pickOutcomeValue ? "won" : "lost"
@@ -866,6 +876,12 @@ export default function BasketPage() {
                                         ? text("Pas de données", "No data")
                                         : `${pick.historicalRate}% (${pick.sampleSize} ${text("match(s)", "matches")})`}
                                   </span>
+                                  {theoreticalOdds !== null && (
+                                    <span className="text-[11px] text-gray-400">
+                                      {text("Cote théorique", "Theoretical odds")}{" "}
+                                      <span className="font-semibold text-green-400">{theoreticalOdds}</span>
+                                    </span>
+                                  )}
                                 </li>
                               );
                             })}
@@ -921,6 +937,9 @@ export default function BasketPage() {
                         {typeof combination.coupon.estimatedCombinedRate === "number" && (
                           <p className="mt-1 text-[11px] text-gray-400">
                             {text("Estimation indicative", "Indicative estimate")}: {combination.coupon.estimatedCombinedRate}%
+                            {formatTheoreticalOdds(combination.coupon.estimatedCombinedRate) !== null && (
+                              <> · {text("Cote théorique", "Theoretical odds")} <span className="font-semibold text-green-400">{formatTheoreticalOdds(combination.coupon.estimatedCombinedRate)}</span></>
+                            )}
                           </p>
                         )}
                       </div>
@@ -1186,6 +1205,9 @@ export default function BasketPage() {
                                 )}
                                 <ul className="mt-2 space-y-1">
                                   {match.picks.map(pick => {
+                                    const theoreticalOdds = pick.historicalRate === null
+                                      ? null
+                                      : formatTheoreticalOdds(pick.historicalRate);
                                     const finished = fixture ? isFixtureFinished(fixture) : false;
                                     const score = fixture && finished ? parseFixtureScore(fixture) : null;
                                     const pickOutcomeValue = score ? settleCouponPick(pick, score) : null;
@@ -1213,6 +1235,12 @@ export default function BasketPage() {
                                                 `${pick.historicalRate}% across ${pick.sampleSize} match(es)`
                                               )}
                                         </span>
+                                        {theoreticalOdds !== null && (
+                                          <span className="text-[11px] text-gray-400">
+                                          {text("Cote théorique", "Theoretical odds")}{" "}
+                                          <span className="font-semibold text-green-400">{theoreticalOdds}</span>
+                                          </span>
+                                        )}
                                       </li>
                                     );
                                   })}

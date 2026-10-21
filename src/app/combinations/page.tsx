@@ -9,7 +9,7 @@ import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { useFixtureStatuses } from "@/hooks/useFixtureStatuses";
 import { readFixtureBasket, writeFixtureBasket } from "@/lib/fixtureBasket";
 import { readGeneratedCombinations, writeGeneratedCombinations } from "@/lib/generatedCombinations";
-import { uniqueGeneratedCoupons, type GeneratedCoupon, type GeneratedStatisticCoupon, type GeneratedScorerCoupon, type CouponPick, type StatisticMarket } from "@/lib/coupons";
+import { formatTheoreticalOdds, uniqueGeneratedCoupons, type GeneratedCoupon, type GeneratedStatisticCoupon, type GeneratedScorerCoupon, type CouponPick, type StatisticMarket } from "@/lib/coupons";
 import type { Fixture, FixtureResponse } from "@/lib/fixtures";
 import type { LiveMatchAnalysis } from "@/lib/liveAnalysis";
 import {
@@ -1754,6 +1754,9 @@ export default function CombinationsPage() {
               {typeof safeCoupon.estimatedCombinedRate === "number" && (
                 <span className="shrink-0 rounded-full border border-green-800 bg-green-950/60 px-3 py-1 text-xs font-semibold text-green-200">
                   {text("Estimation combinée indicative", "Indicative combined estimate")}: {safeCoupon.estimatedCombinedRate}%
+                  {formatTheoreticalOdds(safeCoupon.estimatedCombinedRate) !== null && (
+                    <> · {text("Cote théorique", "Theoretical odds")} <span className="text-green-400">{formatTheoreticalOdds(safeCoupon.estimatedCombinedRate)}</span></>
+                  )}
                 </span>
               )}
             </header>
@@ -1777,24 +1780,37 @@ export default function CombinationsPage() {
                     </button>
                   </div>
                   <ul className="mt-2 space-y-1.5">
-                    {match.picks.map(pick => (
-                      <li key={`${pick.market}-${pick.selection}`} className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs">
-                        <span className="flex min-w-0 flex-wrap items-center gap-2">
-                          {renderPickOutcome(safeCoupon, match.fixtureId, pick)}
-                          <span className="flex items-center gap-2 text-gray-300">
-                            {pick.playerImageUrl && (
-                              <Image src={pick.playerImageUrl} alt={pick.playerName ?? ""} width={28} height={28} unoptimized className="h-7 w-7 rounded-full object-cover" />
-                            )}
-                            {pickLabel(pick)}
+                    {match.picks.map(pick => {
+                      const theoreticalOdds = pick.historicalRate === null
+                        ? null
+                        : formatTheoreticalOdds(pick.historicalRate);
+                      return (
+                        <li key={`${pick.market}-${pick.selection}`} className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs">
+                          <span className="flex min-w-0 flex-wrap items-center gap-2">
+                            {renderPickOutcome(safeCoupon, match.fixtureId, pick)}
+                            <span className="flex items-center gap-2 text-gray-300">
+                              {pick.playerImageUrl && (
+                                <Image src={pick.playerImageUrl} alt={pick.playerName ?? ""} width={28} height={28} unoptimized className="h-7 w-7 rounded-full object-cover" />
+                              )}
+                              {pickLabel(pick)}
+                            </span>
                           </span>
-                        </span>
-                        <span className="rounded-full border border-green-900/80 bg-green-950/40 px-2 py-0.5 font-medium text-green-300">
-                          {pick.historicalRate === null
-                            ? text("Pas de données", "No data")
-                            : `${pick.historicalRate}% (${pick.sampleSize} ${text("match(s)", "matches")})`}
-                        </span>
-                      </li>
-                    ))}
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full border border-green-900/80 bg-green-950/40 px-2 py-0.5 font-medium text-green-300">
+                              {pick.historicalRate === null
+                                ? text("Pas de données", "No data")
+                                : `${pick.historicalRate}% (${pick.sampleSize} ${text("match(s)", "matches")})`}
+                            </span>
+                            {theoreticalOdds !== null && (
+                              <span className="text-[11px] text-gray-400">
+                                {text("Cote théorique", "Theoretical odds")}{" "}
+                                <span className="font-semibold text-green-400">{theoreticalOdds}</span>
+                              </span>
+                            )}
+                          </span>
+                        </li>
+                      );
+                    })}
                   </ul>
                   <Link href={`/match/${encodeURIComponent(match.fixtureId)}`} className="mt-2 inline-block text-xs font-semibold text-fuchsia-400 hover:text-fuchsia-300">
                     {text("Voir le match →", "View fixture →")}
@@ -2312,6 +2328,9 @@ export default function CombinationsPage() {
                   </div>
                   <span className="rounded-full border border-green-700 bg-green-950 px-3 py-1 text-sm font-semibold text-green-200">
                     {text("Estimation combinée indicative", "Indicative combined estimate")}: {statisticCoupon.estimatedCombinedRate}%
+                    {formatTheoreticalOdds(statisticCoupon.estimatedCombinedRate) !== null && (
+                      <> · {text("Cote théorique", "Theoretical odds")} <span className="text-green-400">{formatTheoreticalOdds(statisticCoupon.estimatedCombinedRate)}</span></>
+                    )}
                   </span>
                 </div>
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -2337,6 +2356,9 @@ export default function CombinationsPage() {
                         <p className="mt-2 text-sm text-gray-300">{text(market.label, market.labelEn)} : {direction} {line}</p>
                         <p className="mt-1 text-xs text-green-300">
                           {match.historicalRate}% {text("sur", "across")} {match.sampleSize} {text("match(s) historique(s)", "historical match(es)")}
+                          {formatTheoreticalOdds(match.historicalRate) !== null && (
+                            <> · {text("Cote théorique", "Theoretical odds")} <span className="font-semibold">{formatTheoreticalOdds(match.historicalRate)}</span></>
+                          )}
                         </p>
                         <Link href={`/match/${encodeURIComponent(match.fixtureId)}`} className="mt-3 inline-block text-xs font-semibold text-green-400 hover:text-green-300">
                           {text("Voir le match →", "View fixture →")}

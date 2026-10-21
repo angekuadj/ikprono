@@ -73,6 +73,10 @@ export interface GeneratedCoupon {
   estimatedCombinedRate?: number;
 }
 
+export function formatTheoreticalOdds(rate: number): string | null {
+  return Number.isFinite(rate) && rate > 0 ? (100 / rate).toFixed(2) : null;
+}
+
 export function uniqueGeneratedCoupons(coupons: GeneratedCoupon[]): GeneratedCoupon[] {
   const seen = new Set<string>();
   return coupons.filter(coupon => {
