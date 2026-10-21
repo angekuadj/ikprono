@@ -154,11 +154,11 @@ export default function CombinationsPage() {
   const [riskLevel, setRiskLevel] = useState<RiskLevel>("medium");
   const [showRiskOptions, setShowRiskOptions] = useState(false);
   const [showAutoRiskOptions, setShowAutoRiskOptions] = useState(false);
-  const [requestedCount, setRequestedCount] = useState(3);
+  const [requestedCount, setRequestedCount] = useState(2);
   const [liveOnly, setLiveOnly] = useState(false);
   const [randomSelection, setRandomSelection] = useState(false);
   const [statisticMarket, setStatisticMarket] = useState<StatisticMarket>("shots");
-  const [statisticCount, setStatisticCount] = useState(3);
+  const [statisticCount, setStatisticCount] = useState(2);
   const [aiSetupStep, setAiSetupStep] = useState<1 | 2>(1);
   const [statisticCoupon, setStatisticCoupon] = useState<GeneratedStatisticCoupon | null>(null);
   const [scorerCoupon, setScorerCoupon] = useState<GeneratedScorerCoupon | null>(null);
@@ -189,8 +189,8 @@ export default function CombinationsPage() {
     ? String(entitlements.remainingToday)
     : "∞";
   const suggestionCount = Number.isFinite(entitlements.remainingToday)
-    ? Math.min(3, Math.max(0, entitlements.remainingToday))
-    : 3;
+    ? Math.min(2, Math.max(0, entitlements.remainingToday))
+    : 2;
   const couponFixtureIds = useMemo(
     () => Array.from(new Set([
       ...(safeCoupon?.matches.map(match => match.fixtureId) ?? []),
@@ -431,7 +431,7 @@ export default function CombinationsPage() {
     });
   };
 
-  const generateCombinations = async (regenerate = false, couponCount = 3, selectedRiskLevel = riskLevel) => {
+  const generateCombinations = async (regenerate = false, couponCount = 2, selectedRiskLevel = riskLevel) => {
     if (fixturesForCombination.length === 0) return;
     const remaining = requireGuestCombinationQuota();
     if (remaining === 0) return;
@@ -1557,20 +1557,9 @@ export default function CombinationsPage() {
         <section className="combination-auto-controls mt-6 grid gap-4 rounded-xl border border-gray-800 bg-gray-900 p-4 sm:grid-cols-[minmax(13rem,0.8fr)_minmax(0,1.2fr)] sm:items-end" aria-label={text("Paramètres de la combinaison automatique", "Automatic combination settings")}>
           <label className="combination-count-field block text-sm font-medium text-gray-200">
             {text("Nombre d’événements souhaités", "Number of events")}
-            <select
-              value={requestedCount}
-              onChange={event => {
-                setRequestedCount(Number(event.target.value));
-                setSafeCoupon(null);
-              }}
-              className="mt-2 block w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-white sm:max-w-xs"
-            >
-              {Array.from({ length: MAX_FIXTURES }, (_, index) => index + 1).map(count => (
-                <option key={count} value={count}>
-                  {text(`${count} événement${count > 1 ? "s" : ""}`, `${count} event${count > 1 ? "s" : ""}`)}
-                </option>
-              ))}
-            </select>
+            <div className="mt-2 block w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-white sm:max-w-xs">
+              {text("2 événements", "2 events")}
+            </div>
             <span className="mt-1 block text-xs font-normal text-gray-400">
               {text(
                 randomSelection
@@ -1665,16 +1654,16 @@ export default function CombinationsPage() {
             type="button"
             onClick={() => {
               setShowRiskOptions(false);
-              void generateCombinations(false, suggestionCount || 3, riskLevel);
+              void generateCombinations(false, suggestionCount || 2, riskLevel);
             }}
             disabled={authLoading || !canGenerateCombination || fixturesForCombination.length === 0 || generating}
             className="rounded-lg bg-green-600 px-5 py-3 text-sm font-bold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {generating
               ? text("Préparation des combinaisons…", "Preparing combinations…")
-              : suggestionCount < 3
+              : suggestionCount < 2
                 ? text(`Proposer ${suggestionCount} combinaison(s)`, `Suggest ${suggestionCount} combination(s)`)
-                : text("Proposer 3 combinaisons", "Suggest 3 combinations")}
+                : text("Proposer 2 combinaisons", "Suggest 2 combinations")}
           </button>
           <button
             type="button"
@@ -1727,7 +1716,7 @@ export default function CombinationsPage() {
                     disabled={authLoading || !canGenerateCombination || generating}
                     onClick={() => {
                       setRiskLevel(level);
-                      void generateCombinations(true, suggestionCount || 3, level);
+                      void generateCombinations(true, suggestionCount || 2, level);
                     }}                    className={`rounded-lg border p-3 text-left transition hover:border-green-600 ${
                       riskLevel === level ? "border-green-700 bg-green-950/30" : "border-gray-700 bg-gray-950"
                     }`}
@@ -2114,7 +2103,7 @@ export default function CombinationsPage() {
                     }}
                     className="mt-2 block w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-white"
                   >
-                    {Array.from({ length: MAX_FIXTURES }, (_, index) => index + 1).map(count => (
+                    {Array.from({ length: 2 }, (_, index) => index + 1).map(count => (
                       <option key={count} value={count}>{count}</option>
                     ))}
                   </select>
