@@ -12,6 +12,7 @@ import {
 type UnknownRecord = Record<string, unknown>;
 
 export interface HistoricalMatch {
+  matchId?: string;
   date: string;
   competition: string;
   homeTeam: string;
@@ -394,7 +395,9 @@ function mapHistoricalMatch(value: unknown, competition = ""): HistoricalMatch |
   if (!homeTeam || !awayTeam || !score) return null;
   const time = isRecord(value.time) ? value.time : isRecord(value.date) ? value.date : {};
   const league = isRecord(value.league) ? text(value.league.name) : competition;
+  const matchId = text(value.matchUrl || value.linkToMatch).match(/#(\d{1,20})$/)?.[1];
   return {
+    ...(matchId ? { matchId } : {}),
     date: isoDate(time.utcTime),
     competition: league,
     homeTeam,

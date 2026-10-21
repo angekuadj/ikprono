@@ -44,6 +44,8 @@ export interface CouponPick {
   historicalRate: number | null;
   sampleSize: number;
   team?: "home" | "away";
+  playerName?: string;
+  playerImageUrl?: string;
 }
 
 export interface CouponFixturePrediction {

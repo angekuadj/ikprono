@@ -3988,3 +3988,45 @@ html[data-theme="light"] .home-sports-list span {
     flex: 1 1 100%;
   }
 }
+
+html[data-theme="light"] .match-center {
+  background: #f4f4f5 !important;
+  color: #18181b;
+}
+
+html[data-theme="light"] .match-breadcrumbs {
+  color: #52525b;
+}
+
+html[data-theme="light"] .match-back-link,
+html[data-theme="light"] .match-back-link:hover {
+  color: #27272a;
+}
+
+html[data-theme="light"] .match-center .match-scoreboard,
+html[data-theme="light"] .app-main .match-scoreboard {
+  border-color: rgba(24, 24, 27, 0.12) !important;
+  background: linear-gradient(145deg, #fff, #fafafa) !important;
+  box-shadow: 0 16px 40px rgba(24, 24, 27, 0.08) !important;
+}
+
+html[data-theme="light"] .match-scoreboard-meta {
+  border-bottom-color: rgba(24, 24, 27, 0.1);
+}
+
+html[data-theme="light"] .match-sport-label,
+html[data-theme="light"] .match-team-name,
+html[data-theme="light"] .match-score-numbers {
+  color: #18181b;
+}
+
+html[data-theme="light"] .match-scoreboard-meta .text-gray-400,
+html[data-theme="light"] .match-score-caption {
+  color: #52525b;
+}
+
+html[data-theme="light"] .match-status:not(.is-live) {
+  border-color: rgba(24, 24, 27, 0.13);
+  background: #f4f4f5;
+  color: #3f3f46;
+}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { hasAdminAccess } from "@/lib/adminAccess";
@@ -277,7 +278,10 @@ export default function ProfilePage() {
       "over-8.5": text("Plus de 8,5 corners", "Over 8.5 corners"),
       "over-10.5": text("Plus de 10,5 corners", "Over 10.5 corners"),
     };
-    return labels[pick.selection];
+    const label = labels[pick.selection];
+    return pick.market === "scorer" && pick.playerName
+      ? `${label} : ${pick.playerName}`
+      : label;
   };
 
   const couponStatus = (coupon: GeneratedCoupon) =>
@@ -622,7 +626,12 @@ export default function ProfilePage() {
                                           : finished ? "unavailable" : "pending";
                                         return (
                                           <li key={`${pick.market}-${pick.selection}`} className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                                            <span className="text-gray-300">{pickLabel(pick)}</span>
+                                            <span className="flex items-center gap-2 text-gray-300">
+                                              {pick.playerImageUrl && (
+                                                <Image src={pick.playerImageUrl} alt={pick.playerName ?? ""} width={28} height={28} unoptimized className="h-7 w-7 rounded-full object-cover" />
+                                              )}
+                                              {pickLabel(pick)}
+                                            </span>
                                             <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 ${outcomeStyle(pickStatus)}`}>
                                               <span aria-hidden="true">{outcomeIcon(pickStatus)}</span>
                                               {outcomeLabel(pickStatus)}

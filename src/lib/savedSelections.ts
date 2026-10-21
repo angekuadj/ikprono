@@ -87,6 +87,8 @@ export function isGeneratedCoupon(value: unknown): value is GeneratedCoupon {
       (pick.selection === null || (typeof pick.selection === "string" && couponSelections.includes(pick.selection))) &&
       (pick.historicalRate === null || typeof pick.historicalRate === "number") &&
       typeof pick.sampleSize === "number" &&
+      (pick.playerName === undefined || typeof pick.playerName === "string") &&
+      (pick.playerImageUrl === undefined || typeof pick.playerImageUrl === "string") &&
       (pick.team === undefined || pick.team === "home" || pick.team === "away")
     )
   );

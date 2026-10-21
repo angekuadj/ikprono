@@ -96,6 +96,7 @@ const MAX_CONCURRENT_REQUESTS = 8;
 const REQUEST_TIMEOUT_MS = 12_000;
 const REQUEST_ATTEMPTS = 2;
 const HISTORY_MATCHES_TO_LOAD = 5;
+const SCORER_HISTORY_MATCHES_TO_LOAD = 2;
 /** Nombre minimal d'échantillons exploitables pour fonder une statistique. */
 const MIN_STAT_SAMPLES = 3;
 const PICKS_PER_MATCH = 2;
@@ -1106,6 +1107,57 @@ function mergeCandidates(players: ScorerCandidate[]): ScorerCandidate[] {
   return [...merged.values()];
 }
 
+async function loadRecentTeamDetails(
+  details: FotMobDetails,
+  teamName: string,
+  load: DetailsLoader
+): Promise<FotMobDetails[]> {
+  const recentMatches = details.history.recentMatches.find(
+    recent => normalize(recent.team) === normalize(teamName)
+  )?.matches ?? [];
+  const ids = recentMatches
+    .filter(match => match.matchId)
+    .sort((first, second) => second.date.localeCompare(first.date))
+    .slice(0, SCORER_HISTORY_MATCHES_TO_LOAD)
+    .flatMap(match => match.matchId ? [match.matchId] : []);
+  const loaded = await Promise.all(ids.map(load));
+  return loaded.filter((item): item is FotMobDetails => item !== null);
+}
+
+function scorerCandidatesFromTeamHistory(
+  historyDetails: FotMobDetails[],
+  teamName: string
+): { players: ScorerCandidate[]; scorers: Set<string> } {
+  const players: ScorerCandidate[] = [];
+  const scorers = new Set<string>();
+  const teamKey = normalize(teamName);
+  for (const details of historyDetails) {
+    const isHome = normalize(details.fixture.homeTeam) === teamKey;
+    const isAway = normalize(details.fixture.awayTeam) === teamKey;
+    if (!isHome && !isAway) continue;
+    const side = isHome ? "home" : "away";
+    const teamLineup = side === "home" ? details.homeLineup : details.awayLineup;
+    const teamTopPlayers = side === "home" ? details.topPlayers.home : details.topPlayers.away;
+    players.push(
+      ...teamLineup.map(player => ({ ...player, team: teamName })),
+      ...teamTopPlayers.map(player => ({ ...player, team: teamName }))
+    );
+    for (const event of details.events) {
+      const type = normalize(event.type);
+      const player = normalize(event.player);
+      if (
+        player &&
+        event.side === side &&
+        GOAL_EVENT_PATTERN.test(type) &&
+        !EXCLUDED_EVENT_PATTERN.test(type)
+      ) {
+        scorers.add(player);
+      }
+    }
+  }
+  return { players: mergeCandidates(players), scorers };
+}
+
 export async function generateFotMobScorerCoupon(
   fixtures: Fixture[],
   count: number,
@@ -1130,23 +1182,37 @@ export async function generateFotMobScorerCoupon(
         ...withTeam(details.awayLineup, fixture.awayTeam),
         ...withTeam(details.topPlayers?.home, fixture.homeTeam),
         ...withTeam(details.topPlayers?.away, fixture.awayTeam),
+        ...(details.topScorers ?? []).map(scorer => ({
+          name: scorer.name,
+          position: scorer.position ?? "",
+          rating: String(scorer.goals),
+          ...(scorer.imageUrl ? { imageUrl: scorer.imageUrl } : {}),
+          team: scorer.team,
+        })),
       ]);
 
-      const historyDetails = await loadHistoryDetails(details, load, fixture.id);
-      const recentScorerNames = extractRecentPlayers(historyDetails).scorers;
+      const [homeHistory, awayHistory] = await Promise.all([
+        loadRecentTeamDetails(details, fixture.homeTeam, load),
+        loadRecentTeamDetails(details, fixture.awayTeam, load),
+      ]);
 
-      const pickScorerForTeam = (teamName: string): ScorerCandidate | undefined => {
+      const pickScorerForTeam = (
+        teamName: string,
+        teamHistory: FotMobDetails[]
+      ): ScorerCandidate | undefined => {
         const teamKey = normalize(teamName);
-        const teamPlayers = candidates.filter(player => normalize(player.team) === teamKey);
+        const recentCandidates = scorerCandidatesFromTeamHistory(teamHistory, teamName);
+        const currentPlayers = candidates.filter(player => normalize(player.team) === teamKey);
+        const teamPlayers = mergeCandidates([...currentPlayers, ...recentCandidates.players]);
         const topNames = topScorerNamesFor(details, teamName);
-        const isRecent = (player: ScorerCandidate) => recentScorerNames.has(normalize(player.name));
+        const isRecent = (player: ScorerCandidate) => recentCandidates.scorers.has(normalize(player.name));
         const isTop = (player: ScorerCandidate) => topNames.has(normalize(player.name));
         const strikers = teamPlayers
           .filter(player => isStriker(player.position))
           .sort((first, second) => ratingOf(second) - ratingOf(first));
 
-        // 1) attaquant ayant marqué récemment, 2) attaquant au classement des buteurs,
-        // 3) attaquant le mieux noté, 4) non-attaquant seulement s'il a marqué récemment / est classé.
+        // Priorité à l'attaquant ayant marqué lors des deux derniers matchs, puis
+        // aux attaquants du classement ou les mieux notés.
         return (
           strikers.find(isRecent) ??
           strikers.find(isTop) ??
@@ -1156,8 +1222,8 @@ export async function generateFotMobScorerCoupon(
         );
       };
 
-      const homeScorer = pickScorerForTeam(fixture.homeTeam);
-      const awayScorer = pickScorerForTeam(fixture.awayTeam);
+      const homeScorer = pickScorerForTeam(fixture.homeTeam, homeHistory);
+      const awayScorer = pickScorerForTeam(fixture.awayTeam, awayHistory);
       if (!homeScorer && !awayScorer) return null;
 
       return {
@@ -1183,7 +1249,7 @@ export async function generateFotMobScorerCoupon(
 
   return {
     title: "Combinaison buteurs — buteur à tout moment",
-    description: `Un attaquant suggéré par équipe et par rencontre, sélectionné à partir des compositions, des buteurs des ${HISTORY_MATCHES_TO_LOAD} derniers matchs et du classement des buteurs de la compétition. Les milieux et défenseurs ne sont pas proposés comme buteurs sauf s'ils figurent parmi les buteurs récents ou le classement de la compétition. Aucune probabilité de but n’est fournie.`,
+    description: `Un attaquant suggéré par équipe et par rencontre, à partir des compositions disponibles et des buteurs des ${SCORER_HISTORY_MATCHES_TO_LOAD} derniers matchs de chaque équipe, avec le classement des buteurs en complément. Aucune probabilité de but n’est fournie.`,
     matches: pickFromRanked(eligible, count, randomSelection),
   };
 }
