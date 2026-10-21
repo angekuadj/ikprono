@@ -148,6 +148,7 @@ export default function MatchPushAlerts({ fixture }: { fixture: Fixture }) {
 
   const hasUnsavedChanges = ALERT_KEYS.some(key => alerts[key] !== savedAlerts[key]);
 
+  /*
   return (
     <section className="mt-5 rounded-xl border border-gray-800 bg-gray-900/70 p-4" aria-label={text("Alertes push pour ce match", "Push alerts for this match")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -207,4 +208,7 @@ export default function MatchPushAlerts({ fixture }: { fixture: Fixture }) {
       {notice && <p role="status" className="mt-3 text-xs text-green-300">{notice}</p>}
     </section>
   );
+  */
+
+  return null;
 }
