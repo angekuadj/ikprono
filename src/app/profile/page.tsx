@@ -8,6 +8,7 @@ import { useLanguage } from "@/context/LanguageContext";
 import { hasAdminAccess } from "@/lib/adminAccess";
 import { useNotifications } from "@/context/NotificationContext";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
+import WebPushSettings from "@/components/WebPushSettings";
 import { readSavedSelections, type SavedSelection } from "@/lib/savedSelections";
 import { readFixtureBasket } from "@/lib/fixtureBasket";
 import {
@@ -550,6 +551,7 @@ export default function ProfilePage() {
           </div>
         </form>
         )}
+        {activeTab === "profile" && user?.id.startsWith("firebase:") && <WebPushSettings />}
 
         {activeTab === "coupons" && (
           <section role="tabpanel" className="space-y-5">

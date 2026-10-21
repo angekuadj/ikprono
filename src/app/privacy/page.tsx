@@ -37,6 +37,7 @@ export default function PrivacyPage() {
               <li><strong className="text-white">{text("Informations de paiement :", "Payment information:")}</strong> {text("données de carte (traitées par notre partenaire de paiement)", "card details (processed by our payment partner)")}</li>
               <li><strong className="text-white">{text("Données d'utilisation :", "Usage data:")}</strong> {text("préférences, historique des prédictions consultées", "preferences and prediction viewing history")}</li>
               <li><strong className="text-white">{text("Données techniques :", "Technical data:")}</strong> {text("adresse IP, type d'appareil, navigateur", "IP address, device type, and browser")}</li>
+              <li><strong className="text-white">{text("Notifications Web Push :", "Web Push notifications:")}</strong> {text("jeton de notification associé à votre compte, uniquement après activation volontaire dans le navigateur", "a notification token linked to your account, only after you opt in through your browser")}</li>
             </ul>
           </section>
 
@@ -65,6 +66,7 @@ export default function PrivacyPage() {
             <ul className="list-disc list-inside text-gray-400 space-y-2">
               <li><strong className="text-white">{text("Partenaires de paiement :", "Payment partners:")}</strong> {text("pour traiter les transactions", "to process transactions")}</li>
               <li><strong className="text-white">{text("Prestataires de services :", "Service providers:")}</strong> {text("hébergement, email, analyse", "hosting, email, and analytics")}</li>
+              <li><strong className="text-white">{text("Firebase Cloud Messaging :", "Firebase Cloud Messaging:")}</strong> {text("acheminement des notifications Web Push lorsque vous les activez", "delivery of Web Push notifications when you enable them")}</li>
               <li><strong className="text-white">{text("Autorités légales :", "Legal authorities:")}</strong> {text("si requis par la loi", "when required by law")}</li>
             </ul>
             <p className="text-gray-400 leading-relaxed mt-4">
