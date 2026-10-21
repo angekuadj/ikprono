@@ -684,6 +684,7 @@ function parseFotMobDetails(payload: unknown, matchId: string, source: "fotmob" 
 
   const eventContainer = isRecord(facts.events) ? facts.events : {};
   const rawEvents = Array.isArray(eventContainer.events) ? eventContainer.events : [];
+  const matchEvents = rawEvents.filter(isRecord);
   const liveticker = isRecord(content.liveticker) ? content.liveticker : {};
   const rawComments = [
     ...(Array.isArray(eventContainer.comments) ? eventContainer.comments : []),
@@ -733,6 +734,21 @@ function parseFotMobDetails(payload: unknown, matchId: string, source: "fotmob" 
       ...(type === "Half" && halfLabel === "FT" ? { period: "fulltime" as const } : {}),
     };
   });
+  if (matchEvents.length > 0) {
+    fixture.goalScorers = matchEvents.flatMap(event => {
+      const type = text(event.type);
+      const ownGoal = event.ownGoal === true
+        || event.isOwnGoal === true
+        || /\bown goal\b/i.test(`${type} ${text(event.nameStr)}`);
+      if (!/\bgoal\b/i.test(type) || ownGoal || /\b(disallowed|cancelled|canceled|offside)\b/i.test(type)) return [];
+      const player = isRecord(event.player) ? text(event.player.name) : text(event.player);
+      if (!player) return [];
+      return [{
+        name: player,
+        ...(typeof event.isHome === "boolean" ? { side: event.isHome ? "home" as const : "away" as const } : {}),
+      }];
+    });
+  }
   const cancelledOffsideGoals = rawEvents.filter(isRecord).flatMap(event => {
     if (!/\bvar\b/i.test(text(event.type))) return [];
     const varData = isRecord(event.VAR) ? event.VAR : {};

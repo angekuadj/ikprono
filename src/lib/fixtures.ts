@@ -49,6 +49,7 @@ export interface Fixture {
     player?: string;
     side?: "home" | "away";
   };
+  goalScorers?: Array<{ name: string; side?: "home" | "away" }>;
   matchCards?: FixtureCards;
   liveStatistics?: LiveFixtureStatistics;
   odds?: {

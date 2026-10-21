@@ -950,9 +950,10 @@ export default function CombinationsPage() {
     const fixture = refreshedCouponFixtures[fixtureId] ?? fixtures.find(item => item.id === fixtureId);
     if (!fixture) return "unavailable";
     const score = parseFixtureScore(fixture);
-    if (!score) return isFixtureFinished(fixture) ? "unavailable" : "pending";
-    const result = settleCouponPick(pick, score);
-    return result === null ? "unavailable" : result ? "won" : "lost";
+    const result = settleCouponPick(pick, score, fixture);
+    return result === null
+      ? isFixtureFinished(fixture) ? "unavailable" : "pending"
+      : result ? "won" : "lost";
   };
   const getCouponPickStatuses = (coupon: GeneratedCoupon) => Object.fromEntries(
     coupon.matches.flatMap(match => match.picks.map(pick => [

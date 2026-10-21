@@ -632,10 +632,10 @@ export default function ProfilePage() {
                                     {fixture?.score && <p className="mt-1 text-xs text-gray-400">{text("Score final :", "Final score:")} {fixture.score}</p>}
                                     <ul className="mt-3 space-y-2">
                                       {match.picks.map(pick => {
-                                        const pickOutcome = score ? settleCouponPick(pick, score) : null;
-                                        const pickStatus: CouponOutcome = score
-                                          ? pickOutcome === null ? "unavailable" : pickOutcome ? "won" : "lost"
-                                          : finished ? "unavailable" : "pending";
+                                        const pickOutcome = settleCouponPick(pick, score, fixture);
+                                        const pickStatus: CouponOutcome = pickOutcome === null
+                                          ? fixture && !finished ? "pending" : "unavailable"
+                                          : pickOutcome ? "won" : "lost";
                                         return (
                                           <li key={`${pick.market}-${pick.selection}`} className="flex flex-wrap items-center justify-between gap-2 text-xs">
                                             <span className="flex items-center gap-2 text-gray-300">

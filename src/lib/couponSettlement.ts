@@ -26,7 +26,26 @@ export function isFixtureFinished(fixture: Fixture): boolean {
   return status !== undefined && ["termine", "finished", "full time", "ft", "aet", "pen"].includes(status);
 }
 
-export function settleCouponPick(pick: CouponPick, score: [number, number]): boolean | null {
+function normalizePlayerName(name: string): string {
+  return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim().toLocaleLowerCase();
+}
+
+export function settleCouponPick(
+  pick: CouponPick,
+  score: [number, number] | null,
+  fixture?: Fixture
+): boolean | null {
+  if (pick.market === "scorer") {
+    if (!fixture || !pick.playerName) return null;
+    const playerName = normalizePlayerName(pick.playerName);
+    const hasScored = fixture.goalScorers?.some(scorer =>
+      normalizePlayerName(scorer.name) === playerName
+      && (!pick.team || !scorer.side || scorer.side === pick.team)
+    );
+    if (hasScored) return true;
+    return isFixtureFinished(fixture) ? false : null;
+  }
+  if (!score) return null;
   if (!pick.selection) return null;
   const [homeGoals, awayGoals] = score;
 
@@ -77,7 +96,7 @@ export function settleCouponPick(pick: CouponPick, score: [number, number]): boo
     }
   }
 
-  if (pick.market === "corners" || pick.market === "scorer") {
+  if (pick.market === "corners") {
     return null;
   }
 
@@ -89,14 +108,24 @@ export function settleCouponMatch(
   fixture: Fixture | undefined
 ): CouponOutcome {
   if (!fixture) return "unavailable";
-  if (!isFixtureFinished(fixture)) return "pending";
-
+  const finished = isFixtureFinished(fixture);
+  if (!finished) return "pending";
   const score = parseFixtureScore(fixture);
-  if (!score) return "unavailable";
 
-  const outcomes = prediction.picks.map(pick => settleCouponPick(pick, score));
-  if (outcomes.some(outcome => outcome === false)) return "lost";
-  if (outcomes.length === 0 || outcomes.some(outcome => outcome === null)) return "unavailable";
+  const outcomes = prediction.picks.map(pick => settleCouponPick(pick, score, fixture));
+  if (outcomes.length === 0) return "unavailable";
+  const scorerOutcomes = prediction.picks
+    .map((pick, index) => pick.market === "scorer" ? outcomes[index] : undefined)
+    .filter((outcome): outcome is boolean | null => outcome !== undefined);
+  const otherOutcomes = prediction.picks
+    .map((pick, index) => pick.market !== "scorer" ? outcomes[index] : undefined)
+    .filter((outcome): outcome is boolean | null => outcome !== undefined);
+  if (otherOutcomes.some(outcome => outcome === false)) return "lost";
+  if (scorerOutcomes.length > 0 && scorerOutcomes.every(outcome => outcome === false)) return "lost";
+  if (
+    otherOutcomes.some(outcome => outcome === null)
+    || (scorerOutcomes.length > 0 && scorerOutcomes.every(outcome => outcome === null))
+  ) return "unavailable";
   return "won";
 }
 

@@ -482,10 +482,10 @@ export default function BasketPage() {
       const fixture = fixturesById[match.fixtureId] ?? combination.fixtures.find(item => item.id === match.fixtureId);
       const score = fixture ? parseFixtureScore(fixture) : null;
       return match.picks.map(pick => {
-        const result = score ? settleCouponPick(pick, score) : null;
-        const outcome: CouponOutcome = score
-          ? result === null ? "unavailable" : result ? "won" : "lost"
-          : fixture && isFixtureFinished(fixture) ? "unavailable" : fixture ? "pending" : "unavailable";
+        const result = settleCouponPick(pick, score, fixture);
+        const outcome: CouponOutcome = result === null
+          ? fixture && !isFixtureFinished(fixture) ? "pending" : "unavailable"
+          : result ? "won" : "lost";
         return [`${match.homeTeam} — ${match.awayTeam}::${getCouponPickLabel(pick)}`, outcome];
       });
     }));
@@ -853,10 +853,10 @@ export default function BasketPage() {
                               const theoreticalOdds = pick.historicalRate === null
                                 ? null
                                 : formatTheoreticalOdds(pick.historicalRate);
-                              const pickOutcomeValue = score ? settleCouponPick(pick, score) : null;
-                              const pickOutcome: CouponOutcome = score
-                                ? pickOutcomeValue === null ? "unavailable" : pickOutcomeValue ? "won" : "lost"
-                                : finished ? "unavailable" : "pending";
+                              const pickOutcomeValue = settleCouponPick(pick, score, fixture);
+                              const pickOutcome: CouponOutcome = pickOutcomeValue === null
+                                ? fixture && !finished ? "pending" : "unavailable"
+                                : pickOutcomeValue ? "won" : "lost";
                               return (
                                 <li key={`${pick.market}-${pick.selection}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 text-xs">
                                   <span className="flex min-w-0 items-center gap-2 break-words text-gray-300">
@@ -1013,10 +1013,10 @@ export default function BasketPage() {
                           </div>
                           <ul className="mt-2 space-y-1.5">
                             {match.picks.map(pick => {
-                              const pickOutcomeValue = score ? settleCouponPick(pick, score) : null;
-                              const pickOutcome: CouponOutcome = score
-                                ? pickOutcomeValue === null ? "unavailable" : pickOutcomeValue ? "won" : "lost"
-                                : finished ? "unavailable" : "pending";
+                              const pickOutcomeValue = settleCouponPick(pick, score, fixture);
+                              const pickOutcome: CouponOutcome = pickOutcomeValue === null
+                                ? fixture && !finished ? "pending" : "unavailable"
+                                : pickOutcomeValue ? "won" : "lost";
                               const theoreticalOdds = pick.historicalRate === null
                                 ? null
                                 : formatTheoreticalOdds(pick.historicalRate);
@@ -1218,10 +1218,10 @@ export default function BasketPage() {
                                       : formatTheoreticalOdds(pick.historicalRate);
                                     const finished = fixture ? isFixtureFinished(fixture) : false;
                                     const score = fixture && finished ? parseFixtureScore(fixture) : null;
-                                    const pickOutcomeValue = score ? settleCouponPick(pick, score) : null;
-                                    const pickOutcome: CouponOutcome = score
-                                      ? pickOutcomeValue === null ? "unavailable" : pickOutcomeValue ? "won" : "lost"
-                                      : finished ? "unavailable" : "pending";
+                                    const pickOutcomeValue = settleCouponPick(pick, score, fixture);
+                                    const pickOutcome: CouponOutcome = pickOutcomeValue === null
+                                      ? fixture && !finished ? "pending" : "unavailable"
+                                      : pickOutcomeValue ? "won" : "lost";
                                     return (
                                       <li key={`${pick.market}-${pick.selection}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 text-xs">
                                         <span className="flex min-w-0 items-center gap-2 break-words text-gray-300">
