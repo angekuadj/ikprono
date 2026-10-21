@@ -38,15 +38,14 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold text-white mb-4">{text("3. Description du service", "3. Service Description")}</h2>
             <p className="text-gray-400 leading-relaxed mb-4">
-              {text("IkProno est une application de prédictions sportives alimentée par l'intelligence artificielle. Nos services incluent :", "IkProno is an AI-powered sports prediction application. Our services include:")}
+              {text("IkProno permet de parcourir les calendriers de rencontres sportives et les informations de match disponibles. Les données et fonctionnalités dépendent des fournisseurs configurés.", "IkProno lets users browse sports fixture calendars and available match information. Data and features depend on configured providers.")}
             </p>
             <ul className="list-disc list-inside text-gray-400 space-y-2">
-              <li>{text("Génération de prédictions sportives basées sur l'IA", "AI-powered sports predictions")}</li>
-              <li>{text("Analyses statistiques de matchs", "Statistical match analysis")}</li>
-              <li>{text("Création de combinaisons personnalisées", "Custom accumulator creation")}</li>
-              <li>{text("Recherche IA de matchs selon vos critères", "AI match search based on your criteria")}</li>
-              <li>{text("Accès aux scores en direct", "Live scores")}</li>
-              <li>{text("Participation aux lotteries (abonnés Premium)", "Lottery participation (Premium subscribers)")}</li>
+              <li>{text("Consultation des rencontres par sport et période", "Browsing fixtures by sport and date range")}</li>
+              <li>{text("Consultation des informations de match disponibles", "Viewing available match information")}</li>
+              <li>{text("Enregistrement des rencontres favorites", "Saving favorite fixtures")}</li>
+              <li>{text("Outils de combinaison et de suivi disponibles dans l’application", "Combination and tracking tools available in the application")}</li>
+              <li>{text("Un simulateur de tirage de démonstration, sans participation ni gain réel", "A draw simulator for demonstration only, with no real entry or prize")}</li>
             </ul>
           </section>
 
@@ -82,16 +81,13 @@ export default function TermsPage() {
 
           {/* Prédictions et paris */}
           <section>
-            <h2 className="text-2xl font-bold text-white mb-4">{text("6. Prédictions et paris", "6. Predictions and Betting")}</h2>
+            <h2 className="text-2xl font-bold text-white mb-4">{text("6. Données sportives", "6. Sports Data")}</h2>
             <p className="text-gray-400 leading-relaxed mb-4">
-              {text("Important concernant nos prédictions :", "Important information about our predictions:")}
+              {text("IkProno ne fournit actuellement ni cotes ni pronostics de paris. Les informations de rencontre sont fournies à titre informatif et leur disponibilité ou exactitude dépend des fournisseurs de données.", "IkProno does not currently provide betting odds or betting predictions. Fixture information is provided for reference; its availability and accuracy depend on the data providers.")}
             </p>
             <ul className="list-disc list-inside text-gray-400 space-y-2">
-              <li>{text("Les prédictions sont fournies à titre informatif uniquement", "Predictions are provided for informational purposes only")}</li>
-              <li>{text("IkProno ne garantit aucun gain ou résultat", "IkProno does not guarantee winnings or outcomes")}</li>
-              <li>{text("Les paris sportifs comportent des risques financiers", "Sports betting involves financial risk")}</li>
-              <li>{text("Vous êtes seul responsable de vos décisions de paris", "You are solely responsible for your betting decisions")}</li>
-              <li>{text("Ne pariez jamais plus que ce que vous pouvez vous permettre de perdre", "Never bet more than you can afford to lose")}</li>
+              <li>{text("Les horaires et résultats peuvent évoluer après leur publication par les fournisseurs", "Schedules and results may change after being published by providers")}</li>
+              <li>{text("Les tirages visibles sur la page de démonstration ne sont pas réels et ne donnent lieu à aucun gain", "Draws shown on the demo page are not real and do not award prizes")}</li>
             </ul>
           </section>
 

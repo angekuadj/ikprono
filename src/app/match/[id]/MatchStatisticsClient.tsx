@@ -465,6 +465,7 @@ export default function MatchStatisticsClient({ fixtureId }: { fixtureId: string
   // Actualisation automatique des données du match : plus fréquente pendant le direct.
   const statusKey = (stats?.status ?? '').trim().toLocaleLowerCase('fr-FR');
   const isLiveMatch = statusKey === 'en direct' || statusKey === 'mi-temps';
+  const isFinishedMatch = /^(termin[eé]|finished|full time|ft|aet|pen)$/.test(statusKey);
   const [refreshKey] = useAutoRefresh(isLiveMatch ? LIVE_REFRESH_INTERVAL_MS : IDLE_REFRESH_INTERVAL_MS);
 
   useEffect(() => {
@@ -615,13 +616,46 @@ export default function MatchStatisticsClient({ fixtureId }: { fixtureId: string
       )
       .sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`))[0];
   };
-  const momentum = stats.momentum.filter(point =>
-    Number.isFinite(point.minute) && point.minute >= 0 && Number.isFinite(point.value)
+  const momentum = stats.momentum
+    .filter(point =>
+      Number.isFinite(point.minute) && point.minute >= 0 && Number.isFinite(point.value)
+    )
+    .sort((first, second) => first.minute - second.minute);
+  const goalEvents = stats.events.flatMap(event => {
+    const normalizedType = event.type.replace(/[\s_-]/g, '').toLowerCase();
+    const minuteValue = eventMinuteValue(event.minute);
+    const stoppageMinute = String(event.minute).match(/^(\d+)\+(\d+)$/);
+    if (
+      !normalizedType.includes('goal') ||
+      /disallow|cancel|overturn/.test(normalizedType) ||
+      minuteValue === Number.MAX_SAFE_INTEGER ||
+      (event.side !== 'home' && event.side !== 'away')
+    ) {
+      return [];
+    }
+    return [{
+      ...event,
+      chartMinute: stoppageMinute
+        ? Number(stoppageMinute[1]) + Number(stoppageMinute[2])
+        : minuteValue / 100,
+    }];
+  });
+  const momentumMaximumMinute = Math.max(
+    1,
+    ...momentum.map(point => point.minute),
+    ...goalEvents.map(event => event.chartMinute)
   );
-  const momentumMaximumMinute = momentum.reduce(
-    (maximum, point) => Math.max(maximum, point.minute),
-    1
-  );
+  const momentumValueAtMinute = (minute: number) => {
+    if (momentum.length === 0 || minute <= momentum[0].minute) return momentum[0]?.value ?? 0;
+    const nextIndex = momentum.findIndex(point => point.minute >= minute);
+    if (nextIndex === -1) return momentum[momentum.length - 1].value;
+    const previous = momentum[nextIndex - 1];
+    const next = momentum[nextIndex];
+    const span = next.minute - previous.minute;
+    if (span <= 0) return next.value;
+    const progress = (minute - previous.minute) / span;
+    return previous.value + (next.value - previous.value) * progress;
+  };
   const momentumPath = momentum.length > 0
     ? [
       `M ${12 + (momentum[0].minute / momentumMaximumMinute) * 576} 100`,
@@ -763,7 +797,7 @@ export default function MatchStatisticsClient({ fixtureId }: { fixtureId: string
   const visibleH2H = showAllH2H ? h2hRows : h2hRows.slice(0, INITIAL_H2H_COUNT);
 
   return (
-    <div className="mt-6">
+    <div className="match-details mt-6">
       {stats.source === "cache" && (
         <p role="status" className="mb-5 rounded-lg border border-amber-700/60 bg-amber-950/40 p-4 text-sm text-amber-200">
           Le flux live est indisponible. Les dernières données sont affichées et peuvent être obsolètes ; veuillez réessayer plus tard.
@@ -771,15 +805,19 @@ export default function MatchStatisticsClient({ fixtureId }: { fixtureId: string
         </p>
       )}
       {/* Tabs */}
-      <div className="mb-6 flex gap-2 rounded-xl border border-gray-800 bg-gray-900 p-2 overflow-x-auto">
+      <div className="match-detail-tabs mb-6 flex gap-2 rounded-xl border border-gray-800 bg-gray-900 p-2 overflow-x-auto" role="tablist" aria-label={text('Sections de la fiche du match', 'Match details sections')}>
         {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 whitespace-nowrap rounded-lg px-4 py-3 text-sm font-semibold transition-colors ${
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            aria-controls={`match-panel-${tab.id}`}
+            id={`match-tab-${tab.id}`}
+            className={`match-detail-tab flex-1 whitespace-nowrap rounded-lg px-4 py-3 text-sm font-semibold transition-colors ${
               activeTab === tab.id
-                ? 'bg-green-600 text-white'
+                ? 'is-active bg-green-600 text-white'
                 : 'text-gray-400 hover:bg-gray-800 hover:text-white'
             }`}
           >
@@ -789,14 +827,25 @@ export default function MatchStatisticsClient({ fixtureId }: { fixtureId: string
       </div>
 
       {/* Tab Content */}
+      <div
+        id={`match-panel-${activeTab}`}
+        role="tabpanel"
+        aria-labelledby={`match-tab-${activeTab}`}
+        tabIndex={0}
+        className="match-tab-panel"
+      >
       {activeTab === 'resume' && (
         <div className="space-y-6">
-          <section className="rounded-2xl border border-gray-800 bg-gray-900 p-4 sm:p-5" aria-label={text('Marchés et estimations indicatives', 'Markets and indicative estimates')}>
+          <section className="rounded-2xl border border-gray-800 bg-gray-900 p-4 sm:p-5" aria-label={text('Estimations du modèle prédictif', 'Predictive model estimates')}>
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <h3 className="text-lg font-bold text-white">{text('Marchés du match', 'Match markets')}</h3>
+                <h3 className="text-lg font-bold text-white">{text('Estimations du modèle', 'Model estimates')}</h3>
                 <p className="mt-1 text-xs text-gray-400">
-                  {text('Estimations historiques · pas des cotes bookmaker', 'Historical estimates · not bookmaker odds')}
+                  {isLiveMatch
+                    ? text('Modèle statistique fondé sur les résultats récents, non ajusté au score en direct. Ce ne sont pas des cotes bookmaker.', 'Statistical model based on recent results, not adjusted to the live score. These are not bookmaker odds.')
+                    : isFinishedMatch
+                      ? text('Estimation théorique du modèle à partir de l’historique récent, pas une archive des cotes avant match.', 'Theoretical model estimate from recent history, not an archived pre-match quote.')
+                      : text('Modèle prédictif local à partir des résultats FotMob : probabilités et cotes théoriques, sans marge bookmaker.', 'Local predictive model based on FotMob results: probabilities and theoretical odds, without bookmaker margin.')}
                 </p>
               </div>
               {stats.status !== 'Prévu' && (
@@ -1185,9 +1234,17 @@ export default function MatchStatisticsClient({ fixtureId }: { fixtureId: string
               </span>
             </div>
 
-            <div className="overflow-x-auto p-4 sm:p-6">
+            <div
+              className="match-pitch-scroll overflow-x-auto p-4 sm:p-6"
+              role="region"
+              aria-label={text('Défilement horizontal du terrain', 'Horizontal pitch view')}
+              tabIndex={0}
+            >
+              <p className="match-pitch-scroll-hint" aria-hidden="true">
+                {text('Faites glisser le terrain horizontalement pour voir les deux côtés.', 'Swipe horizontally to view both sides of the pitch.')}
+              </p>
               <div
-                className="relative mx-auto h-[440px] min-w-[680px] max-w-5xl overflow-hidden rounded-xl border-2 border-white/40 bg-[#34764b] sm:h-[540px]"
+                className="match-pitch relative mx-auto min-w-[680px] max-w-5xl overflow-hidden rounded-xl border-2 border-white/40 bg-[#34764b]"
                 aria-label={text('Terrain et compositions probables', 'Pitch and predicted lineups')}
               >
                 <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'linear-gradient(90deg, transparent 50%, rgba(0,0,0,.2) 50%)', backgroundSize: '20% 100%' }} />
@@ -1265,22 +1322,29 @@ export default function MatchStatisticsClient({ fixtureId }: { fixtureId: string
             <section className="rounded-2xl border border-gray-800 bg-gray-900 p-5 sm:p-6">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <h3 className="text-lg font-bold">{text('Dynamique du match', 'Match momentum')}</h3>
-                <div className="flex flex-wrap gap-4 text-xs text-gray-300">
+                <div className="match-momentum-legend flex flex-wrap gap-4 text-xs text-gray-300">
                   <span className="flex items-center gap-2">
-                    <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-green-500" />
+                    <span aria-hidden="true" className="match-momentum-home h-2.5 w-2.5 rounded-full" />
                     {stats.homeTeam}
                   </span>
                   <span className="flex items-center gap-2">
-                    <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-rose-500" />
+                    <span aria-hidden="true" className="match-momentum-away h-2.5 w-2.5 rounded-full" />
                     {stats.awayTeam}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span aria-hidden="true">⚽</span>
+                    {text('Buts', 'Goals')}
                   </span>
                 </div>
               </div>
               <svg
                 viewBox="0 0 600 220"
                 role="img"
-                aria-label={text('Graphique de dynamique du match', 'Match momentum chart')}
-                className="h-auto w-full overflow-visible"
+                aria-label={text(
+                  `Dynamique du match, ${goalEvents.length} but(s) indiqué(s) sur le graphique.`,
+                  `Match momentum with ${goalEvents.length} goal(s) marked on the chart.`
+                )}
+                className="match-momentum-chart h-auto w-full overflow-visible"
               >
                 <defs>
                   <clipPath id={`momentum-home-${stats.fixtureId}`}>
@@ -1290,13 +1354,13 @@ export default function MatchStatisticsClient({ fixtureId }: { fixtureId: string
                     <rect x="0" y="100" width="600" height="100" />
                   </clipPath>
                 </defs>
-                <line x1="12" y1="18" x2="588" y2="18" stroke="#374151" strokeDasharray="4 5" />
-                <line x1="12" y1="100" x2="588" y2="100" stroke="#6b7280" />
-                <line x1="12" y1="182" x2="588" y2="182" stroke="#374151" strokeDasharray="4 5" />
+                <line x1="12" y1="18" x2="588" y2="18" stroke="#3f3f46" strokeDasharray="5 6" />
+                <line x1="12" y1="100" x2="588" y2="100" stroke="#71717a" strokeWidth="1.5" />
+                <line x1="12" y1="182" x2="588" y2="182" stroke="#3f3f46" strokeDasharray="5 6" />
                 {momentum.length > 1 ? (
                   <>
-                    <path d={momentumPath} fill="#22c55e" fillOpacity="0.72" clipPath={`url(#momentum-home-${stats.fixtureId})`} />
-                    <path d={momentumPath} fill="#f43f5e" fillOpacity="0.72" clipPath={`url(#momentum-away-${stats.fixtureId})`} />
+                    <path d={momentumPath} fill="#ef4444" fillOpacity="0.72" clipPath={`url(#momentum-home-${stats.fixtureId})`} />
+                    <path d={momentumPath} fill="#22c55e" fillOpacity="0.72" clipPath={`url(#momentum-away-${stats.fixtureId})`} />
                     <path
                       d={momentum.map((point, index) => {
                         const x = 12 + (point.minute / momentumMaximumMinute) * 576;
@@ -1304,8 +1368,8 @@ export default function MatchStatisticsClient({ fixtureId }: { fixtureId: string
                         return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
                       }).join(' ')}
                       fill="none"
-                      stroke="#e5e7eb"
-                      strokeWidth="2"
+                      stroke="#f4f4f5"
+                      strokeWidth="2.5"
                       strokeLinejoin="round"
                       strokeLinecap="round"
                     />
@@ -1315,9 +1379,23 @@ export default function MatchStatisticsClient({ fixtureId }: { fixtureId: string
                     cx={12 + (momentum[0].minute / momentumMaximumMinute) * 576}
                     cy={100 - (Math.max(-100, Math.min(100, momentum[0].value)) / 100) * 82}
                     r="4"
-                    fill="#e5e7eb"
+                    fill="#f4f4f5"
                   />
                 )}
+                {goalEvents.map((event, index) => {
+                  const x = 12 + (event.chartMinute / momentumMaximumMinute) * 576;
+                  const y = 100 - (Math.max(-100, Math.min(100, momentumValueAtMinute(event.chartMinute))) / 100) * 82;
+                  const color = event.side === 'home' ? '#ef4444' : '#22c55e';
+                  return (
+                    <g key={`${event.chartMinute}-${event.side}-${event.player}-${index}`}>
+                      <title>
+                        {text('But', 'Goal')} · {event.player} · {event.minute}′ · {event.side === 'home' ? stats.homeTeam : stats.awayTeam}
+                      </title>
+                      <circle cx={x} cy={y} r="9" fill={color} stroke="#fff" strokeWidth="2" />
+                      <text x={x} y={y + 3.5} textAnchor="middle" fontSize="9" aria-hidden="true">⚽</text>
+                    </g>
+                  );
+                })}
                 <text x="12" y="210" fill="#9ca3af" fontSize="12">0′</text>
                 <text x="588" y="210" fill="#9ca3af" fontSize="12" textAnchor="end">
                   {Math.round(momentumMaximumMinute)}′
@@ -1764,6 +1842,7 @@ export default function MatchStatisticsClient({ fixtureId }: { fixtureId: string
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

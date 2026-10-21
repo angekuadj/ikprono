@@ -56,17 +56,19 @@ export default function LiveMatchHeader({
   };
 
   return (
-    <section className="mt-6 rounded-2xl border border-gray-800 bg-gray-900 p-6 sm:p-10">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-green-400">Football</p>
-          <h1 className="mt-2 text-lg font-semibold">{fixture.league}</h1>
+    <section className="match-scoreboard mt-5 rounded-2xl border border-gray-800 bg-gray-900 p-5 sm:p-8">
+      <div className="match-scoreboard-meta">
+        <div className="min-w-0">
+          <p className="match-sport-label">Football <span aria-hidden="true">·</span> {fixture.league}</p>
           <p className="mt-1 text-sm text-gray-400">{matchDate} · {fixture.time}</p>
         </div>
+        <span className={`match-status ${isLiveStatus(currentFixture.status) ? "is-live" : ""}`}>
+          {currentFixture.liveDisplay || currentFixture.status || "À venir"}
+        </span>
       </div>
 
-      <div className="mt-8 flex items-center justify-between gap-4 sm:gap-8">
-        <div className="flex-1 text-center">
+      <div className="match-scoreboard-teams">
+        <div className="match-team">
           {currentFixture.homeImageUrl && (
             <Image
               src={currentFixture.homeImageUrl}
@@ -77,18 +79,18 @@ export default function LiveMatchHeader({
               className="mx-auto mb-3 h-14 w-14 object-contain sm:h-16 sm:w-16"
             />
           )}
-          <h2 className="text-xl font-bold sm:text-2xl">{currentFixture.homeTeam}</h2>
+          <h1 className="match-team-name">{currentFixture.homeTeam}</h1>
           {renderCards("home")}
         </div>
-        <div className="flex-shrink-0 text-center">
-          <div className="text-4xl font-bold sm:text-5xl">
+        <div className="match-score">
+          <div className="match-score-numbers">
             {currentFixture.homeScore ?? '-'} - {currentFixture.awayScore ?? '-'}
           </div>
-          <p className="mt-2 text-sm text-gray-400">
-            {currentFixture.liveDisplay || currentFixture.status || 'À venir'}
-          </p>
+          <span className="match-score-caption">
+            {isLiveStatus(currentFixture.status) ? "Score en direct" : "Coup d’envoi"}
+          </span>
         </div>
-        <div className="flex-1 text-center">
+        <div className="match-team">
           {currentFixture.awayImageUrl && (
             <Image
               src={currentFixture.awayImageUrl}
@@ -99,7 +101,7 @@ export default function LiveMatchHeader({
               className="mx-auto mb-3 h-14 w-14 object-contain sm:h-16 sm:w-16"
             />
           )}
-          <h2 className="text-xl font-bold sm:text-2xl">{currentFixture.awayTeam}</h2>
+          <h2 className="match-team-name">{currentFixture.awayTeam}</h2>
           {renderCards("away")}
         </div>
       </div>

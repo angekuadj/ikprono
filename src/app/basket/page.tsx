@@ -570,17 +570,48 @@ export default function BasketPage() {
   const remainingLabel = Number.isFinite(entitlements.remainingToday) ? `${entitlements.remainingToday}/${entitlements.dailyLimit}` : "∞";
 
   return (
-    <main className="min-h-screen bg-black px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-4xl">
-        <header className="mb-8">
-          <Link href="/predictions" className="text-sm font-semibold text-green-400 hover:text-green-300">
-            ← {text("Retour aux rencontres", "Back to fixtures")}
+    <main className="feature-page page-basket min-h-screen bg-black px-4 py-8 sm:px-6 lg:px-8">
+      <div className="basket-layout mx-auto">
+        <header className="basket-header mb-5">
+          <div>
+            <Link href="/predictions" className="basket-back-link">
+              <span aria-hidden="true">←</span>
+              {text("Retour aux rencontres", "Back to fixtures")}
+            </Link>
+            <p className="basket-eyebrow">{text("VOTRE ESPACE DE SÉLECTION", "YOUR PICKS WORKSPACE")}</p>
+            <h1 className="text-3xl font-bold text-white">{text("Mon panier", "My basket")}</h1>
+            <p className="mt-2 max-w-2xl text-sm text-gray-400">
+              {text("Organisez vos matchs, suivez vos combinaisons et retrouvez vos sélections en un seul endroit.", "Organize fixtures, track combinations and manage your picks in one place.")}
+            </p>
+          </div>
+          <Link href="/predictions" className="basket-add-link">
+            <span aria-hidden="true">+</span>
+            {text("Ajouter des matchs", "Add fixtures")}
           </Link>
-          <h1 className="mt-4 text-3xl font-bold text-white">{text("Mon panier", "My basket")}</h1>
-          <p className="mt-2 text-gray-400">
-            {text("Retrouvez vos matchs sélectionnés et vos combinaisons déjà générées.", "Manage selected fixtures and already generated combinations.")}
-          </p>
         </header>
+
+        <section className="basket-overview mb-6" aria-label={text("Résumé du panier", "Basket overview")}>
+          <article className="basket-overview-card">
+            <span className="basket-overview-label">{text("Matchs sélectionnés", "Selected fixtures")}</span>
+            <strong>{fixtures.length}<small>/{MAX_SELECTION_SIZE}</small></strong>
+            <span>{text("dans le panier", "in your basket")}</span>
+          </article>
+          <article className="basket-overview-card">
+            <span className="basket-overview-label">{text("Combinaisons", "Combinations")}</span>
+            <strong>{generatedCombinations.length}</strong>
+            <span>{text("déjà générées", "already generated")}</span>
+          </article>
+          <article className="basket-overview-card">
+            <span className="basket-overview-label">{text("Historique", "History")}</span>
+            <strong>{couponHistory.length}</strong>
+            <span>{text("coupons archivés", "saved coupons")}</span>
+          </article>
+          <article className="basket-overview-card basket-overview-quota">
+            <span className="basket-overview-label">{text("Quota du jour", "Daily quota")}</span>
+            <strong>{isAuthenticated ? remainingLabel : "—"}</strong>
+            <span>{isAuthenticated ? text("générations restantes", "generations remaining") : text("connexion requise", "sign in required")}</span>
+          </article>
+        </section>
 
         {basketError && <p role="alert" className="mb-5 rounded-lg border border-red-800 bg-red-950/40 p-4 text-sm text-red-300">{basketError}</p>}
         {fixtureStatusError && <p role="alert" className="mb-5 rounded-lg border border-amber-800 bg-amber-950/30 p-4 text-sm text-amber-200">{fixtureStatusError}</p>}
@@ -595,51 +626,47 @@ export default function BasketPage() {
           </div>
         )}
 
-        <div className="mb-6 grid grid-cols-3 gap-2 rounded-xl border border-gray-800 bg-gray-900 p-2" role="tablist" aria-label={text("Contenu du panier", "Basket content")}>
+        <div className="basket-tabs mb-6 rounded-xl border border-gray-800 bg-gray-900 p-2" role="tablist" aria-label={text("Contenu du panier", "Basket content")}>
           <button
             type="button"
             role="tab"
             aria-selected={activeTab === "basket"}
             onClick={() => setActiveTab("basket")}
-            className={`rounded-lg px-2 py-2 text-xs font-semibold transition sm:px-3 sm:text-sm ${activeTab === "basket" ? "bg-green-600 text-white" : "text-gray-300 hover:bg-gray-800"}`}
+            className={`basket-tab rounded-lg px-3 py-2.5 text-xs font-semibold transition sm:text-sm ${activeTab === "basket" ? "is-active" : ""}`}
           >
-            {text("Mon panier", "My basket")} ({fixtures.length})
+            <span>{text("Panier", "Basket")}</span><span className="basket-tab-count">{fixtures.length}</span>
           </button>
           <button
             type="button"
             role="tab"
             aria-selected={activeTab === "generated"}
             onClick={() => setActiveTab("generated")}
-            className={`rounded-lg px-2 py-2 text-xs font-semibold transition sm:px-3 sm:text-sm ${activeTab === "generated" ? "bg-green-600 text-white" : "text-gray-300 hover:bg-gray-800"}`}
+            className={`basket-tab rounded-lg px-3 py-2.5 text-xs font-semibold transition sm:text-sm ${activeTab === "generated" ? "is-active" : ""}`}
           >
-            {text("Déjà générées", "Already generated")} ({generatedCombinations.length})
+            <span>{text("Générées", "Generated")}</span><span className="basket-tab-count">{generatedCombinations.length}</span>
           </button>
           <button
             type="button"
             role="tab"
             aria-selected={activeTab === "history"}
             onClick={() => setActiveTab("history")}
-            className={`rounded-lg px-2 py-2 text-xs font-semibold transition sm:px-3 sm:text-sm ${activeTab === "history" ? "bg-green-600 text-white" : "text-gray-300 hover:bg-gray-800"}`}
+            className={`basket-tab rounded-lg px-3 py-2.5 text-xs font-semibold transition sm:text-sm ${activeTab === "history" ? "is-active" : ""}`}
           >
-            {text("Historique des coupons", "Coupon history")} ({couponHistory.length})
+            <span>{text("Historique", "History")}</span><span className="basket-tab-count">{couponHistory.length}</span>
           </button>
           <button
             type="button"
             role="tab"
             aria-selected={activeTab === "selections"}
             onClick={() => setActiveTab("selections")}
-            className={`rounded-lg px-2 py-2 text-xs font-semibold transition sm:px-3 sm:text-sm ${activeTab === "selections" ? "bg-green-600 text-white" : "text-gray-300 hover:bg-gray-800"}`}
+            className={`basket-tab rounded-lg px-3 py-2.5 text-xs font-semibold transition sm:text-sm ${activeTab === "selections" ? "is-active" : ""}`}
           >
-            {text("Mes sélections", "My selections")} ({savedSelections.length})
+            <span>{text("Mes sélections", "My picks")}</span><span className="basket-tab-count">{savedSelections.length}</span>
           </button>
         </div>
 
         {activeTab === "generated" && (
           <section className="space-y-4" aria-label={text("Combinaisons déjà générées", "Already generated combinations")}>
-            {(() => {
-              console.log("🎨 Rendu de l'onglet generated, nombre de combinaisons:", generatedCombinations.length);
-              return null;
-            })()}
             {generatedCombinations.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-gray-700 bg-gray-900/70 px-6 py-12 text-center">
                 <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-green-950 text-green-300">
@@ -656,10 +683,6 @@ export default function BasketPage() {
                 </Link>
               </div>
             ) : (
-              (() => {
-                console.log("📋 Liste des combinaisons à afficher:", generatedCombinations.map(c => ({ id: c.id, title: c.coupon.title, matches: c.coupon.matches.length })));
-                return null;
-              })(),
               generatedCombinations.slice().reverse().map(combination => {
                 const isExpanded = expandedCombinations.has(combination.id);
                 const outcome = couponOutcome(combination.coupon, combination.fixtures);
@@ -1042,7 +1065,7 @@ export default function BasketPage() {
                         const estimate = combinationMarketEstimate(Object.values(selection.marketPicks).flat());
                         return estimate ? (
                           <>
-                            <span className="font-semibold">{text("Estimation indicative", "Indicative estimate")}: </span>
+                            <span className="font-semibold">                            {text("Estimation du modèle", "Model estimate")}: </span>
                             {estimate.probabilityPercent < 0.005 ? "< 0,01%" : `${estimate.probabilityPercent.toFixed(2)}%`}
                             {estimate.estimatedOdds && <span> · ≈{estimate.estimatedOdds.toFixed(2)}</span>}
                           </>
@@ -1052,7 +1075,7 @@ export default function BasketPage() {
                   )}
                   {selection.marketPicks && Object.values(selection.marketPicks).some(picks => picks.length > 0) && (
                     <p className="mt-1 text-[10px] text-gray-500">
-                      {text("Estimation indicative, pas une cote bookmaker ; les choix sont supposés indépendants.", "Indicative estimate, not bookmaker odds; picks are assumed to be independent.")}
+                      {text("Probabilités du modèle, pas des cotes bookmaker ; la combinaison suppose les choix indépendants.", "Model probabilities, not bookmaker odds; the combination assumes picks are independent.")}
                     </p>
                   )}
                   <button
@@ -1201,7 +1224,7 @@ export default function BasketPage() {
                 });
                 const dateTimeLabel = `${dateLabel} (${currentFixture.time})`;
                 return (
-                  <article key={fixture.id} className="relative overflow-hidden rounded-xl border border-gray-800 bg-gradient-to-br from-gray-900 to-gray-950 p-3 shadow-md shadow-black/20">
+                  <article key={fixture.id} className="basket-fixture-card relative overflow-hidden rounded-xl border border-gray-800 bg-gradient-to-br from-gray-900 to-gray-950 p-3 shadow-md shadow-black/20">
                     <div className="flex items-start justify-between gap-2 border-b border-dashed border-gray-700 pb-2">
                       <div className="min-w-0">
                         <p className="truncate text-[11px] font-semibold text-gray-300">
@@ -1282,7 +1305,7 @@ export default function BasketPage() {
               {basketEstimate && (
                 <div className="mt-4 rounded-lg border border-green-800/70 bg-green-950/30 px-3 py-2.5">
                   <p className="text-xs font-semibold text-green-200">
-                    {text("Estimation indicative de la combinaison", "Indicative combination estimate")}
+                    {text("Estimation du modèle pour la combinaison", "Model estimate for the combination")}
                   </p>
                   <p className="mt-1 text-sm font-bold text-white">
                     {basketEstimate.probabilityPercent < 0.005 ? "< 0,01%" : `${basketEstimate.probabilityPercent.toFixed(2)}%`}
@@ -1290,16 +1313,16 @@ export default function BasketPage() {
                   </p>
                   <p className="mt-1 text-[10px] text-gray-400">
                     {text(
-                      "Calcul simplifié à partir des fréquences historiques, en supposant les sélections indépendantes. Ce n’est pas une cote bookmaker ni une garantie.",
-                      "Simplified calculation from historical frequencies, assuming independent picks. This is not bookmaker odds or a guarantee."
+                      "Calcul basé sur les probabilités du modèle, en supposant les sélections indépendantes. Ce n’est pas une cote bookmaker ni une garantie.",
+                      "Calculated from model probabilities, assuming independent picks. This is not bookmaker odds or a guarantee."
                     )}
                   </p>
                 </div>
               )}
               <p className="mt-4 border-t border-gray-800 pt-4 text-xs text-gray-500">
                 {text(
-                  "Cette action enregistre les matchs et marchés choisis et utilise une sélection de votre quota. Les cotes affichées sont des estimations indicatives, pas des cotes bookmaker.",
-                  "This saves your chosen fixtures and markets and uses one selection from your quota. Displayed odds are indicative estimates, not bookmaker odds."
+                  "Cette action enregistre les matchs et marchés choisis et utilise une sélection de votre quota. Les valeurs affichées sont des estimations du modèle, pas des cotes bookmaker.",
+                  "This saves your chosen fixtures and markets and uses one selection from your quota. Displayed values are model estimates, not bookmaker odds."
                 )}
               </p>
             </section>

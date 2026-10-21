@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useNotifications } from "@/context/NotificationContext";
 import { useLanguage } from "@/context/LanguageContext";
@@ -9,45 +10,41 @@ export default function HelpPage() {
   const [email, setEmail] = useState("");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
   const { addNotification } = useNotifications();
   const { text } = useLanguage();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-
-    // Simulate API call
-    setTimeout(() => {
-      addNotification(text("Votre message a été envoyé avec succès !", "Your message was sent successfully!"), "success");
-      setName("");
-      setEmail("");
-      setSubject("");
-      setMessage("");
-      setLoading(false);
-    }, 1000);
+    const emailSubject = encodeURIComponent(`[IkProno] ${subject}`);
+    const emailBody = encodeURIComponent(
+      `Nom : ${name}\nE-mail : ${email}\n\n${message}`
+    );
+    window.location.href = `mailto:support@ikprono.com?subject=${emailSubject}&body=${emailBody}`;
+    addNotification(
+      text(
+        "Votre application de messagerie va s’ouvrir avec le message prérempli.",
+        "Your email app will open with your message prefilled."
+      ),
+      "info"
+    );
   };
 
   const faqs = [
     {
-      question: "Comment fonctionnent les prédictions IA ?",
-      answer: "Notre IA analyse des centaines de matchs chaque jour en utilisant des données historiques, les statistiques des équipes, les performances des joueurs et les cotes du marché pour identifier les paris à forte valeur."
+      question: "Comment consulter les rencontres ?",
+      answer: "Ouvrez le calendrier pour parcourir les rencontres par jour, semaine ou mois, puis filtrez par sport."
     },
     {
-      question: "Quels types de prédictions sont disponibles ?",
-      answer: "Nous proposons plusieurs types : ULTRA SAFE (1 pari sûr), SAFE (2 paris combinés), EQUILIBRE (cotes moyennes), AGRESSIF (fortes cotes), DAILY COMBO (très forte cote), MyCombi 1-5 (personnalisés) et les prédictions IA Premium."
+      question: "Quelles informations sont affichées ?",
+      answer: "Les informations disponibles dépendent des données transmises par les fournisseurs sportifs configurés."
     },
     {
-      question: "Comment consulter les pronostics ?",
-      answer: "Connectez-vous à votre compte, accédez à l'onglet Prédictions ou Dashboard pour voir tous les pronostics du jour avec les analyses détaillées et les niveaux de confiance."
+      question: "IkProno propose-t-il des pronostics ou des cotes de paris ?",
+      answer: "Non. Les cotes et pronostics de paris ne sont pas proposés actuellement."
     },
     {
-      question: "Puis-je annuler mon abonnement ?",
-      answer: "Oui, vous pouvez annuler votre abonnement à tout moment depuis la page de paiement ou en contactant notre support. Aucun engagement n'est requis."
-    },
-    {
-      question: "Les prédictions sont-elles garanties ?",
-      answer: "Non, aucun système de paris ne peut garantir des gains. Nos prédictions maximisent vos probabilités mais le risque zéro n'existe pas dans les paris sportifs."
+      question: "Comment contacter le support ?",
+      answer: "Utilisez le formulaire ci-dessus : votre application de messagerie s’ouvrira avec un e-mail prérempli à envoyer à support@ikprono.com."
     }
   ];
 
@@ -128,10 +125,9 @@ export default function HelpPage() {
             </div>
             <button
               type="submit"
-              disabled={loading}
-              className="w-full bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition hover-glow disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition hover-glow"
             >
-              {loading ? text("Envoi en cours...", "Sending...") : text("Envoyer le message", "Send message")}
+              {text("Préparer l’e-mail", "Prepare email")}
             </button>
           </form>
         </div>
@@ -146,18 +142,16 @@ export default function HelpPage() {
                 className="bg-gray-900 border border-gray-800 rounded-lg p-6 card-hover hover-lift"
               >
                 <h3 className="text-lg font-semibold text-white mb-2">{text(faq.question, [
-                  "How do AI predictions work?",
-                  "What types of predictions are available?",
-                  "How can I view predictions?",
-                  "Can I cancel my subscription?",
-                  "Are predictions guaranteed?"
+                  "How can I browse fixtures?",
+                  "What information is displayed?",
+                  "Does IkProno provide betting predictions or odds?",
+                  "How can I contact support?"
                 ][index])}</h3>
                 <p className="text-gray-400">{text(faq.answer, [
-                  "Our AI analyzes hundreds of matches daily using historical data, team statistics, player performance, and market odds to identify valuable betting opportunities.",
-                  "We offer several types: ULTRA SAFE, SAFE, BALANCED, AGGRESSIVE, DAILY COMBO, MyCombi 1-5, and Premium AI predictions.",
-                  "Sign in and visit the Predictions or Dashboard page to see today's picks, detailed analysis, and confidence levels.",
-                  "Yes. You can cancel your subscription at any time from the payment page or by contacting support. There is no commitment.",
-                  "No betting system can guarantee winnings. Our predictions help inform your choices, but sports betting always involves risk."
+                  "Open the calendar to browse fixtures by day, week, or month, then filter by sport.",
+                  "Available information depends on the data returned by the configured sports providers.",
+                  "No. Betting odds and betting predictions are not currently provided.",
+                  "Use the form above. Your email app will open a prefilled message addressed to support@ikprono.com."
                 ][index])}</p>
               </div>
             ))}
@@ -174,7 +168,9 @@ export default function HelpPage() {
             </div>
             <h3 className="text-white font-semibold mb-2">{text("Guide utilisateur", "User guide")}</h3>
             <p className="text-gray-400 text-sm mb-4">{text("Apprenez à utiliser toutes les fonctionnalités", "Learn how to use all the features")}</p>
-            <button className="text-green-500 hover:text-green-400 font-medium text-sm">{text("Lire le guide →", "Read the guide →")}</button>
+            <Link href="/ai-search" className="text-green-500 hover:text-green-400 font-medium text-sm">
+              {text("Ouvrir le calendrier →", "Open the calendar →")}
+            </Link>
           </div>
 
           <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 text-center card-hover">
@@ -185,7 +181,9 @@ export default function HelpPage() {
             </div>
             <h3 className="text-white font-semibold mb-2">{text("FAQ complète", "Full FAQ")}</h3>
             <p className="text-gray-400 text-sm mb-4">{text("Toutes les réponses à vos questions", "Answers to all your questions")}</p>
-            <button className="text-green-500 hover:text-green-400 font-medium text-sm">{text("Voir la FAQ →", "View FAQ →")}</button>
+            <Link href="/faq" className="text-green-500 hover:text-green-400 font-medium text-sm">
+              {text("Voir la FAQ →", "View FAQ →")}
+            </Link>
           </div>
 
           <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 text-center card-hover">
@@ -194,9 +192,11 @@ export default function HelpPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
               </svg>
             </div>
-            <h3 className="text-white font-semibold mb-2">{text("Chat en direct", "Live chat")}</h3>
-            <p className="text-gray-400 text-sm mb-4">{text("Discutez avec notre support", "Chat with our support team")}</p>
-            <button className="text-green-500 hover:text-green-400 font-medium text-sm">{text("Démarrer le chat →", "Start chat →")}</button>
+            <h3 className="text-white font-semibold mb-2">{text("Contacter le support", "Contact support")}</h3>
+            <p className="text-gray-400 text-sm mb-4">{text("Préparez un e-mail à notre équipe", "Prepare an email to our team")}</p>
+            <Link href="/contact" className="text-green-500 hover:text-green-400 font-medium text-sm">
+              {text("Ouvrir la page Contact →", "Open Contact →")}
+            </Link>
           </div>
         </div>
       </div>

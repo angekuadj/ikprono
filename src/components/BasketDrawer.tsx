@@ -77,8 +77,13 @@ export default function BasketDrawer({ open, onClose }: { open: boolean; onClose
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
   }, [open, onClose]);
 
   const removeCombination = (combinationId: string) => {
@@ -101,15 +106,15 @@ export default function BasketDrawer({ open, onClose }: { open: boolean; onClose
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[70]" role="dialog" aria-modal="true" aria-label={text("Mon panier", "My basket")}>
+    <div className="basket-drawer-overlay fixed inset-0 z-[70]" role="dialog" aria-modal="true" aria-label={text("Mon panier", "My basket")}>
       <button
         type="button"
         aria-label={text("Fermer le panier", "Close basket")}
         onClick={onClose}
         className="absolute inset-0 h-full w-full cursor-default bg-black/60 backdrop-blur-sm"
       />
-      <aside className="absolute bottom-0 right-0 top-0 flex w-full max-w-md flex-col border-l border-green-800/50 bg-gray-950 shadow-2xl animate-slide-in-right">
-        <header className="flex items-center justify-between border-b border-gray-800 px-4 py-3">
+      <aside className="basket-drawer-panel absolute bottom-0 right-0 top-0 flex w-full max-w-md flex-col border-l border-gray-800 bg-gray-950 shadow-2xl animate-slide-in-right">
+        <header className="basket-drawer-header flex items-center justify-between border-b border-gray-800 px-4 py-3">
           <div>
             <h2 className="text-base font-bold text-white">
               {text("Mon panier", "My basket")}
@@ -131,7 +136,7 @@ export default function BasketDrawer({ open, onClose }: { open: boolean; onClose
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-3 py-3">
+        <div className="basket-drawer-list min-h-0 flex-1 overflow-y-auto px-3 py-3">
           {readError && (
             <p role="alert" className="mb-3 rounded-lg border border-red-800 bg-red-950/40 p-3 text-xs text-red-200">
               {readError}
@@ -199,7 +204,7 @@ export default function BasketDrawer({ open, onClose }: { open: boolean; onClose
                     <p className="mt-1.5 text-[11px] text-gray-400">
                       {matches.length} {text("match(s)", "match(es)")}
                       {typeof combination.coupon.estimatedCombinedRate === "number" && (
-                        <> · {text("Cote estimée", "Estimated odds")}{" "}
+                        <> · {text("Cote théorique", "Theoretical odds")}{" "}
                           <span className="font-semibold text-green-400">{combination.coupon.estimatedCombinedRate.toFixed(2)}</span>
                         </>
                       )}
@@ -211,7 +216,7 @@ export default function BasketDrawer({ open, onClose }: { open: boolean; onClose
           )}
         </div>
 
-        <footer className="space-y-2 border-t border-gray-800 px-4 py-3">
+        <footer className="basket-drawer-footer space-y-2 border-t border-gray-800 px-4 py-3">
           {combinations.length > 0 && (
             <button
               type="button"
@@ -225,14 +230,14 @@ export default function BasketDrawer({ open, onClose }: { open: boolean; onClose
             <Link
               href="/basket"
               onClick={onClose}
-              className="flex-1 rounded-lg bg-green-600 px-3 py-2 text-center text-sm font-semibold text-white transition hover:bg-green-500"
+              className="basket-drawer-primary-action flex-1 rounded-lg bg-green-600 px-3 py-2 text-center text-sm font-semibold text-white transition hover:bg-green-500"
             >
               {text("Ouvrir le panier", "Open basket")}
             </Link>
             <Link
               href="/combinations"
               onClick={onClose}
-              className="flex-1 rounded-lg border border-green-700 px-3 py-2 text-center text-sm font-semibold text-green-300 transition hover:bg-green-900/30"
+              className="basket-drawer-secondary-action flex-1 rounded-lg border border-gray-700 px-3 py-2 text-center text-sm font-semibold text-gray-200 transition hover:bg-gray-800"
             >
               {text("Générer", "Generate")}
             </Link>

@@ -1142,8 +1142,8 @@ export default function CombinationsPage() {
   };
 
   return (
-    <main className="min-h-screen bg-black px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl">
+    <main className="feature-page page-combinations min-h-screen bg-black px-4 py-8 sm:px-6 lg:px-8">
+      <div className="feature-page-content mx-auto max-w-6xl">
         {(actionError || actionNotice) && (
           <p className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
             actionError ? "border-red-800 bg-red-950/40 text-red-200" : "border-green-800 bg-green-950/30 text-green-200"
@@ -1151,26 +1151,45 @@ export default function CombinationsPage() {
             {actionError || actionNotice}
           </p>
         )}
-        <header className="mb-8">
-          <h1 className="text-3xl font-bold text-white">
-            {activeTab === "ai" ? text("Combinaisons IA", "AI combinations") : text("Combinaisons à venir", "Upcoming combinations")}
-          </h1>
-          <p className="mt-2 max-w-3xl text-gray-400">
-            {activeTab === "ai"
-              ? text(
-                "Choisissez une statistique, le nombre de rencontres et un niveau de risque pour créer une combinaison à partir des historiques disponibles.",
-                "Choose a statistic, number of fixtures, and risk level to create a combination from available history."
-              )
-              : text(
-                `Choisissez des rencontres programmées pour recevoir ${suggestionCount} proposition(s) de combinaison, établies selon les historiques disponibles.`,
-                `Choose scheduled fixtures to get ${suggestionCount} suggested combination(s) based on available match history.`
-              )}
-          </p>
-          <p className="mt-2 text-xs text-green-400">
-            {text("Les rencontres, scores et statuts sont actualisés automatiquement.", "Fixtures, scores, and statuses refresh automatically.")}
-          </p>
+        <header className="page-intro combinations-hero mb-5">
+          <div>
+            <p className="combinations-eyebrow">{text("VOTRE ESPACE DE PRONOSTICS", "YOUR PREDICTION WORKSPACE")}</p>
+            <h1 className="text-3xl font-bold text-white">
+              {activeTab === "ai" ? text("Construire une combinaison", "Build a combination") : text("Combinaisons à venir", "Upcoming combinations")}
+            </h1>
+            <p className="mt-2 max-w-3xl text-gray-400">
+              {activeTab === "ai"
+                ? text(
+                  "Laissez le moteur statistique composer des sélections selon un marché et un niveau de risque.",
+                  "Let the statistics engine build picks based on a market and risk level."
+                )
+                : text(
+                  `Sélectionnez des rencontres ou demandez ${suggestionCount} propositions fondées sur les historiques disponibles.`,
+                  `Select fixtures or request ${suggestionCount} suggestions based on available history.`
+                )}
+            </p>
+          </div>
           {!authLoading && (
-            <p className="mt-2 text-xs text-gray-400">
+            <div className="combinations-quota">
+              <span>{text("Générations disponibles", "Generations available")}</span>
+              <strong>
+                {trialPhaseActive
+                  ? "∞"
+                  : isAuthenticated
+                    ? entitlements.canGenerate
+                      ? Number.isFinite(entitlements.remainingToday) ? entitlements.remainingToday : "∞"
+                      : "0"
+                    : guestCombinationsRemaining}
+              </strong>
+              <span>{trialPhaseActive
+                ? text("phase d’essai", "trial phase")
+                : isAuthenticated
+                  ? text("aujourd’hui", "today")
+                  : text("gratuites", "free")}</span>
+            </div>
+          )}
+          {!authLoading && (
+            <p className="combinations-plan-note mt-3 text-xs text-gray-400">
               {trialPhaseActive
                 ? text(
                   `Phase d'essai en cours (jusqu'au ${GLOBAL_TRIAL_PHASE_END_DAY.split("-").reverse().join("/")}) : combinaisons illimitées.${!isAuthenticated ? " Connectez-vous pour regarder les vidéos en direct." : ""}`,
@@ -1196,6 +1215,29 @@ export default function CombinationsPage() {
           )}
         </header>
 
+        <div className="combinations-mode-tabs mb-5 grid grid-cols-2 gap-2 rounded-xl border border-gray-800 bg-gray-900 p-2" role="tablist" aria-label={text("Mode de combinaison", "Combination mode")}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "fixtures"}
+            onClick={() => setActiveTab("fixtures")}
+            className={`combination-mode-tab rounded-lg px-4 py-3 text-left transition ${activeTab === "fixtures" ? "is-active" : ""}`}
+          >
+            <span className="block font-semibold">{text("Choisir les rencontres", "Choose fixtures")}</span>
+            <span className="mt-1 block text-xs opacity-70">{text("Sélection manuelle ou propositions", "Manual picks or suggestions")}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "ai"}
+            onClick={() => setActiveTab("ai")}
+            className={`combination-mode-tab rounded-lg px-4 py-3 text-left transition ${activeTab === "ai" ? "is-active" : ""}`}
+          >
+            <span className="block font-semibold">{text("Générateur statistique", "Statistics generator")}</span>
+            <span className="mt-1 block text-xs opacity-70">{text("Marchés, filtres et niveau de risque", "Markets, filters and risk level")}</span>
+          </button>
+        </div>
+
         {!authLoading && !isAuthenticated && (
           <section className={`mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4 ${
             trialPhaseActive || guestCombinationsRemaining > 0
@@ -1205,8 +1247,8 @@ export default function CombinationsPage() {
             <p className="text-sm text-green-100">
               {trialPhaseActive
                 ? text(
-                  "Phase d'essai en cours : générez autant de combinaisons que vous voulez. Connectez-vous pour regarder les vidéos en direct.",
-                  "Free trial phase: generate as many combinations as you want. Sign in to watch live videos."
+                  "Connectez-vous pour regarder les vidéos en direct.",
+                  "Sign in to watch live videos."
                 )
                 : guestCombinationsRemaining === 0
                 ? text(
@@ -1268,9 +1310,9 @@ export default function CombinationsPage() {
           </section>
         )}
 
-        <section className="mb-6 flex flex-wrap items-end justify-between gap-4 rounded-xl border border-gray-800 bg-gray-900 p-4">
+        <section className="combination-date-toolbar mb-5 flex flex-wrap items-end justify-between gap-4 rounded-xl border border-gray-800 bg-gray-900 p-4">
           <div>
-            <p className="mb-2 text-sm font-medium text-gray-200">{text("Période des rencontres", "Fixture date range")}</p>
+            <p className="mb-2 text-sm font-semibold text-gray-200">{text("Période des rencontres", "Fixture date range")}</p>
             <div className="flex flex-wrap items-center gap-3">
               <label className="text-xs text-gray-400">
                 {text("Du", "From")}
@@ -1329,29 +1371,8 @@ export default function CombinationsPage() {
           </div>
         </section>
 
-        <div className="mb-6 grid grid-cols-2 gap-2 rounded-lg border border-gray-800 bg-gray-900 p-1" role="tablist" aria-label={text("Mode de combinaison", "Combination mode")}>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "fixtures"}
-            onClick={() => setActiveTab("fixtures")}
-            className={`rounded-md px-4 py-3 text-sm font-semibold transition ${activeTab === "fixtures" ? "bg-green-600 text-white" : "text-gray-400 hover:text-white"}`}
-          >
-            {text("Rencontres", "Fixtures")}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "ai"}
-            onClick={() => setActiveTab("ai")}
-            className={`rounded-md px-4 py-3 text-sm font-semibold transition ${activeTab === "ai" ? "bg-green-600 text-white" : "text-gray-400 hover:text-white"}`}
-          >
-            IA
-          </button>
-        </div>
-
         {activeTab === "fixtures" && (
-          <section className="mb-4 rounded-xl border border-gray-800 bg-gray-900 p-4" aria-label={text("Rechercher des rencontres", "Search fixtures")}>
+          <section className="combination-search-panel mb-4 rounded-xl border border-gray-800 bg-gray-900 p-4" aria-label={text("Rechercher des rencontres", "Search fixtures")}>
             <div className="flex flex-wrap items-end justify-between gap-3">
               <label className="min-w-[16rem] flex-1 text-xs text-gray-400">
                 {text("Rechercher une rencontre", "Search fixtures")}
@@ -1401,13 +1422,9 @@ export default function CombinationsPage() {
         {loadError && (
           <p role="alert" className="mb-4 rounded-lg border border-red-800 bg-red-950/30 p-4 text-sm text-red-200">{loadError}</p>
         )}
-        {actionError && (
-          <p role="status" className="mb-4 rounded-lg border border-amber-800 bg-amber-950/30 p-4 text-sm text-amber-200">{actionError}</p>
-        )}
-
         {activeTab === "fixtures" && (
           <>
-        <section aria-label={text("Rencontres à venir", "Upcoming fixtures")}>
+        <section className="combination-fixtures-section" aria-label={text("Rencontres à venir", "Upcoming fixtures")}>
           {loading && fixtures.length === 0 ? (
             <p role="status" className="py-12 text-center text-gray-400">{text("Chargement des rencontres…", "Loading fixtures…")}</p>
           ) : fixtures.length === 0 ? (
@@ -1491,8 +1508,8 @@ export default function CombinationsPage() {
           )}
         </section>
 
-        <div className="mt-6 grid gap-4 rounded-xl border border-green-900 bg-green-950/20 p-4 sm:grid-cols-[1fr_auto] sm:items-end">
-          <label className="block text-sm font-medium text-gray-200">
+        <section className="combination-auto-controls mt-6 grid gap-4 rounded-xl border border-gray-800 bg-gray-900 p-4 sm:grid-cols-[minmax(13rem,0.8fr)_minmax(0,1.2fr)] sm:items-end" aria-label={text("Paramètres de la combinaison automatique", "Automatic combination settings")}>
+          <label className="combination-count-field block text-sm font-medium text-gray-200">
             {text("Nombre d’événements souhaités", "Number of events")}
             <select
               value={requestedCount}
@@ -1527,8 +1544,20 @@ export default function CombinationsPage() {
               )}
             </span>
           </label>
-          <div className="flex flex-col gap-3 sm:items-end">
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-300">
+          <div className="combination-auto-preferences flex flex-wrap items-center justify-start gap-2 sm:justify-end">
+            <button
+              type="button"
+              onClick={() => setLiveOnly(current => !current)}
+              aria-pressed={liveOnly}
+              className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                liveOnly
+                  ? "border-red-700 bg-red-950/30 text-red-200"
+                  : "border-gray-700 bg-gray-950 text-gray-300 hover:border-gray-500"
+              }`}
+            >
+              {liveOnly ? text("Matchs en direct", "Live matches") : text("Matchs à venir", "Upcoming matches")}
+            </button>
+            <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-gray-700 bg-gray-950 px-3 text-sm text-gray-300">
               <input
                 type="checkbox"
                 checked={randomSelection}
@@ -1537,13 +1566,8 @@ export default function CombinationsPage() {
               />
               {text("Sélection aléatoire", "Random selection")}
             </label>
-            <button
-              type="button"
-              onClick={() => setLiveOnly(current => !current)}
-              className="rounded-lg border border-green-700 bg-green-950/30 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-green-300 hover:border-green-500"
-            >
-              {liveOnly ? text("Matchs en live", "Live matches") : text("Matchs à venir", "Upcoming matches")}
-            </button>
+          </div>
+          <div className="combination-auto-actions flex flex-wrap items-center justify-end gap-2 sm:col-span-2">
             <button
               type="button"
               onClick={() => {
@@ -1561,14 +1585,14 @@ export default function CombinationsPage() {
               type="button"
               onClick={() => setShowAutoRiskOptions(current => !current)}
               disabled={generating}
-              className="rounded-lg border border-gray-700 px-5 py-3 text-sm font-semibold text-gray-200 hover:border-green-600 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg border border-gray-700 px-5 py-3 text-sm font-semibold text-gray-200 transition hover:border-gray-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {showAutoRiskOptions
                 ? text("Masquer les risques", "Hide risk levels")
                 : text("Niveau de risque", "Risk level")}
             </button>
           </div>
-        </div>
+        </section>
 
         {showAutoRiskOptions && (
           <section className="mt-4 rounded-xl border border-gray-800 bg-gray-900 p-4" aria-label={text("Choisir un niveau de risque automatique", "Choose an automatic risk level")}>
@@ -1698,7 +1722,7 @@ export default function CombinationsPage() {
         )}
 
         {safeCoupon && (
-          <section className="mt-8 overflow-hidden rounded-2xl border border-green-900/70 bg-gradient-to-br from-gray-900 to-gray-950 shadow-lg shadow-black/20" aria-label={text("Combinaison proposée par l’IA", "AI suggested combination")}>
+          <section className="combination-result combination-result--auto mt-8 overflow-hidden rounded-2xl border border-green-900/70 bg-gradient-to-br from-gray-900 to-gray-950 shadow-lg shadow-black/20" aria-label={text("Combinaison proposée par l’IA", "AI suggested combination")}>
             <header className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-800 px-4 py-3 sm:px-5">
               <div className="min-w-0">
                 <h2 className="text-lg font-bold text-white">{safeCoupon.title}</h2>
@@ -1791,7 +1815,7 @@ export default function CombinationsPage() {
         )}
 
         {(aiAnalyses.length > 0 || aiError) && (
-          <section className="mt-10 rounded-2xl border border-purple-800/70 bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 p-4 shadow-xl shadow-black/30 sm:p-6" aria-label={text("Analyse IA des matchs en direct", "AI analysis of live matches")}>
+          <section className="combination-result combination-result--live mt-10 rounded-2xl border border-purple-800/70 bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 p-4 shadow-xl shadow-black/30 sm:p-6" aria-label={text("Analyse IA des matchs en direct", "AI analysis of live matches")}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 text-xl font-bold text-white">
                 <span aria-hidden="true">🧠</span>
@@ -1901,21 +1925,23 @@ export default function CombinationsPage() {
         )}
 
         {coupons.length > 0 && (
-          <section className="mt-10" aria-label={text("Combinaisons proposées", "Suggested combinations")}>
+          <section className="combination-results mt-10" aria-label={text("Combinaisons proposées", "Suggested combinations")}>
             <h2 className="mb-4 text-2xl font-bold text-white">{text("Vos combinaisons", "Your combinations")}</h2>
-            <p className="mb-4 text-sm text-green-300">
+            <p className="combination-results-intro mb-4 text-sm text-gray-400">
               {text("Retirez les rencontres que vous ne souhaitez pas garder, puis enregistrez chaque combinaison pour suivre son résultat dans le panier.", "Remove any fixtures you do not want, then save each combination to track its result in your basket.")}
               {" "}
               <Link href="/basket" className="font-semibold underline hover:text-green-200">
                 {text("Voir le suivi", "View tracking")}
               </Link>
             </p>
-            <div className="grid gap-4 lg:grid-cols-3">
+            <div className="combination-coupon-grid grid gap-4 lg:grid-cols-2">
               {coupons.map((coupon, index) => (
-                <article key={`${coupon.level}-${index}`} className="rounded-xl border border-gray-800 bg-gray-900 p-5">
-                  <h3 className="text-lg font-bold text-white">{coupon.title}</h3>
-                  <p className="mt-1 text-sm text-gray-400">{coupon.description}</p>
-                  <ul className="mt-4 space-y-3">
+                <article key={`${coupon.level}-${index}`} className="combination-coupon-card rounded-xl border border-gray-800 bg-gray-900 p-5">
+                  <header className="combination-coupon-heading">
+                    <h3 className="text-lg font-bold text-white">{coupon.title}</h3>
+                    <p className="mt-1 text-sm text-gray-400">{coupon.description}</p>
+                  </header>
+                  <ul className="combination-pick-list mt-4 space-y-3">
                     {coupon.matches.map(match => (
                       <li key={match.fixtureId} className="rounded-lg border border-gray-800 bg-black/30 p-3">
                         <div className="flex items-start justify-between gap-2">
@@ -1997,7 +2023,7 @@ export default function CombinationsPage() {
         )}
 
         {activeTab === "ai" && (
-          <section className="rounded-xl border border-gray-800 bg-gray-900 p-4 sm:p-6" aria-label={text("Générateur IA statistique", "AI statistics generator")}>
+          <section className="ai-generator-panel rounded-xl border border-gray-800 bg-gray-900 p-4 sm:p-6" aria-label={text("Générateur IA statistique", "AI statistics generator")}>
             <div className="mb-6 flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase text-green-400">{text("Générateur IA", "AI generator")}</p>
@@ -2152,7 +2178,7 @@ export default function CombinationsPage() {
             )}
 
             {scorerCoupon && (
-              <section className="mt-8 border-t border-gray-800 pt-6" aria-label={text("Combinaison de buteurs générée", "Generated scorer combination")}>
+              <section className="combination-result combination-result--scorers mt-8 border-t border-gray-800 pt-6" aria-label={text("Combinaison de buteurs générée", "Generated scorer combination")}>
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <h3 className="text-lg font-bold text-white">{scorerCoupon.title}</h3>
@@ -2251,7 +2277,7 @@ export default function CombinationsPage() {
             )}
 
             {statisticCoupon && (
-              <section className="mt-8 border-t border-gray-800 pt-6" aria-label={text("Combinaison statistique générée", "Generated statistics combination")}>
+              <section className="combination-result combination-result--statistics mt-8 border-t border-gray-800 pt-6" aria-label={text("Combinaison statistique générée", "Generated statistics combination")}>
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <h3 className="text-lg font-bold text-white">{statisticCoupon.title}</h3>

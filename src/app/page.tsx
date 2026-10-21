@@ -4,257 +4,183 @@ import Link from "next/link";
 import { useLanguage } from "@/context/LanguageContext";
 
 export default function Home() {
-  const { t, text } = useLanguage();
+  const { text } = useLanguage();
+
+  const destinations = [
+    {
+      href: "/ai-search",
+      number: "01",
+      title: text("Calendrier", "Calendar"),
+      description: text(
+        "Parcourez les rencontres par date, période et sport.",
+        "Browse fixtures by date, period, and sport."
+      ),
+      icon: "▦",
+    },
+    {
+      href: "/live",
+      number: "02",
+      title: text("En direct", "Live"),
+      description: text(
+        "Suivez les scores et les événements disponibles en direct.",
+        "Follow scores and available live match events."
+      ),
+      icon: "⌁",
+    },
+    {
+      href: "/combinations",
+      number: "03",
+      title: text("Combinaisons", "Combinations"),
+      description: text(
+        "Composez et gérez vos sélections de rencontres.",
+        "Create and manage your fixture selections."
+      ),
+      icon: "↗",
+    },
+    {
+      href: "/favorites",
+      number: "04",
+      title: text("Favoris", "Favorites"),
+      description: text(
+        "Retrouvez rapidement les rencontres que vous suivez.",
+        "Quickly return to the fixtures you follow."
+      ),
+      icon: "☆",
+    },
+  ];
 
   return (
-    <div className="bg-black min-h-screen">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden py-24 md:py-32">
-        {/* Animated background particles */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-20 left-10 w-2 h-2 bg-green-500 rounded-full animate-particle" style={{ animationDelay: '0s' }}></div>
-          <div className="absolute top-40 right-20 w-3 h-3 bg-green-400 rounded-full animate-particle" style={{ animationDelay: '2s' }}></div>
-          <div className="absolute bottom-20 left-1/4 w-2 h-2 bg-green-600 rounded-full animate-particle" style={{ animationDelay: '4s' }}></div>
-          <div className="absolute top-1/3 right-1/3 w-4 h-4 bg-green-300 rounded-full animate-particle" style={{ animationDelay: '6s' }}></div>
-          <div className="absolute bottom-1/3 left-1/2 w-2 h-2 bg-green-500 rounded-full animate-particle" style={{ animationDelay: '8s' }}></div>
-        </div>
-
-        {/* Gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/50 to-black"></div>
-
-        <div className="container mx-auto px-4 relative z-10">
-          <div className="max-w-4xl mx-auto text-center">
-            <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 tracking-tight animate-float-up">
-              {t("heroTitle")}<br />
-              <span className="text-green-500 animate-gradient bg-gradient-to-r from-green-400 via-green-500 to-green-600 bg-clip-text text-transparent">
-                {t("heroSubtitle")}
-              </span>
-            </h1>
-            <p className="text-xl text-gray-400 mb-8 max-w-2xl mx-auto animate-float-up" style={{ animationDelay: '0.2s' }}>
-              {t("heroDescription")}
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center animate-float-up" style={{ animationDelay: '0.4s' }}>
-              <Link
-                href="/register"
-                className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white px-8 py-4 rounded-lg font-semibold transition text-center animate-pulse hover-glow hover:scale-105 transform"
-              >
-                {t("accessIkProno")}
-              </Link>
-              <Link
-                href="/predictions"
-                className="border-2 border-gray-700 hover:border-green-600 text-white px-8 py-4 rounded-lg font-semibold transition text-center hover-lift hover:bg-gray-800"
-              >
-                {t("viewPredictions")}
-              </Link>
-            </div>
-
-            {/* Stats badges */}
-            <div className="mt-12 flex flex-wrap justify-center gap-6 animate-float-up" style={{ animationDelay: '0.6s' }}>
-              <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-lg px-6 py-3 flex items-center gap-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="text-gray-300 text-sm">{text("3 sports", "3 sports")}</span>
-              </div>
-              <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-lg px-6 py-3 flex items-center gap-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="text-gray-300 text-sm">{text("Jour · Semaine · Mois", "Day · Week · Month")}</span>
-              </div>
-              <div className="bg-gray-900/50 backdrop-blur border border-gray-800 rounded-lg px-6 py-3 flex items-center gap-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="text-gray-300 text-sm">{text("Sélection de rencontres", "Select fixtures")}</span>
-              </div>
-            </div>
-            <div className="mt-6">
-              <p className="text-sm font-medium text-green-400">
-                {text("L’application mobile IkProno sera bientôt disponible", "The IkProno mobile app is coming soon")}
-              </p>
-              <div className="mt-3 flex items-center justify-center gap-4 text-gray-400" aria-label="Android et iOS">
-                <svg role="img" aria-label="Android" viewBox="0 0 24 24" className="h-7 w-7" fill="currentColor">
-                  <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-1.0001s.4482-1.0001.9993-1.0001c.5511 0 .9993.4486.9993 1.0001s-.4482 1.0001-.9993 1.0001m-11.046 0c-.5511 0-.9993-.4486-.9993-1.0001s.4482-1.0001.9993-1.0001c.5511 0 .9993.4486.9993 1.0001s-.4482 1.0001-.9993 1.0001m11.4045-6.02 1.9973-3.4592a.416.416 0 0 0-.1521-.5676.416.416 0 0 0-.5678.1521l-2.0223 3.5021a12.1865 12.1865 0 0 0-10.2732 0L4.8411 5.4467a.4161.416 0 0 0-.72.4154l1.9972 3.4593C2.6889 11.2175.845 14.6022.605 18.396h22.79c-.24-3.7938-2.0839-7.1785-5.5135-9.0746" />
-                </svg>
-                <svg role="img" aria-label="Apple" viewBox="0 0 24 24" className="h-7 w-7" fill="currentColor">
-                  <path d="M16.365 1.43c0 1.14-.416 2.22-1.247 3.236-.998 1.202-2.205 1.896-3.512 1.79a3.6 3.6 0 0 1-.027-.44c0-1.095.477-2.267 1.323-3.226 1.056-1.213 2.38-1.907 3.463-1.98.027.207.04.414.04.62M21.94 17.18c-.383.88-.84 1.69-1.37 2.44-.72 1.02-1.31 1.73-1.77 2.14-.71.66-1.47 1-2.27 1-.58 0-1.28-.17-2.1-.52-.82-.35-1.57-.52-2.25-.52-.71 0-1.48.17-2.3.52-.83.35-1.5.53-2.02.55-.77.03-1.55-.32-2.34-1.05-.5-.44-1.12-1.18-1.86-2.21-.79-1.1-1.44-2.38-1.96-3.84-.56-1.58-.84-3.11-.84-4.61 0-1.7.37-3.16 1.1-4.38.58-.99 1.35-1.77 2.31-2.34a6.24 6.24 0 0 1 3.15-.89c.62 0 1.43.2 2.43.59.99.4 1.63.6 1.9.6.2 0 .9-.23 2.1-.7 1.13-.43 2.08-.61 2.86-.54 2.11.17 3.69 1.01 4.72 2.53-1.89 1.14-2.82 2.73-2.8 4.78.02 1.6.6 2.93 1.74 3.99.51.47 1.08.84 1.72 1.1-.14.4-.28.78-.43 1.15" />
-                </svg>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="match-preview-stage mx-auto mt-14" aria-label={text("Aperçu du calendrier des rencontres", "Fixture calendar preview")}>
-          <div className="match-orbit orbit-one">PSG</div>
-          <div className="match-orbit orbit-two">FCB</div>
-          <div className="match-orbit orbit-three">BVB</div>
-          <div className="match-phone">
-            <div className="match-phone-notch" />
-            <div className="match-phone-status"><span>9:41</span><span>●●●　100</span></div>
-            <div className="match-phone-brand">IK<span>PRONO</span></div>
-            <div className="match-phone-tabs"><b>{text("RENCONTRES", "FIXTURES")}</b><span>FOOTBALL</span><span>TENNIS</span></div>
-            <div className="match-preview-card">
-              <div className="match-preview-heading"><span>{text("AUJOURD’HUI", "TODAY")}</span><small>FOOTBALL</small></div>
-              <div className="match-preview-game"><span className="match-team-mark">F</span><div><strong>{text("Rencontres réelles", "Real fixtures")}</strong><small>{text("Calendrier de football", "Football schedule")}</small></div></div>
-              <div className="match-preview-selection"><span>{text("Rencontre", "Fixture")}</span><strong>{text("À venir", "Upcoming")}</strong></div>
-            </div>
-            <div className="match-preview-card compact">
-              <div className="match-preview-heading"><span>{text("DEMAIN", "TOMORROW")}</span><small>BASKETBALL</small></div>
-              <div className="match-preview-game"><span className="match-team-mark blue">B</span><div><strong>{text("Rencontres réelles", "Real fixtures")}</strong><small>{text("Calendrier de basketball", "Basketball schedule")}</small></div></div>
-              <div className="match-preview-selection"><span>{text("Rencontre", "Fixture")}</span><strong>{text("À venir", "Upcoming")}</strong></div>
-            </div>
-            <div className="match-phone-bottom"><span>▦</span><span>◎</span><span>⚽</span><span>◇</span></div>
-          </div>
-        </div>
-      </section>
-
-      {/* Why Section */}
-      <section className="py-16 border-t border-gray-800 animate-slide-up">
-        <div className="container mx-auto px-4">
-          <div className="max-w-3xl mx-auto">
-            <h2 className="text-3xl font-bold text-white mb-6">
-              {text("Pourquoi IkProno", "Why IkProno")}
-            </h2>
-            <p className="text-gray-400 text-lg mb-8">
-              {text("IkProno vous aide à parcourir les rencontres de football, basketball et tennis par jour, semaine ou mois.", "IkProno helps you browse football, basketball, and tennis fixtures by day, week, or month.")}
-            </p>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-12">
-              <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 card-hover hover-lift animate-slide-up stagger-1">
-                <div className="w-12 h-12 bg-green-500/20 rounded-lg flex items-center justify-center mb-4">
-                  <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-3">{text("Analyse IA avancée", "Advanced AI analysis")}</h3>
-                <p className="text-gray-400">
-                  {text("Consultez les rencontres dans un calendrier simple, sans cotes ni pronostics de pari.", "Browse fixtures in a simple calendar, without betting odds or picks.")}
-                </p>
-              </div>
-              <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 card-hover hover-lift animate-slide-up stagger-2">
-                <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center mb-4">
-                  <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-3">{text("Mise à jour quotidienne", "Daily updates")}</h3>
-                <p className="text-gray-400">
-                  {text("Passez facilement de la vue du jour à la semaine ou au mois.", "Switch easily between day, week, and month views.")}
-                </p>
-              </div>
-              <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 card-hover hover-lift animate-slide-up stagger-3">
-                <div className="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center mb-4">
-                  <svg className="w-6 h-6 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-3">{text("30+ compétitions", "30+ competitions")}</h3>
-                <p className="text-gray-400">
-                  {text("Ligue des Champions, Premier League, Liga, Bundesliga, NBA et bien d'autres ligues analysées.", "Champions League, Premier League, La Liga, Bundesliga, NBA, and many more leagues analyzed.")}
-                </p>
-              </div>
-              <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 card-hover hover-lift animate-slide-up stagger-4">
-                <div className="w-12 h-12 bg-yellow-500/20 rounded-lg flex items-center justify-center mb-4">
-                  <svg className="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-3">{text("Lotteries exclusives", "Exclusive lotteries")}</h3>
-                <p className="text-gray-400">
-                  {text("Participez aux tirages et gagnez des prix incroyables (réservé Premium).", "Enter the draws and win amazing prizes (Premium members only).")}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Fixture schedule */}
-      <section className="py-16 border-t border-gray-800 animate-slide-up">
-        <div className="container mx-auto px-4">
-          <div className="max-w-3xl mx-auto">
-            <h2 className="text-3xl font-bold text-white mb-6">
-              {text("Un calendrier de rencontres", "A fixture calendar")}
-            </h2>
-            <p className="mb-8 text-lg text-gray-400">
-              {text("Choisissez une journée, une semaine ou un mois et parcourez les rencontres réelles de football, basketball et tennis.", "Choose a day, week, or month and browse real football, basketball, and tennis fixtures.")}
-            </p>
-            <Link href="/live" className="inline-flex rounded-lg bg-green-600 px-6 py-3 font-semibold text-white transition hover:bg-green-500">
-              {text("Voir les rencontres", "Browse fixtures")}
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Pricing Preview */}
-      <section className="py-16 border-t border-gray-800">
-        <div className="container mx-auto px-4">
-          <div className="max-w-3xl mx-auto text-center">
-            <h2 className="text-3xl font-bold text-white mb-6">
-              {text("Tarif", "Pricing")}
-            </h2>
-            <p className="text-gray-400 text-lg mb-8">
-              {t("freeAccount")}
-            </p>
-            <Link 
-              href="/payment" 
-              className="inline-block bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-lg font-semibold transition"
-            >
-              {text("Voir les tarifs", "View pricing")}
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ Preview */}
-      <section className="py-16 border-t border-gray-800">
-        <div className="container mx-auto px-4">
-          <div className="max-w-3xl mx-auto">
-            <h2 className="text-3xl font-bold text-white mb-6">
-              {text("Questions fréquentes", "Frequently asked questions")}
-            </h2>
-            <div className="space-y-6">
-              <div className="border-b border-gray-800 pb-4">
-                <h3 className="text-lg font-semibold text-white mb-2">
-                  {text("L'IA garantit-elle des gains ?", "Does AI guarantee winnings?")}
-                </h3>
-                <p className="text-gray-400">
-                  {text("IkProno affiche les rencontres réelles fournies par les services sportifs configurés. La disponibilité dépend de ces fournisseurs.", "IkProno displays real fixtures from the configured sports data services. Availability depends on those providers.")}
-                </p>
-              </div>
-              <div className="border-b border-gray-800 pb-4">
-                <h3 className="text-lg font-semibold text-white mb-2">
-                  {text("Quels sports et périodes sont disponibles ?", "Which sports and periods are available?")}
-                </h3>
-                <p className="text-gray-400">
-                  {text("Vous pouvez parcourir les rencontres réelles de football, basketball et tennis par jour, semaine ou mois.", "Browse real football, basketball, and tennis fixtures by day, week, or month.")}
-                </p>
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-white mb-2">
-                  {text("Compatible mobile ?", "Is it mobile-friendly?")}
-                </h3>
-                <p className="text-gray-400">
-                  {text("Oui. IkProno est une Progressive Web App (PWA) installable sur Android et iOS. Ajoutez-la à votre écran d'accueil pour une expérience comme une vraie app.", "Yes. IkProno is a Progressive Web App (PWA) that you can install on Android and iOS. Add it to your home screen for an app-like experience.")}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-16 border-t border-gray-800 animate-slide-up relative overflow-hidden">
-        {/* Animated background */}
-        <div className="absolute inset-0 bg-gradient-to-r from-green-900/10 via-transparent to-green-900/10 animate-gradient"></div>
-
-        <div className="container mx-auto px-4 text-center relative z-10">
-          <h2 className="text-3xl font-bold text-white mb-6">
-            {text("Prêt à parcourir les rencontres ?", "Ready to browse fixtures?")}
-          </h2>
-          <p className="text-gray-400 mb-8 max-w-2xl mx-auto">
-            {text("Explorez les rencontres dans une interface simple et adaptée au téléphone.", "Explore fixtures in a simple, mobile-friendly interface.")}
+    <div className="home-page">
+      <section className="home-hero">
+        <div className="home-hero-copy">
+          <p className="home-eyebrow">
+            <span className="home-live-indicator" aria-hidden="true" />
+            {text("VOTRE ESPACE SPORTIF", "YOUR SPORTS HUB")}
           </p>
-          <Link
-            href="/register"
-            className="inline-block bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white px-8 py-4 rounded-lg font-semibold transition animate-pulse hover-glow hover:scale-105 transform"
-          >
-            {text("Commencer maintenant", "Get started")}
+          <h1>
+            {text("Les rencontres.", "Every fixture.")}
+            <span>{text("À votre rythme.", "Your way.")}</span>
+          </h1>
+          <p className="home-hero-description">
+            {text(
+              "Explorez les calendriers, consultez les matchs en direct et gardez vos rencontres préférées à portée de main.",
+              "Explore fixture calendars, check live matches, and keep the games you follow close at hand."
+            )}
+          </p>
+          <div className="home-hero-actions">
+            <Link href="/predictions" className="home-button home-button-primary">
+              {text("Explorer les rencontres", "Explore fixtures")}
+              <span aria-hidden="true">→</span>
+            </Link>
+            <Link href="/live" className="home-button home-button-secondary">
+              {text("Voir le direct", "Open live")}
+            </Link>
+          </div>
+          <div className="home-sports-list" aria-label={text("Sports disponibles", "Available sports")}>
+            <span>Football</span>
+            <span>Basketball</span>
+            <span>Tennis</span>
+          </div>
+        </div>
+
+        <aside className="home-hero-panel" aria-label={text("Aperçu des fonctionnalités", "Feature overview")}>
+          <div className="home-panel-topline">
+            <span>{text("CENTRE DE MATCHS", "MATCH CENTRE")}</span>
+            <span className="home-panel-status">
+              <span className="home-live-indicator" aria-hidden="true" />
+              {text("À EXPLORER", "READY TO EXPLORE")}
+            </span>
+          </div>
+          <div className="home-panel-title">
+            <span className="home-panel-icon" aria-hidden="true">⚽</span>
+            <div>
+              <p>{text("Tout le sport, un seul point de départ.", "All your sports, one place to start.")}</p>
+              <span>{text("Choisissez votre prochaine étape", "Choose where to go next")}</span>
+            </div>
+          </div>
+          <div className="home-panel-options">
+            <Link href="/ai-search" className="home-panel-option">
+              <span className="home-panel-option-icon" aria-hidden="true">▦</span>
+              <span>
+                <strong>{text("Parcourir le calendrier", "Browse the calendar")}</strong>
+                <small>{text("Jour · Semaine · Mois", "Day · Week · Month")}</small>
+              </span>
+              <span className="home-panel-arrow" aria-hidden="true">↗</span>
+            </Link>
+            <Link href="/live" className="home-panel-option">
+              <span className="home-panel-option-icon is-live" aria-hidden="true">⌁</span>
+              <span>
+                <strong>{text("Suivre les matchs en direct", "Follow live matches")}</strong>
+                <small>{text("Scores et états disponibles", "Available scores and status")}</small>
+              </span>
+              <span className="home-panel-arrow" aria-hidden="true">↗</span>
+            </Link>
+            <Link href="/favorites" className="home-panel-option">
+              <span className="home-panel-option-icon is-favorite" aria-hidden="true">☆</span>
+              <span>
+                <strong>{text("Retrouver vos favoris", "Return to your favorites")}</strong>
+                <small>{text("Vos rencontres enregistrées", "Your saved fixtures")}</small>
+              </span>
+              <span className="home-panel-arrow" aria-hidden="true">↗</span>
+            </Link>
+          </div>
+          <p className="home-panel-footnote">
+            {text(
+              "La disponibilité des rencontres dépend des données des fournisseurs sportifs.",
+              "Fixture availability depends on sports data providers."
+            )}
+          </p>
+        </aside>
+      </section>
+
+      <section className="home-section" aria-labelledby="home-tools-title">
+        <div className="home-section-heading">
+          <div>
+            <p className="home-eyebrow">{text("SIMPLE À PARCOURIR", "EASY TO EXPLORE")}</p>
+            <h2 id="home-tools-title">{text("Tout commence ici.", "Start here.")}</h2>
+          </div>
+          <p>
+            {text(
+              "Accédez directement aux outils que vous utilisez le plus.",
+              "Jump straight to the tools you use most."
+            )}
+          </p>
+        </div>
+        <div className="home-destination-grid">
+          {destinations.map(item => (
+            <Link className="home-destination-card" href={item.href} key={item.href}>
+              <div className="home-destination-card-top">
+                <span className="home-destination-icon" aria-hidden="true">{item.icon}</span>
+                <span className="home-destination-number">{item.number}</span>
+              </div>
+              <h3>{item.title}</h3>
+              <p>{item.description}</p>
+              <span className="home-destination-link">
+                {text("Ouvrir", "Open")} <span aria-hidden="true">→</span>
+              </span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="home-account-section">
+        <div>
+          <p className="home-eyebrow">{text("VOTRE COMPTE", "YOUR ACCOUNT")}</p>
+          <h2>{text("Un espace à vous.", "Your own space.")}</h2>
+          <p>
+            {text(
+              "Connectez-vous pour retrouver votre tableau de bord, votre panier et vos préférences.",
+              "Sign in to access your dashboard, basket, and preferences."
+            )}
+          </p>
+        </div>
+        <div className="home-account-actions">
+          <Link href="/dashboard" className="home-button home-button-primary">
+            {text("Tableau de bord", "Dashboard")}
+            <span aria-hidden="true">→</span>
+          </Link>
+          <Link href="/payment" className="home-account-link">
+            {text("Découvrir les offres", "Explore plans")}
           </Link>
         </div>
       </section>

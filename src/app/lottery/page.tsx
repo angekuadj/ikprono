@@ -97,43 +97,31 @@ export default function LotteryPage() {
           <div className="relative max-w-3xl">
             <span className="inline-flex items-center gap-2 rounded-full border border-fuchsia-300/20 bg-fuchsia-300/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-fuchsia-200">
               <span aria-hidden="true">🎟️</span>
-              {text("Tirages IkProno", "IkProno draws")}
+              {text("Mode démonstration", "Demo mode")}
             </span>
             <h1 className="mt-5 text-3xl font-extrabold tracking-tight sm:text-5xl">
-              {text("À vous de jouer.", "Your chance to play.")}
+              {text("Simulateur de tirage", "Draw simulator")}
             </h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-gray-300 sm:text-lg">
               {text(
-                "Découvrez les tirages en cours et les lots à remporter. L’accès aux tirages est réservé aux membres Premium.",
-                "Explore current draws and prizes. Draw entry is reserved for Premium members."
+                "Cette page est une démonstration locale : les lots, dates et statistiques sont fictifs. Aucun paiement, ticket réel ou gain n’est proposé.",
+                "This is a local demonstration: prizes, dates, and statistics are fictional. No payment, real ticket, or prize is offered."
               )}
             </p>
-            <div className="mt-7 flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-2 rounded-full border border-amber-300/20 bg-amber-300/10 px-4 py-2 text-sm font-medium text-amber-100">
-                <span aria-hidden="true">✦</span>
-                {text("Réservé aux membres Premium", "Premium members only")}
-              </span>
-              <Link
-                href="/payment"
-                className="inline-flex items-center justify-center rounded-full bg-fuchsia-500 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-fuchsia-400 focus:outline-none focus:ring-2 focus:ring-fuchsia-300 focus:ring-offset-2 focus:ring-offset-gray-950"
-              >
-                {text("Découvrir Premium", "Explore Premium")}
-              </Link>
-            </div>
           </div>
         </header>
 
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-xl font-bold sm:text-2xl">
-              {text("Les tirages à venir", "Upcoming draws")}
+              {text("Exemples de tirages fictifs", "Fictional draw examples")}
             </h2>
             <p className="mt-1 text-sm text-gray-400">
-              {text("Choisissez un tirage pour voir les détails.", "Select a draw to see its details.")}
+              {text("Sélectionnez un exemple pour tester le simulateur.", "Select an example to try the simulator.")}
             </p>
           </div>
           <span className="rounded-full border border-gray-800 bg-gray-900 px-3 py-1 text-xs font-medium text-gray-300">
-            {text("Ticket démo : 1 FCFA", "Demo ticket: 1 XOF")}
+            {text("Simulation gratuite", "Free simulation")}
           </span>
         </div>
 
@@ -190,16 +178,16 @@ export default function LotteryPage() {
 
                 <div className="grid grid-cols-2 gap-3 border-t border-gray-800 px-5 py-4 text-sm sm:px-6">
                   <div>
-                    <p className="text-xs text-gray-500">{text("Date du tirage", "Draw date")}</p>
+                    <p className="text-xs text-gray-500">{text("Date fictive", "Fictional date")}</p>
                     <p className="mt-1 font-semibold text-gray-200">{formatDate(lottery.drawDate)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">{text("Participants", "Participants")}</p>
+                    <p className="text-xs text-gray-500">{text("Exemple de participants", "Sample participants")}</p>
                     <p className="mt-1 font-semibold text-gray-200">{numberFormatter.format(lottery.participants)}</p>
                   </div>
                   <div className="col-span-2">
                     <div className="mb-1.5 flex justify-between text-xs text-gray-500">
-                      <span>{text("Tickets disponibles", "Tickets available")}</span>
+                      <span>{text("Tickets fictifs", "Fictional tickets")}</span>
                       <span>{numberFormatter.format(lottery.tickets)}</span>
                     </div>
                   </div>
@@ -212,7 +200,7 @@ export default function LotteryPage() {
                       onClick={handleBuyTicket}
                       className="w-full rounded-xl bg-fuchsia-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-fuchsia-400 focus:outline-none focus:ring-2 focus:ring-fuchsia-300 focus:ring-offset-2 focus:ring-offset-gray-950"
                     >
-                      {text("Ajouter un ticket démo · 1 FCFA", "Add demo ticket · 1 XOF")}
+                      {text("Ajouter un ticket démo", "Add demo ticket")}
                     </button>
                   </div>
                 )}
@@ -283,8 +271,8 @@ export default function LotteryPage() {
           <h2 className="font-bold text-amber-100">{text("À savoir", "Please note")}</h2>
           <p className="mt-2 text-sm leading-6 text-gray-300">
             {text(
-              "Cette page est une démonstration : aucun paiement n’est effectué, les tickets ne sont pas enregistrés et les tirages ne sont pas réels. Le prix affiché est en francs CFA.",
-              "This page is a demo: no payment is taken, tickets are not saved, and draws are not real. Prices are displayed in CFA francs."
+              "Démo uniquement : aucun paiement, ticket ou tirage réel. Les données affichées sont fictives et restent locales à cette session.",
+              "Demo only: no real payment, ticket, or draw. Displayed data is fictional and stays local to this session."
             )}
           </p>
         </aside>

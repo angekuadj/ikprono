@@ -267,9 +267,9 @@ export default function LiveFixtures() {
   };
 
   return (
-    <main className="min-h-screen bg-black px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <header className="mb-8">
+    <main className="feature-page page-live min-h-screen bg-black px-4 py-8 sm:px-6 lg:px-8">
+      <div className="feature-page-content mx-auto max-w-7xl">
+        <header className="page-intro mb-8">
           <h1 className="mb-2 text-3xl font-bold text-white">
             {text("Matchs en direct", "Live Matches")}
           </h1>

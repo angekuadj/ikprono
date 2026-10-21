@@ -11,5 +11,6 @@ export async function loadFixtureMarketEstimates(fixtureId: string) {
       details.history.recentMatches
     ),
     source: "fotmob-history" as const,
+    model: "weighted-poisson-v1" as const,
   };
 }

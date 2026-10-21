@@ -316,13 +316,13 @@ export default function ProfilePage() {
   };
 
   if (isLoading) {
-    return <div className="min-h-screen px-4 py-16 text-center text-gray-400">{t("processing")}</div>;
+    return <div className="profile-page min-h-screen px-4 py-16 text-center text-gray-400">{t("processing")}</div>;
   }
 
   if (!user) {
     return (
-      <div className="min-h-screen px-4 py-16">
-        <div className="mx-auto max-w-lg rounded-2xl border border-gray-800 bg-gray-900 p-8 text-center">
+      <div className="profile-page min-h-screen px-4 py-16">
+        <div className="profile-layout mx-auto max-w-lg rounded-2xl border border-gray-800 bg-gray-900 p-8 text-center">
           <h1 className="text-2xl font-bold text-white">{t("profileTitle")}</h1>
           <p className="mt-3 text-gray-400">{t("login")}</p>
           <Link href="/login" className="mt-6 inline-block rounded-xl bg-fuchsia-700 px-6 py-3 font-semibold text-white">{t("login")}</Link>
@@ -338,22 +338,59 @@ export default function ProfilePage() {
   ];
 
   return (
-    <div className="min-h-screen px-4 py-12 sm:px-6">
-      <div className="mx-auto max-w-3xl">
-        <div className="mb-8 flex items-center gap-4">
-          <div className="grid h-14 w-14 place-items-center rounded-2xl border border-fuchsia-400/30 bg-fuchsia-500/10 text-fuchsia-200">
-            <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-              <circle cx="12" cy="8" r="4" strokeWidth="1.8" />
-              <path d="M4 21a8 8 0 0 1 16 0" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
+    <div className="profile-page min-h-screen px-4 py-12 sm:px-6">
+      <div className="profile-layout mx-auto">
+        <header className="profile-heading mb-5">
+          <div className="profile-identity">
+            <div className="profile-avatar" aria-hidden="true">
+              {(user.name.trim()[0] || user.email.trim()[0] || "I").toLocaleUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <p className="profile-eyebrow">{text("ESPACE PERSONNEL", "PERSONAL SPACE")}</p>
+              <h1 className="text-3xl font-bold text-white">{t("profileTitle")}</h1>
+              <p className="mt-1 truncate text-sm text-gray-400">{user.email}</p>
+              <p className="mt-1 text-sm text-gray-500">{t("profileDescription")}</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-3xl font-bold text-white">{t("profileTitle")}</h1>
-            <p className="mt-1 text-gray-400">{t("profileDescription")}</p>
+          <div className="profile-header-actions">
+            <span className="profile-account-badge">
+              <span className="profile-status-dot" aria-hidden="true" />
+              {entitlements.trialActive
+                ? text("Essai gratuit", "Free trial")
+                : entitlements.hasTvAccess || entitlements.hasCombinationAccess
+                  ? text("Compte abonné", "Subscriber account")
+                  : t("standardStatus")}
+            </span>
+            <Link href="/dashboard" className="profile-dashboard-link">
+              {text("Tableau de bord", "Dashboard")}
+              <span aria-hidden="true">→</span>
+            </Link>
           </div>
-        </div>
+        </header>
 
-        <div className={`mb-6 grid gap-2 rounded-xl border border-gray-800 bg-gray-900 p-2 ${adminAccess ? "grid-cols-4" : "grid-cols-3"}`} role="tablist" aria-label={text("Sections du profil", "Profile sections")}>
+        <section className="profile-overview" aria-label={text("Résumé du compte", "Account overview")}>
+          <article className="profile-overview-card">
+            <span className="profile-overview-label">{text("Accès direct", "Live access")}</span>
+            <strong>{entitlements.hasTvAccess ? text("Actif", "Active") : text("Inactif", "Inactive")}</strong>
+            <span>{text("Matchs en direct", "Live matches")}</span>
+          </article>
+          <article className="profile-overview-card">
+            <span className="profile-overview-label">{text("Combinaisons", "Combinations")}</span>
+            <strong>
+              {entitlements.canGenerate
+                ? `${Number.isFinite(entitlements.remainingToday) ? entitlements.remainingToday : "∞"}`
+                : "0"}
+            </strong>
+            <span>{text("générations disponibles aujourd’hui", "generations available today")}</span>
+          </article>
+          <article className="profile-overview-card">
+            <span className="profile-overview-label">{text("Mon panier", "My basket")}</span>
+            <strong>{basketFixtures.length}</strong>
+            <span>{text("match(s) sélectionné(s)", "selected fixture(s)")}</span>
+          </article>
+        </section>
+
+        <div className="profile-tabs mb-6 rounded-xl border border-gray-800 bg-gray-900 p-2" role="tablist" aria-label={text("Sections du profil", "Profile sections")}>
           {([
             ["profile", text("Profil", "Profile")],
             ["coupons", text("Historique des coupons", "Coupon history")],
@@ -366,7 +403,7 @@ export default function ProfilePage() {
               role="tab"
               aria-selected={activeTab === tab}
               onClick={() => setActiveTab(tab)}
-              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${activeTab === tab ? "bg-fuchsia-700 text-white" : "text-gray-300 hover:bg-gray-800"}`}
+              className={`profile-tab rounded-lg px-3 py-2 text-sm font-semibold transition ${activeTab === tab ? "is-active" : ""}`}
             >
               {label}
             </button>

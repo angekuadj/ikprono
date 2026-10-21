@@ -58,7 +58,7 @@ export default function AdminStatsPage() {
             className={`admin-card admin-stagger-${index + 1} animate-slide-up rounded-2xl p-6`}
           >
             <p className="relative z-10 text-sm text-slate-400">{card.label}</p>
-            <p className="gradient-text relative z-10 mt-3 text-3xl font-bold">{card.value}</p>
+            <p className="admin-metric-value relative z-10 mt-3 text-3xl font-bold">{card.value}</p>
           </article>
         ))}
       </div>

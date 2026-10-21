@@ -713,12 +713,12 @@ export default function FixtureSchedule({
             awayImageUrl={fixture.awayImageUrl}
           />
           {fixture.sport === "football" && fixture.status === "Prévu" && (
-            <div className="mt-2" role="group" aria-label={text("Estimations indicatives 1 N 2", "Indicative 1 X 2 estimates")}>
+            <div className="mt-2" role="group" aria-label={text("Probabilités estimées par le modèle 1 N 2", "Model-estimated 1 X 2 probabilities")}>
               <div className="mb-1 flex items-center justify-between gap-2">
                 <span className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">
-                  1X2 · {text("estimation indicative", "indicative estimate")}
+                  1X2 · {text("modèle prédictif", "predictive model")}
                 </span>
-                <span className="text-[9px] text-gray-600">{text("pas bookmaker", "not bookmaker odds")}</span>
+                <span className="text-[9px] text-gray-600">{text("cote théorique", "theoretical odds")}</span>
               </div>
               <div className="grid grid-cols-3 gap-1">
                 {oneXTwoMarkets.map(market => {
@@ -732,8 +732,8 @@ export default function FixtureSchedule({
                       aria-pressed={selected}
                       title={estimate
                         ? text(
-                          `${estimate.estimatedRate}% sur ${estimate.sampleSize} matchs historiques`,
-                          `${estimate.estimatedRate}% across ${estimate.sampleSize} historical matches`
+                          `${estimate.estimatedRate.toFixed(1)}% · modèle pondéré sur ${estimate.sampleSize} matchs historiques`,
+                          `${estimate.estimatedRate.toFixed(1)}% · weighted model using ${estimate.sampleSize} historical matches`
                         )
                         : text("Historique insuffisant", "Insufficient history")}
                       onClick={() => estimate && toggleMarketSelection(fixture, estimate)}
@@ -844,14 +844,14 @@ export default function FixtureSchedule({
             >
               {marketPanelFixtureId === fixture.id
                 ? text("Masquer les marchés", "Hide markets")
-                : text("Marchés · estimations indicatives", "Markets · indicative estimates")}
+                : text("Marchés · modèle prédictif", "Markets · predictive model")}
             </button>
             {marketPanelFixtureId === fixture.id && (
               <div className="mt-2 rounded-lg border border-gray-800 bg-gray-950/80 p-2.5">
                 <p className="mb-2 text-[10px] text-gray-500">
                   {text(
-                    "Estimations issues des derniers résultats connus, pas des cotes bookmaker.",
-                    "Estimates from recent results, not bookmaker odds."
+                    "Modèle statistique local pondéré par la récence des buts. Cotes théoriques, pas des cotes bookmaker.",
+                    "Local statistical model weighted by recent goals. Theoretical odds, not bookmaker odds."
                   )}
                 </p>
                 {marketLoadingFixtureId === fixture.id && (
@@ -881,7 +881,7 @@ export default function FixtureSchedule({
                           <span>{text(market.label, market.labelEn)}</span>
                           <span className="shrink-0 font-semibold">
                             {estimate
-                              ? `${estimate.estimatedRate}% · ≈${(100 / estimate.estimatedRate).toFixed(2)}`
+                              ? `${estimate.estimatedRate.toFixed(1)}% · ≈${(100 / estimate.estimatedRate).toFixed(2)}`
                               : text("Données insuffisantes", "Insufficient data")}
                           </span>
                         </button>
@@ -911,17 +911,26 @@ export default function FixtureSchedule({
   };
 
   return (
-    <main className="min-h-screen bg-black px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <header className="mb-8">
+    <main className={`feature-page ${predictionTools ? "page-predictions" : "page-fixtures"} min-h-screen bg-black px-4 py-8 sm:px-6 lg:px-8`}>
+      <div className="feature-page-content mx-auto max-w-7xl">
+        <header className="page-intro mb-8">
           <h1 className="mb-2 text-3xl font-bold text-white">
-            {pageTitle ?? text("Rencontres", "Fixtures")}
+            {pageTitle ?? (
+              predictionTools
+                ? text("Pronostics", "Predictions")
+                : text("Rencontres", "Fixtures")
+            )}
           </h1>
           <p className="text-gray-400">
-            {text(
-              "Choisissez un sport, puis filtrez par pays, championnat, équipe et période.",
-              "Choose a sport, then filter by country, competition, team, and date."
-            )}
+            {predictionTools
+              ? text(
+                "Explorez les rencontres, consultez les estimations de marché et construisez vos pronostics.",
+                "Explore fixtures, review market estimates, and build your predictions."
+              )
+              : text(
+                "Choisissez un sport, puis filtrez par pays, championnat, équipe et période.",
+                "Choose a sport, then filter by country, competition, team, and date."
+              )}
           </p>
           <p className="mt-2 text-xs text-green-400">
             {text("Rencontres, scores et statuts actualisés automatiquement toutes les 30 secondes.", "Fixtures, scores, and statuses refresh automatically every 30 seconds.")}
@@ -1006,8 +1015,8 @@ export default function FixtureSchedule({
         </div>
 
         {(groupByLocation || predictionTools) && (
-          <section className="mb-5 grid gap-3 sm:grid-cols-2" aria-label={text("Filtres par lieu et compétition", "Location and competition filters")}>
-            {groupByLocation && <label className="text-sm text-gray-300">
+          <section className="fixture-location-filters mb-5 grid gap-3 sm:grid-cols-2" aria-label={text("Filtres par lieu et compétition", "Location and competition filters")}>
+            {groupByLocation && <label className="min-w-0 text-sm text-gray-300">
               {text("Lieu", "Location")}
               <select
                 value={locationFilter}
@@ -1015,13 +1024,13 @@ export default function FixtureSchedule({
                   setLocationFilter(event.target.value);
                   setCompetitionFilter("");
                 }}
-                className="mt-1 block w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-white"
+                className="mt-1 block w-full min-w-0 rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-white"
               >
                 <option value="">{text("Tous les lieux", "All locations")}</option>
                 {locations.map(location => <option key={location} value={location}>{location}</option>)}
               </select>
             </label>}
-            <label className={`text-sm text-gray-300 ${predictionTools && !groupByLocation ? "sm:col-span-2" : ""}`}>
+            <label className={`min-w-0 text-sm text-gray-300 ${predictionTools && !groupByLocation ? "sm:col-span-2" : ""}`}>
               {groupByLocation
                 ? text("Compétition", "Competition")
                 : text("Compétition · les plus suivies en premier", "Competition · most followed first")}
@@ -1182,19 +1191,20 @@ export default function FixtureSchedule({
           </section>
         )}
 
-        <p className="mb-5 text-sm text-gray-500">
-          {text("Rencontres chargées depuis la base de données.", "Fixtures loaded from the database.")}
-          {predictionTools && (
+        {(predictionTools || selectedFixtures.size > 0) && (
+          <p className="mb-5 text-sm text-gray-500">
+            {predictionTools && (
             <span className="ml-2 text-gray-400">
               {text(`${orderedFixtures.length} match(s) trouvé(s)`, `${orderedFixtures.length} match(es) found`)}
             </span>
-          )}
-          {selectedFixtures.size > 0 && (
+            )}
+            {selectedFixtures.size > 0 && (
             <span className="ml-2 text-green-400">
               {text(`${selectedFixtures.size} sélectionnée(s)`, `${selectedFixtures.size} selected`)}
             </span>
-          )}
-        </p>
+            )}
+          </p>
+        )}
 
         {Object.entries(errors ?? {}).length > 0 && (
           <div role="status" className="mb-4 rounded-lg border border-amber-800 bg-amber-950/30 p-4 text-sm text-amber-200">

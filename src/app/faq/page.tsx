@@ -9,30 +9,30 @@ export default function FAQPage() {
 
   const englishFaqs: [string, [string, string][]][] = [
       ["General", [
-        ["What is IkProno?", "IkProno is a sports prediction app powered by artificial intelligence. Our AI analyzes hundreds of matches every day to identify betting opportunities with statistical value."],
-        ["How does the AI work?", "Our AI uses historical data, team statistics, player performance, and market odds to generate predictions. It compares its estimates with real odds to identify genuine opportunities."],
-        ["Does IkProno guarantee winnings?", "No. No sports betting system can guarantee winnings. IkProno uses statistical analysis and value betting to help inform your decisions, but there is no such thing as zero risk in sports betting."]
+        ["What is IkProno?", "IkProno helps you browse real football, basketball, and tennis fixtures by date and competition, and save the matches you follow."],
+        ["Does IkProno provide betting predictions or odds?", "No. Betting odds and betting predictions are not currently provided. IkProno focuses on real fixture calendars and match information."],
+        ["Are fixture schedules guaranteed to be complete?", "Fixture availability depends on the sports data providers and competitions available for the selected date."]
       ]],
       ["Account and Subscription", [
         ["How do I create an account?", "Click the Sign up button at the top of the page, fill in your details, and verify your email. You can then access the available features."],
-        ["What subscription plans are available?", "We offer free Standard access and a Premium subscription. Prices are displayed on the payment page. Premium provides access to additional AI predictions and exclusive features."],
-        ["Can I cancel my subscription?", "Yes. You can cancel your subscription at any time from your dashboard or by contacting support. There is no long-term commitment."],
-        ["How can I pay?", "Available payment methods are shown on the payment page. Payments are processed securely when a payment provider is connected."]
+        ["What subscription plans are available?", "The payment page lists the plans and prices currently available, including TV, Combinations, and the combined plan."],
+        ["Can I cancel my subscription?", "For questions about an active subscription, contact support using the contact details on the Contact page."],
+        ["How can I pay?", "The payment page shows the plans and payment methods currently available to your account."]
       ]],
       ["Fixtures", [
         ["Which sports are available?", "Browse real fixtures for football, basketball, and tennis when the corresponding provider credentials are configured."],
         ["Can I browse fixtures by date?", "Yes. The fixture calendar includes day, week, and month views."],
-        ["Does IkProno provide betting odds or predictions?", "No. Betting odds and betting predictions are disabled. The calendar displays real fixtures."]
+        ["Does IkProno provide betting odds or predictions?", "No. Betting odds and betting predictions are disabled. The calendar displays real fixtures."],
+        ["Are the fixtures real?", "Yes. Fixture data is requested from the configured sports data providers; availability depends on their API access."]
       ]],
       ["Features", [
         ["How does the fixture calendar work?", "Choose a day, week, or month and filter real fixtures by football, basketball, or tennis."],
-        ["Are the fixtures real?", "Yes. Fixture data is requested from the configured sports data providers; availability depends on their API access."],
-        ["How do the lotteries work?", "Lotteries are exclusive draws available to Premium subscribers. Check each draw's details for participation rules and prizes."],
-        ["Is the app available on mobile?", "Yes. IkProno is a Progressive Web App (PWA) that can be installed on Android and iOS. Add it to your home screen for an app-like experience."]
+        ["Are the lottery draws real?", "No. The lottery page is a local demonstration: prizes, participant counts, tickets, and results are simulated. No real entry or prize is offered."],
+        ["Can I use IkProno on mobile?", "Yes. The website is responsive and can be used in a mobile browser. A dedicated mobile app is planned."]
       ]],
       ["Support", [
-        ["How can I contact support?", "Contact us using the Help page form, email support@ikprono.com, or the live chat when available."],
-        ["How quickly does support respond?", "We generally reply to emails within 24 hours. Live chat availability may vary."],
+        ["How can I contact support?", "Use the Contact page to prepare an email to support@ikprono.com."],
+        ["How quickly does support respond?", "Response times may vary. Contact support by email for assistance."],
         ["I forgot my password. What should I do?", "Click Forgot password on the sign-in page. You will receive an email with instructions to reset your password."]
       ]]
     ];
@@ -43,15 +43,15 @@ export default function FAQPage() {
       questions: [
         {
           q: "Qu'est-ce qu'IkProno ?",
-          a: "IkProno est une application de prédictions sportives alimentée par l'intelligence artificielle. Notre IA analyse des centaines de matchs chaque jour pour identifier les paris à forte valeur statistique."
+          a: "IkProno vous permet de parcourir les rencontres réelles de football, basketball et tennis par date et compétition, puis d’enregistrer les matchs que vous suivez."
         },
         {
-          q: "Comment fonctionne l'IA ?",
-          a: "Notre IA utilise des données historiques, les statistiques des équipes, les performances des joueurs et les cotes du marché pour générer des prédictions. Elle compare ses estimations aux cotes réelles pour ne retenir que les paris où l'opportunité est réelle."
+          q: "IkProno propose-t-il des pronostics ou des cotes de paris ?",
+          a: "Non. Les cotes et pronostics de paris ne sont pas proposés actuellement. IkProno se concentre sur les calendriers de rencontres réelles et les informations des matchs."
         },
         {
-          q: "IkProno garantit-il des gains ?",
-          a: "Non. Aucun système de paris sportifs ne peut garantir des gains. IkProno maximise vos probabilités via l'analyse statistique et le value betting, mais le risque zéro n'existe pas dans les paris sportifs."
+          q: "Les calendriers sont-ils toujours complets ?",
+          a: "La disponibilité des rencontres dépend des fournisseurs de données sportives et des compétitions accessibles pour la date choisie."
         }
       ]
     },
@@ -64,15 +64,15 @@ export default function FAQPage() {
         },
         {
           q: "Quels sont les plans d'abonnement ?",
-          a: "Nous proposons des abonnements hebdomadaires et mensuels. Les tarifs sont affichés sur la page de paiement. L'abonnement Premium donne accès à toutes les prédictions IA et aux lotteries exclusives."
+          a: "La page de paiement présente les offres et tarifs actuellement disponibles, notamment TV, Combinaisons et le Pack Combinaisons + TV."
         },
         {
           q: "Puis-je annuler mon abonnement ?",
-          a: "Oui, vous pouvez annuler votre abonnement à tout moment depuis votre dashboard ou en contactant le support. Aucun engagement n'est requis."
+          a: "Pour toute question concernant un abonnement actif, contactez le support avec les coordonnées indiquées sur la page Contact."
         },
         {
           q: "Comment payer ?",
-          a: "Nous acceptons les paiements par carte bancaire, PayPal et autres méthodes sécurisées. Tous les paiements sont traités via notre partenaire de paiement sécurisé."
+          a: "La page de paiement affiche les offres et les moyens de paiement actuellement disponibles pour votre compte."
         }
       ]
     },
@@ -105,16 +105,12 @@ export default function FAQPage() {
           a: "Choisissez un jour, une semaine ou un mois, puis filtrez les rencontres par football, basketball ou tennis."
         },
         {
-          q: "Les endpoints de données sportives sont-ils activés ?",
-          a: "Oui. Les appels sont effectués côté serveur avec les clés API configurées."
-        },
-        {
           q: "Comment fonctionnent les lotteries ?",
-          a: "Les lotteries sont des tirages exclusifs réservés aux abonnés Premium. Vous pouvez participer gratuitement et gagner des prix. Les tirages ont lieu régulièrement."
+          a: "Non. La page des lotteries est une démonstration locale : les lots, nombres de participants, tickets et résultats sont simulés. Aucune participation ni récompense réelle n’est proposée."
         },
         {
           q: "L'application est-elle disponible sur mobile ?",
-          a: "Oui, IkProno est une Progressive Web App (PWA) installable sur Android et iOS. Ajoutez-la à votre écran d'accueil pour une expérience comme une vraie application."
+          a: "Oui. Le site s’adapte aux navigateurs mobiles. Une application mobile dédiée est prévue."
         }
       ]
     },
@@ -123,11 +119,11 @@ export default function FAQPage() {
       questions: [
         {
           q: "Comment contacter le support ?",
-          a: "Vous pouvez nous contacter via le formulaire de la page Aide, par email à support@ikprono.com, ou via le chat en direct disponible pendant les heures ouvrées."
+          a: "Utilisez la page Contact pour préparer un e-mail à l’adresse support@ikprono.com."
         },
         {
           q: "Quel est le temps de réponse du support ?",
-          a: "Nous répondons généralement aux emails dans les 24 heures. Le chat en direct est disponible du lundi au vendredi de 9h à 18h (heure de Paris)."
+          a: "Le délai de réponse peut varier. Contactez le support par e-mail pour obtenir de l’aide."
         },
         {
           q: "J'ai oublié mon mot de passe, que faire ?",

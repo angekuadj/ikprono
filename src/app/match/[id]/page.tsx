@@ -20,21 +20,23 @@ export default async function MatchDetailsPage({ params }: { params: { id: strin
   });
 
   return (
-    <main className="min-h-screen bg-black px-4 py-8 text-white sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <Link href="/predictions" className="text-sm font-medium text-green-400 hover:text-green-300">
-          ← Retour aux rencontres
-        </Link>
+    <div className="match-center min-h-screen bg-black px-4 py-7 text-white sm:px-6 lg:px-8">
+      <div className="match-center-content mx-auto max-w-6xl">
+        <nav className="match-breadcrumbs" aria-label="Fil d’Ariane">
+          <Link href="/predictions" className="match-back-link">
+            ← Retour aux rencontres
+          </Link>
+          <span aria-hidden="true">/</span>
+          <span>Fiche du match</span>
+        </nav>
 
-        {/* Match Header — mises à jour automatiques du score, du statut et des cartons */}
         <LiveMatchHeader fixture={fixture} matchDate={matchDate} />
-        <div className="mt-6 flex justify-center">
+        <div className="match-actions">
           <FavoriteFixtureButton fixture={fixture} />
         </div>
 
-        {/* Match Statistics */}
         <MatchStatisticsClient fixtureId={params.id} />
       </div>
-    </main>
+    </div>
   );
 }

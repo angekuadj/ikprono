@@ -10,8 +10,8 @@ import FloatingBasketLink from "@/components/FloatingBasketLink";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "IkProno - Prédictions Sportives par IA",
-  description: "Application de prédictions sportives alimentée par l'intelligence artificielle",
+  title: "IkProno - Calendrier sportif",
+  description: "Parcourez les rencontres de football, basketball et tennis par jour, semaine ou mois.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://ikprono.onrender.com"),
 };
 
@@ -21,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr">
+    <html lang="fr" suppressHydrationWarning>
       <body className={`${inter.className} app-theme`}>
         <AppProviders>
           <Navigation />
