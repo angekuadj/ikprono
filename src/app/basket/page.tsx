@@ -806,9 +806,9 @@ export default function BasketPage() {
                         : null;
                       return (
                         <article key={match.fixtureId} className="rounded-xl border border-gray-800 bg-black/30 p-3">
-                          <div className="flex items-center justify-between gap-2 border-b border-dashed border-gray-800 pb-2">
-                            <div className="min-w-0 flex items-center gap-2">
-                              <p className="min-w-0 truncate text-[10px] font-medium text-gray-400">
+                          <div className="basket-match-heading flex flex-wrap items-center justify-between gap-2 border-b border-dashed border-gray-800 pb-2">
+                            <div className="basket-match-meta flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                              <p className="min-w-0 flex-[1_1_9rem] truncate text-[10px] font-medium text-gray-400">
                                 {fixture
                                   ? `${fixture.sport === "football" ? "⚽ " : ""}${fixture.competition ?? fixture.league} · ${matchDateLabel} (${fixture.time})`
                                   : text("Détails de la rencontre", "Fixture details")}
@@ -817,7 +817,7 @@ export default function BasketPage() {
                                 {fixtureStatusLabel(fixture)}
                               </span>
                             </div>
-                            <div className="flex items-center gap-1">
+                            <div className="basket-match-actions flex shrink-0 items-center gap-1">
                               <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${outcomeStyle(matchOutcome)}`}>
                                 <span aria-hidden="true">{outcomeIcon(matchOutcome)}</span>
                                 {outcomeLabel(matchOutcome)}
@@ -832,7 +832,7 @@ export default function BasketPage() {
                               </button>
                             </div>
                           </div>
-                          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 py-2.5">
+                          <div className="basket-match-teams grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 py-2.5">
                             <div className="flex min-w-0 items-center gap-2">
                               {fixture?.homeImageUrl && (
                                 <Image src={fixture.homeImageUrl} alt="" width={24} height={24} unoptimized className="h-6 w-6 shrink-0 object-contain" />
@@ -859,14 +859,14 @@ export default function BasketPage() {
                                 ? pickOutcomeValue === null ? "unavailable" : pickOutcomeValue ? "won" : "lost"
                                 : finished ? "unavailable" : "pending";
                               return (
-                                <li key={`${pick.market}-${pick.selection}`} className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                                  <span className="flex items-center gap-2 text-gray-300">
+                                <li key={`${pick.market}-${pick.selection}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 text-xs">
+                                  <span className="flex min-w-0 items-center gap-2 break-words text-gray-300">
                                     {pick.playerImageUrl && (
                                       <Image src={pick.playerImageUrl} alt={pick.playerName ?? ""} width={28} height={28} unoptimized className="h-7 w-7 rounded-full object-cover" />
                                     )}
                                     {getCouponPickLabel(pick)}
                                   </span>
-                                  <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${outcomeStyle(pickOutcome)}`}>
+                                  <span className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${outcomeStyle(pickOutcome)}`}>
                                     <span aria-hidden="true">{outcomeIcon(pickOutcome)}</span>
                                     {score || finished
                                       ? outcomeLabel(pickOutcome)
@@ -877,7 +877,7 @@ export default function BasketPage() {
                                         : `${pick.historicalRate}% (${pick.sampleSize} ${text("match(s)", "matches")})`}
                                   </span>
                                   {theoreticalOdds !== null && (
-                                    <span className="text-[11px] text-gray-400">
+                                    <span className="col-span-2 min-w-0 text-[11px] text-gray-400 sm:col-span-1 sm:justify-self-end">
                                       {text("Cote théorique", "Theoretical odds")}{" "}
                                       <span className="font-semibold text-green-400">{theoreticalOdds}</span>
                                     </span>
@@ -969,9 +969,9 @@ export default function BasketPage() {
                         : null;
                       return (
                         <article key={match.fixtureId} className="rounded-xl border border-gray-800 bg-black/30 p-3">
-                          <div className="flex items-center justify-between gap-2 border-b border-dashed border-gray-800 pb-2">
-                            <div className="min-w-0 flex items-center gap-2">
-                              <p className="min-w-0 truncate text-[10px] font-medium text-gray-400">
+                          <div className="basket-match-heading flex flex-wrap items-center justify-between gap-2 border-b border-dashed border-gray-800 pb-2">
+                            <div className="basket-match-meta flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                              <p className="min-w-0 flex-[1_1_9rem] truncate text-[10px] font-medium text-gray-400">
                                 {fixture
                                   ? `${fixture.sport === "football" ? "⚽ " : ""}${fixture.competition ?? fixture.league} · ${matchDateLabel} (${fixture.time})`
                                   : text("Détails de la rencontre", "Fixture details")}
@@ -980,7 +980,7 @@ export default function BasketPage() {
                                 {fixtureStatusLabel(fixture)}
                               </span>
                             </div>
-                            <div className="flex items-center gap-1">
+                            <div className="basket-match-actions flex shrink-0 items-center gap-1">
                               <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${outcomeStyle(matchOutcome)}`}>
                                 <span aria-hidden="true">{outcomeIcon(matchOutcome)}</span>
                                 {outcomeLabel(matchOutcome)}
@@ -995,7 +995,7 @@ export default function BasketPage() {
                               </button>
                             </div>
                           </div>
-                          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 py-2.5">
+                          <div className="basket-match-teams grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 py-2.5">
                             <div className="flex min-w-0 items-center gap-2">
                               {fixture?.homeImageUrl && (
                                 <Image src={fixture.homeImageUrl} alt="" width={24} height={24} unoptimized className="h-6 w-6 shrink-0 object-contain" />
@@ -1018,15 +1018,18 @@ export default function BasketPage() {
                               const pickOutcome: CouponOutcome = score
                                 ? pickOutcomeValue === null ? "unavailable" : pickOutcomeValue ? "won" : "lost"
                                 : finished ? "unavailable" : "pending";
+                              const theoreticalOdds = pick.historicalRate === null
+                                ? null
+                                : formatTheoreticalOdds(pick.historicalRate);
                               return (
-                                <li key={`${pick.market}-${pick.selection}`} className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                                  <span className="flex items-center gap-2 text-gray-300">
+                                <li key={`${pick.market}-${pick.selection}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 text-xs">
+                                  <span className="flex min-w-0 items-center gap-2 break-words text-gray-300">
                                     {pick.playerImageUrl && (
                                       <Image src={pick.playerImageUrl} alt={pick.playerName ?? ""} width={28} height={28} unoptimized className="h-7 w-7 rounded-full object-cover" />
                                     )}
                                     {getCouponPickLabel(pick)}
                                   </span>
-                                  <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${outcomeStyle(pickOutcome)}`}>
+                                  <span className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${outcomeStyle(pickOutcome)}`}>
                                     <span aria-hidden="true">{outcomeIcon(pickOutcome)}</span>
                                     {score || finished
                                       ? outcomeLabel(pickOutcome)
@@ -1036,6 +1039,12 @@ export default function BasketPage() {
                                         ? text("Pas de données", "No data")
                                         : `${pick.historicalRate}% (${pick.sampleSize} ${text("match(s)", "matches")})`}
                                   </span>
+                                  {theoreticalOdds !== null && (
+                                    <span className="col-span-2 min-w-0 text-[11px] text-gray-400 sm:col-span-1 sm:justify-self-end">
+                                      {text("Cote théorique", "Theoretical odds")}{" "}
+                                      <span className="font-semibold text-green-400">{theoreticalOdds}</span>
+                                    </span>
+                                  )}
                                 </li>
                               );
                             })}
@@ -1094,9 +1103,9 @@ export default function BasketPage() {
                           {picks.length > 0 && (
                             <ul className="mb-2 ml-3 mt-1 space-y-1 border-l border-fuchsia-900 pl-2">
                               {picks.map(pick => (
-                                <li key={pick.market} className="flex flex-wrap justify-between gap-x-2 text-xs text-gray-400">
-                                  <span>{marketPickLabel(pick)}</span>
-                                  <span className="text-fuchsia-200">{pick.estimatedRate}% · ≈{pick.estimatedOdds.toFixed(2)}</span>
+                                <li key={pick.market} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1 text-xs text-gray-400">
+                                  <span className="min-w-0 break-words">{marketPickLabel(pick)}</span>
+                                  <span className="text-right text-fuchsia-200">{pick.estimatedRate}% · ≈{pick.estimatedOdds.toFixed(2)}</span>
                                 </li>
                               ))}
                             </ul>
@@ -1215,14 +1224,14 @@ export default function BasketPage() {
                                       ? pickOutcomeValue === null ? "unavailable" : pickOutcomeValue ? "won" : "lost"
                                       : finished ? "unavailable" : "pending";
                                     return (
-                                      <li key={`${pick.market}-${pick.selection}`} className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                                        <span className="flex items-center gap-2 text-gray-300">
+                                      <li key={`${pick.market}-${pick.selection}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 text-xs">
+                                        <span className="flex min-w-0 items-center gap-2 break-words text-gray-300">
                                           {pick.playerImageUrl && (
                                             <Image src={pick.playerImageUrl} alt={pick.playerName ?? ""} width={28} height={28} unoptimized className="h-7 w-7 rounded-full object-cover" />
                                           )}
                                           {getCouponPickLabel(pick)}
                                         </span>
-                                        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 ${outcomeStyle(pickOutcome)}`}>
+                                        <span className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-1 ${outcomeStyle(pickOutcome)}`}>
                                           <span aria-hidden="true">{outcomeIcon(pickOutcome)}</span>
                                           {score || finished
                                             ? outcomeLabel(pickOutcome)
@@ -1236,9 +1245,9 @@ export default function BasketPage() {
                                               )}
                                         </span>
                                         {theoreticalOdds !== null && (
-                                          <span className="text-[11px] text-gray-400">
-                                          {text("Cote théorique", "Theoretical odds")}{" "}
-                                          <span className="font-semibold text-green-400">{theoreticalOdds}</span>
+                                          <span className="col-span-2 min-w-0 text-[11px] text-gray-400 sm:col-span-1 sm:justify-self-end">
+                                            {text("Cote théorique", "Theoretical odds")}{" "}
+                                            <span className="font-semibold text-green-400">{theoreticalOdds}</span>
                                           </span>
                                         )}
                                       </li>

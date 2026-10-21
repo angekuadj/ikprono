@@ -1,0 +1,29 @@
+name: Check match push notifications
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: firebase-match-notifications
+  cancel-in-progress: false
+
+jobs:
+  check-matches:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Check followed matches and send push notifications
+        env:
+          MATCH_PUSH_CRON_SECRET: ${{ secrets.MATCH_PUSH_CRON_SECRET }}
+        run: |
+          if [ -z "$MATCH_PUSH_CRON_SECRET" ]; then
+            echo "::error::Configure the MATCH_PUSH_CRON_SECRET GitHub Actions secret."
+            exit 1
+          fi
+
+          curl --fail --silent --show-error --max-time 210 \
+            --request POST \
+            --header "Authorization: Bearer ${MATCH_PUSH_CRON_SECRET}" \
+            https://ikprono.onrender.com/api/notifications/matches/check

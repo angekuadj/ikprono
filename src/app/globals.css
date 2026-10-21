@@ -3409,6 +3409,48 @@ html[data-theme="light"] .match-details .match-momentum-chart text {
     flex-direction: column;
   }
 
+  .page-basket,
+  .page-basket .basket-layout {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .basket-tabs {
+    padding: 0.4rem;
+  }
+
+  .basket-tabs > [role="tab"] {
+    min-width: 0;
+    padding-inline: 0.4rem;
+  }
+
+  .basket-tab {
+    gap: 0.35rem;
+    font-size: 0.7rem;
+    white-space: normal;
+  }
+
+  .basket-match-heading {
+    align-items: flex-start;
+  }
+
+  .basket-match-meta {
+    flex-basis: 100%;
+  }
+
+  .basket-match-actions {
+    margin-left: auto;
+  }
+
+  .basket-match-teams {
+    column-gap: 0.4rem;
+  }
+
+  .basket-match-teams img {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
   .profile-header-actions {
     width: 100%;
     align-items: stretch;

@@ -50,6 +50,39 @@ function subscriptionDocumentId(uid: string, fixtureId: string): string {
   return `${uid}_${fixtureId}`;
 }
 
+export async function GET(request: NextRequest) {
+  const { principal } = await identifyRequest(request);
+  if (principal.kind !== "user") {
+    return NextResponse.json({ error: "Connectez-vous avec Firebase pour consulter vos alertes." }, { status: 401 });
+  }
+  if (!await isAdminConfigured()) {
+    return NextResponse.json({ error: "Firebase Admin n’est pas configuré sur le serveur." }, { status: 503 });
+  }
+  const db = getAdminDb();
+  if (!db) return NextResponse.json({ error: "Le stockage des notifications est indisponible." }, { status: 503 });
+
+  try {
+    const snapshot = await db.collection(COLLECTION).where("uid", "==", principal.uid).get();
+    const subscriptions = snapshot.docs.map(document => {
+      const data = document.data();
+      return {
+        fixture: {
+          id: data.fixtureId,
+          homeTeam: data.homeTeam,
+          awayTeam: data.awayTeam,
+        },
+        alerts: Object.fromEntries(
+          ALERT_KEYS.map(key => [key, data.alerts?.[key] === true])
+        ) as Record<AlertKey, boolean>,
+      };
+    });
+    return NextResponse.json({ subscriptions });
+  } catch (error) {
+    console.error("Match push subscription read failed.", error);
+    return NextResponse.json({ error: "Impossible de charger vos alertes de matchs." }, { status: 500 });
+  }
+}
+
 export async function PUT(request: NextRequest) {
   const { principal } = await identifyRequest(request);
   if (principal.kind !== "user") {

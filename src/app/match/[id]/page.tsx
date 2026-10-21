@@ -4,6 +4,7 @@ import { loadFotMobDetails } from "@/lib/fotmob";
 import MatchStatisticsClient from "./MatchStatisticsClient";
 import FavoriteFixtureButton from "@/components/FavoriteFixtureButton";
 import LiveMatchHeader from "@/components/LiveMatchHeader";
+import MatchPushAlerts from "@/components/MatchPushAlerts";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,7 @@ export default async function MatchDetailsPage({ params }: { params: { id: strin
           <FavoriteFixtureButton fixture={fixture} />
         </div>
 
+        <MatchPushAlerts fixture={fixture} />
         <MatchStatisticsClient fixtureId={params.id} />
       </div>
     </div>
