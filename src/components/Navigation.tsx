@@ -203,14 +203,16 @@ export default function Navigation() {
           aria-label={text("Navigation rapide", "Quick navigation")}
         >
           {[
-            { href: "/ai-search", label: text("Calendrier", "Calendar"), icon: "▦" },
-            { href: "/live", label: text("Direct", "Live"), icon: "⌁" },
-            { href: "/favorites", label: text("Favoris", "Favorites"), icon: "☆" },
-            { href: "/basket", label: text("Panier", "Basket"), icon: "▤" },
+            { href: "/ai-search", label: text("Calendrier", "Calendar"), ariaLabel: text("Calendrier", "Calendar"), icon: "▦" },
+            { href: "/live", label: text("Direct", "Live"), ariaLabel: text("Direct", "Live"), icon: "⌁" },
+            { href: "/favorites", label: text("Favoris", "Favorites"), ariaLabel: text("Favoris", "Favorites"), icon: "☆" },
+            { href: "/combinations", label: text("Comb.", "Combos"), ariaLabel: text("Combinaisons", "Combinations"), icon: "⧉" },
+            { href: "/basket", label: text("Panier", "Basket"), ariaLabel: text("Panier", "Basket"), icon: "▤" },
           ].map(item => (
             <Link
               key={item.href}
               href={item.href}
+              aria-label={item.ariaLabel}
               aria-current={isCurrentPath(pathname, item.href) ? "page" : undefined}
               className={`mobile-bottom-nav-link ${isCurrentPath(pathname, item.href) ? "is-active" : ""}`}
             >
