@@ -107,6 +107,42 @@ function normalizeStatus(value: string | undefined): string {
     .toLocaleLowerCase("en-GB");
 }
 
+function getMatchStatusCategory(status?: string): "completed" | "upcoming" | "live" | "other" {
+  const normalized = normalizeStatus(status);
+  if (FINISHED_STATUSES.some(value => normalized === value || normalized.startsWith(`${value} `))) {
+    return "completed";
+  }
+  if (
+    ["en direct", "en live", "en cours", "live", "mi-temps", "half time", "in progress", "1st half", "2nd half"]
+      .some(value => normalized === value || normalized.startsWith(`${value} `))
+  ) {
+    return "live";
+  }
+  if (
+    ["prevu", "a venir", "scheduled", "not started", "reporte", "postponed", "delayed"]
+      .some(value => normalized === value || normalized.startsWith(`${value} `))
+  ) {
+    return "upcoming";
+  }
+  return "other";
+}
+
+function getMinutesUntilKickoff(fixture: Fixture, now: number): number | null {
+  const dateMatch = fixture.date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const timeMatch = fixture.time.match(/^(\d{1,2}):(\d{2})$/);
+  if (!dateMatch || !timeMatch) return null;
+  const [, year, month, day] = dateMatch;
+  const [, hours, minutes] = timeMatch;
+  const kickoff = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hours),
+    Number(minutes)
+  ).getTime();
+  return Number.isFinite(kickoff) ? (kickoff - now) / 60_000 : null;
+}
+
 function toOutcome(home: number, away: number): MatchOutcome {
   return home > away ? "home" : home < away ? "away" : "draw";
 }
@@ -116,7 +152,7 @@ function toOutcome(home: number, away: number): MatchOutcome {
  * Permet d'identifier la cote gagnante et les cotes perdantes.
  */
 function getFinishedResult(fixture: Fixture): MatchOutcome | null {
-  if (!FINISHED_STATUSES.includes(normalizeStatus(fixture.status))) return null;
+  if (getMatchStatusCategory(fixture.status) !== "completed") return null;
 
   const scoreMatch = /^(\d+)\s*-\s*(\d+)$/.exec((fixture.score ?? "").trim());
   if (scoreMatch) {
@@ -292,8 +328,26 @@ export default function FixtureSchedule({
     return () => controller.abort();
   }, [periodStart, periodDays, sportFilter, refreshKey]);
 
-  const normalizedSearch = searchQuery.trim().toLocaleLowerCase(language === "fr" ? "fr-FR" : "en-GB");
-  const filteredFixtures = fixtures.filter(fixture => {
+  const now = Date.now();
+  const statusRefreshFixtureIds = fixtures
+    .filter(fixture => {
+      const category = getMatchStatusCategory(fixture.status);
+      return category !== "upcoming" || (getMinutesUntilKickoff(fixture, now) ?? 1) <= 0;
+    })
+    .map(fixture => fixture.id);
+  const { fixturesById: refreshedLiveFixtures, error: fixtureDetailsError } = useFixtureStatuses(statusRefreshFixtureIds);
+  const fixturesWithUpdatedStatuses = fixtures.map(fixture => ({
+    ...fixture,
+    ...refreshedLiveFixtures[fixture.id],
+  }));
+  const normalizeSearch = (value: string) => value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase(language === "fr" ? "fr-FR" : "en-GB")
+    .trim();
+  const normalizedSearch = normalizeSearch(searchQuery);
+  const showFixtureFilters = predictionTools || groupByLocation;
+  const filteredFixtures = fixturesWithUpdatedStatuses.filter(fixture => {
     if (groupByLocation && locationFilter && fixture.location !== locationFilter) return false;
     if (
       (groupByLocation || predictionTools) &&
@@ -310,29 +364,20 @@ export default function FixtureSchedule({
           fixture.homeTeam,
           fixture.awayTeam,
           fixture.status,
+          fixture.liveDisplay,
           fixture.date,
+          fixture.time,
         ].join(" ").toLocaleLowerCase(language === "fr" ? "fr-FR" : "en-GB");
-        if (!searchableText.includes(normalizedSearch)) return false;
+        if (!normalizeSearch(searchableText).includes(normalizedSearch)) return false;
       }
     }
 
-    if (predictionTools) {
-      const status = fixture.status?.trim().toLocaleLowerCase("fr-FR") ?? "";
-      const isCompleted = status === "terminé";
-      const isLive = status === "en live" || status === "mi-temps";
-      const isUpcoming = status === "prévu" || status === "reporté";
-      if (matchStatusFilter === "completed" && !isCompleted) return false;
-      if (matchStatusFilter === "upcoming" && !isUpcoming) return false;
-      if (matchStatusFilter === "live" && !isLive) return false;
+    if (showFixtureFilters) {
+      const statusCategory = getMatchStatusCategory(fixture.status);
+      if (matchStatusFilter !== "all" && statusCategory !== matchStatusFilter) return false;
 
       // Time filter for upcoming matches
-      if (timeFilter !== "all" && isUpcoming) {
-        const [hours, minutes] = fixture.time.split(":").map(Number);
-        const fixtureDate = new Date(`${fixture.date}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`);
-        const now = new Date();
-        const timeDiff = fixtureDate.getTime() - now.getTime();
-        const timeDiffMinutes = timeDiff / (1000 * 60);
-
+      if (timeFilter !== "all" && statusCategory === "upcoming") {
         const filterMinutes: Record<TimeFilter, number> = {
           all: 0,
           "5min": 5,
@@ -341,9 +386,11 @@ export default function FixtureSchedule({
           "1h": 60,
           "2h": 120,
         };
-
-        if (timeDiffMinutes < 0 || timeDiffMinutes > filterMinutes[timeFilter]) return false;
-      } else if (timeFilter !== "all" && !isUpcoming) {
+        const timeDiffMinutes = getMinutesUntilKickoff(fixture, now);
+        if (timeDiffMinutes === null || timeDiffMinutes < 0 || timeDiffMinutes > filterMinutes[timeFilter]) {
+          return false;
+        }
+      } else if (timeFilter !== "all" && statusCategory !== "upcoming") {
         return false;
       }
 
@@ -360,12 +407,7 @@ export default function FixtureSchedule({
         `${first.date}T${first.time}`.localeCompare(`${second.date}T${second.time}`)
       )
     : filteredFixtures;
-  const showFixtureFilters = predictionTools || groupByLocation;
   const visibleFixtures = orderedFixtures;
-  const startedFixtureIds = visibleFixtures
-    .filter(fixture => fixture.status === "En direct" || fixture.status === "Terminé")
-    .map(fixture => fixture.id);
-  const { fixturesById: refreshedLiveFixtures, error: fixtureDetailsError } = useFixtureStatuses(startedFixtureIds);
   const fixturesForDisplay = visibleFixtures.map(fixture => ({
     ...fixture,
     ...refreshedLiveFixtures[fixture.id],
@@ -1214,7 +1256,7 @@ export default function FixtureSchedule({
           </div>
         )}
         {basketError && <p role="alert" className="mb-4 text-sm text-red-300">{basketError}</p>}
-        {fixtureDetailsError && startedFixtureIds.length > 0 && (
+        {fixtureDetailsError && statusRefreshFixtureIds.length > 0 && (
           <p role="status" className="mb-4 rounded-lg border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">
             {text("La mise à jour des cartons des matchs commencés est indisponible.", "Card updates for started matches are unavailable.")} {fixtureDetailsError}
           </p>

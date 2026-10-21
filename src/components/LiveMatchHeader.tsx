@@ -1,12 +1,30 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFixtureStatuses } from "@/hooks/useFixtureStatuses";
 import type { Fixture } from "@/lib/fixtures";
 
 const LIVE_REFRESH_INTERVAL_MS = 20_000;
 const IDLE_REFRESH_INTERVAL_MS = 60_000;
+const SCORE_FLASH_DURATION_MS = 2_000;
+
+function parseScore(fixture: Fixture): [number, number] | null {
+  const home = Number(fixture.homeScore);
+  const away = Number(fixture.awayScore);
+  if (
+    fixture.homeScore !== undefined &&
+    fixture.awayScore !== undefined &&
+    Number.isInteger(home) &&
+    Number.isInteger(away) &&
+    home >= 0 &&
+    away >= 0
+  ) {
+    return [home, away];
+  }
+  const match = fixture.score?.match(/^\s*(\d+)\s*[-–:]\s*(\d+)\s*$/);
+  return match ? [Number(match[1]), Number(match[2])] : null;
+}
 
 function isLiveStatus(status?: string): boolean {
   const normalized = status?.trim().toLocaleLowerCase("fr-FR") ?? "";
@@ -23,14 +41,59 @@ export default function LiveMatchHeader({
   const [refreshInterval, setRefreshInterval] = useState(() =>
     isLiveStatus(fixture.status) ? LIVE_REFRESH_INTERVAL_MS : IDLE_REFRESH_INTERVAL_MS
   );
+  const [highlightedScoreSides, setHighlightedScoreSides] = useState<Array<"home" | "away">>([]);
+  const scoreFlashTimeout = useRef<number | null>(null);
   const { fixturesById } = useFixtureStatuses([fixture.id], refreshInterval);
   const currentFixture = fixturesById[fixture.id] ?? fixture;
+  const currentScore = parseScore(currentFixture);
+  const currentScoreKey = currentScore ? `${currentScore[0]}-${currentScore[1]}` : "";
 
   useEffect(() => {
     setRefreshInterval(
       isLiveStatus(currentFixture.status) ? LIVE_REFRESH_INTERVAL_MS : IDLE_REFRESH_INTERVAL_MS
     );
   }, [currentFixture.status]);
+
+  useEffect(() => {
+    const currentScoreMatch = currentScoreKey.match(/^(\d+)-(\d+)$/);
+    if (!currentScoreMatch) return;
+    const currentHomeScore = Number(currentScoreMatch[1]);
+    const currentAwayScore = Number(currentScoreMatch[2]);
+
+    setHighlightedScoreSides([]);
+    const storageKey = `ikprono:last-seen-score:${fixture.id}`;
+    try {
+      const previousScoreValue = window.localStorage.getItem(storageKey);
+      const previousScoreMatch = previousScoreValue?.match(/^(\d+)-(\d+)$/);
+      if (previousScoreMatch) {
+        const previousHomeScore = Number(previousScoreMatch[1]);
+        const previousAwayScore = Number(previousScoreMatch[2]);
+        const updatedSides: Array<"home" | "away"> = [];
+        if (currentHomeScore > previousHomeScore) updatedSides.push("home");
+        if (currentAwayScore > previousAwayScore) updatedSides.push("away");
+        if (updatedSides.length > 0) {
+          setHighlightedScoreSides(updatedSides);
+          if (scoreFlashTimeout.current !== null) {
+            window.clearTimeout(scoreFlashTimeout.current);
+          }
+          scoreFlashTimeout.current = window.setTimeout(() => {
+            setHighlightedScoreSides([]);
+            scoreFlashTimeout.current = null;
+          }, SCORE_FLASH_DURATION_MS);
+        }
+      }
+      window.localStorage.setItem(storageKey, currentScoreKey);
+    } catch (error) {
+      console.error(`Could not track the last seen score for fixture ${fixture.id}.`, error);
+    }
+
+    return () => {
+      if (scoreFlashTimeout.current !== null) {
+        window.clearTimeout(scoreFlashTimeout.current);
+        scoreFlashTimeout.current = null;
+      }
+    };
+  }, [currentScoreKey, fixture.id]);
 
   const renderCards = (side: "home" | "away") => {
     const cards = currentFixture.matchCards;
@@ -83,8 +146,16 @@ export default function LiveMatchHeader({
           {renderCards("home")}
         </div>
         <div className="match-score">
-          <div className="match-score-numbers">
-            {currentFixture.homeScore ?? '-'} - {currentFixture.awayScore ?? '-'}
+          <div className="match-score-numbers" aria-label={
+            currentScore ? `${currentScore[0]} - ${currentScore[1]}` : undefined
+          }>
+            <span className={highlightedScoreSides.includes("home") ? "is-updated" : ""}>
+              {currentScore?.[0] ?? "-"}
+            </span>
+            {" - "}
+            <span className={highlightedScoreSides.includes("away") ? "is-updated" : ""}>
+              {currentScore?.[1] ?? "-"}
+            </span>
           </div>
           <span className="match-score-caption">
             {isLiveStatus(currentFixture.status) ? "Score en direct" : "Coup d’envoi"}

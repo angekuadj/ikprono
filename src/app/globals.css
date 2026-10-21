@@ -2646,6 +2646,10 @@ button:focus-visible {
   white-space: nowrap;
 }
 
+.match-score-numbers .is-updated {
+  color: #ef4444 !important;
+}
+
 .match-score-caption {
   display: inline-block;
   margin-top: 0.75rem;

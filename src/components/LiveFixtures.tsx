@@ -44,6 +44,20 @@ function normalizeTeamName(name: string): string {
     .replace(/\s+/g, " ");
 }
 
+function parseMatchMinute(value?: string | null): number | null {
+  const match = value?.match(/(\d+)(?:\s*\+\s*(\d+))?/);
+  if (!match) return null;
+  return Number(match[1]) + Number(match[2] ?? 0);
+}
+
+function isStaleGoalIncident(fixture: Fixture): boolean {
+  const incident = fixture.liveIncident;
+  if (incident?.type !== "goal") return false;
+  const currentMinute = parseMatchMinute(fixture.liveDisplay);
+  const goalMinute = parseMatchMinute(incident.minute);
+  return currentMinute !== null && goalMinute !== null && currentMinute - goalMinute > 2;
+}
+
 export default function LiveFixtures() {
   const { language, text } = useLanguage();
   const { entitlements, isAuthenticated, isLoading: authLoading } = useAuth();
@@ -205,6 +219,20 @@ export default function LiveFixtures() {
     for (const fixture of fixturesForDisplay) {
       const incident = fixture.liveIncident;
       if (!incident) continue;
+      if (isStaleGoalIncident(fixture)) {
+        const timeout = liveIncidentTimeouts.current.get(fixture.id);
+        if (timeout) {
+          clearTimeout(timeout);
+          liveIncidentTimeouts.current.delete(fixture.id);
+        }
+        setVisibleLiveIncidents(current => {
+          if (!current[fixture.id]) return current;
+          const next = { ...current };
+          delete next[fixture.id];
+          return next;
+        });
+        continue;
+      }
       const incidentKey = `${fixture.id}:${incident.type}:${incident.minute}:${incident.player ?? ""}`;
       if (handledLiveIncidents.current.has(incidentKey)) continue;
       handledLiveIncidents.current.add(incidentKey);
@@ -574,7 +602,12 @@ export default function LiveFixtures() {
                                   ? text("Vérification VAR", "VAR review")
                                   : text("Grosse occasion", "Big chance")}
                       </span>
-                      {incident.minute && <span>{incident.minute}′</span>}
+                      {incident.minute && (
+                        <span>
+                          {incident.type === "goal" ? `${text("à", "at")} ` : ""}
+                          {incident.minute}′
+                        </span>
+                      )}
                       {incident.player && <span className="truncate">{incident.player}</span>}
                     </p>
                   )}
