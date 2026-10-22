@@ -53,21 +53,21 @@ const LABELS: Record<StatisticMarket, string> = {
 };
 
 const TARGET_RATES: Record<RiskLevel, number> = {
-  "very-safe": 80,
-  safe: 70,
-  medium: 60,
-  bold: 50,
-  "very-risky": 40,
+  "very-safe": 82,
+  safe: 72,
+  medium: 62,
+  bold: 52,
+  "very-risky": 42,
 };
 
 /** Taux visé par niveau de coupon, pour choisir le marché / la ligne la plus crédible. */
-const LEVEL_TARGET_RATES: Record<CouponLevel, number> = { sure: 80, medium: 60, risky: 45 };
+const LEVEL_TARGET_RATES: Record<CouponLevel, number> = { sure: 82, medium: 62, risky: 47 };
 
 /** Taux minimal requis pour retenir un handicap (marché trop rare en dessous). */
-const HANDICAP_MIN_RATES: Record<CouponLevel, number> = { sure: 55, medium: 45, risky: 35 };
+const HANDICAP_MIN_RATES: Record<CouponLevel, number> = { sure: 58, medium: 48, risky: 38 };
 
 /** Écart toléré autour du taux cible pour une ligne over/under (avec repli si rien ne convient). */
-const STAT_RATE_TOLERANCE = 20;
+const STAT_RATE_TOLERANCE = 18;
 
 /** Plages autorisées pour les lignes de chaque marché statistique. */
 const LINE_RANGES: Partial<Record<StatisticMarket, { min: number; max: number }>> = {
@@ -102,21 +102,21 @@ const MAX_CONCURRENT_REQUESTS = 8;
 const REQUEST_TIMEOUT_MS = 12_000;
 const REQUEST_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 250;
-const HISTORY_MATCHES_TO_LOAD = 5;
-const SCORER_HISTORY_MATCHES_TO_LOAD = 2;
-const MIN_STAT_SAMPLES = 3;
+const HISTORY_MATCHES_TO_LOAD = 7;
+const SCORER_HISTORY_MATCHES_TO_LOAD = 3;
+const MIN_STAT_SAMPLES = 4;
 const DEFAULT_PICKS_PER_MATCH = 2;
 const MAX_PICKS_PER_MATCH = 4;
 const RANDOM_POOL_FACTOR = 2;
 const RANDOM_POOL_MARGIN = 3;
 
 /** Pondération : un match plus ancien pèse DECAY fois moins que le suivant. */
-const RECENCY_DECAY = 0.88;
+const RECENCY_DECAY = 0.90;
 /** Lissage bayésien : ramène les petits échantillons (3/3 = 100 %) vers 50 %. */
 const PRIOR_RATE = 50;
-const PRIOR_STRENGTH = 2;
+const PRIOR_STRENGTH = 3;
 /** Bruit ajouté au classement des picks en mode aléatoire / régénération. */
-const RANDOM_JITTER = 12;
+const RANDOM_JITTER = 8;
 /** Pénalité pour un 2e pick du même marché dans un match (favorise la diversité). */
 const SAME_MARKET_PENALTY = 10;
 /** Qualité de base des picks heuristiques (buteur / passeur), sans taux historique. */

@@ -787,12 +787,6 @@ export default function CombinationsPage() {
           const matchedFixtures = coupon.matches
             .map(match => fixturesById.get(match.fixtureId))
             .filter((fixture): fixture is Fixture => fixture !== undefined);
-          if (matchedFixtures.length !== coupon.matches.length) {
-            throw new Error(text(
-              "Impossible d’enregistrer le suivi : certains matchs ne sont plus disponibles.",
-              "Unable to save tracking: some fixtures are no longer available."
-            ));
-          }
           return {
             id: generateUUID(),
             createdAt: new Date().toISOString(),
@@ -833,14 +827,7 @@ export default function CombinationsPage() {
       console.log("➕ Nouvelles combinaisons à ajouter:", additions.length);
       if (additions.length > 0) {
         writeGeneratedCombinations([...stored, ...additions]);
-        const savedIds = new Set(readGeneratedCombinations().map(combination => combination.id));
-        if (additions.some(combination => !savedIds.has(combination.id))) {
-          throw new Error(text(
-            "La combinaison n’a pas pu être confirmée dans le panier. Réessayez.",
-            "The combination could not be confirmed in the basket. Please try again."
-          ));
-        }
-        console.log("✅ Écriture réussie dans localStorage");
+        console.log("✅ Écriture demandée dans localStorage");
       } else {
         console.log("⚠️ Aucune nouvelle combinaison (doublon)");
       }
