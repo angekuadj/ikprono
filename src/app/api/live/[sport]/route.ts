@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const SPORTS_AUTORISES = ["football", "basketball", "cricket", "tennis"] as const;
+const SPORTS_AUTORISES = ["football", "cricket", "tennis"] as const;
 
 export const dynamic = "force-dynamic";
 
@@ -20,9 +20,9 @@ export async function GET(
     );
   }
 
-  const sportsWithFixturesRoute = ["football", "basketball"] as const;
+  const sportsWithFixturesRoute = ["football"] as const;
 
-  // Pour le football et le basket, on utilise la route dédiée /api/sports/fixtures/live afin de
+  // Pour le football, on utilise la route dédiée /api/sports/fixtures/live afin de
   // conserver le cache PostgreSQL et d'éviter les échecs réseau côté serveur.
   if (sportsWithFixturesRoute.includes(sport as (typeof sportsWithFixturesRoute)[number])) {
     try {
@@ -34,26 +34,29 @@ export async function GET(
         },
       });
       const payload = await response.json() as {
-        fixtures?: any[];
+        fixtures?: unknown[];
         error?: string;
         warning?: string;
+        liveAvailable?: boolean;
+        cachedAt?: string;
       };
       if (!response.ok) {
         throw new Error(payload.error || "Impossible de récupérer les matchs en direct");
       }
       const fixtures = Array.isArray(payload.fixtures) ? payload.fixtures : [];
+      // On relaie la charge utile attendue par le client (LiveFixtures) :
+      // fixtures, liveAvailable, cachedAt et warning.
       return NextResponse.json({
-        success: true,
-        sport,
-        count: fixtures.length,
-        matches: fixtures,
+        fixtures,
+        liveAvailable: payload.liveAvailable !== false,
+        ...(payload.cachedAt ? { cachedAt: payload.cachedAt } : {}),
+        ...(payload.warning ? { warning: payload.warning } : {}),
       });
     } catch (error) {
       console.error(`Erreur lors de la récupération des matchs live pour ${sport}:`, error);
       return NextResponse.json(
         {
-          success: false,
-          message: "Impossible de récupérer les matchs en direct"
+          error: "Impossible de récupérer les matchs en direct",
         },
         { status: 500 }
       );
@@ -62,8 +65,7 @@ export async function GET(
 
   return NextResponse.json(
     {
-      success: false,
-      message: "Sport non pris en charge pour les matchs en direct"
+      error: "Sport non pris en charge pour les matchs en direct",
     },
     { status: 404 }
   );
