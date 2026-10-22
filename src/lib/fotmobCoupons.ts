@@ -1582,4 +1582,4 @@ export async function suggestFotMobSafeCoupon(
   options: CouponOptions = {}
 ): Promise<{ coupon: GeneratedCoupon }> {
   return suggestFotMobCoupon(fixtures, count, "very-safe", excludeFixtureIds, randomSelection, options);
-}
+} 
