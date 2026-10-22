@@ -1,4 +1,5 @@
 import type { Fixture, FixtureCards, FixtureStanding } from "@/lib/fixtures";
+import { resolveCountryCode } from "@/lib/countryCodes";
 import {
   loadFotMobFixturesByIds as loadCachedFotMobFixturesByIds,
   loadFotMobDailyResponse,
@@ -181,7 +182,7 @@ function liveDisplay(status: UnknownRecord): string | undefined {
   return short || text(liveTime.long) || undefined;
 }
 
-function mapMatch(match: UnknownRecord, league: string, date: string): Fixture | null {
+function mapMatch(match: UnknownRecord, league: string, date: string, countryCode?: string): Fixture | null {
   if (!isRecord(match.home) || !isRecord(match.away) || !isRecord(match.status)) return null;
   const homeTeam = text(match.home.name);
   const awayTeam = text(match.away.name);
@@ -197,6 +198,8 @@ function mapMatch(match: UnknownRecord, league: string, date: string): Fixture |
     ? text(status.scoreStr) || (homeScore !== null && awayScore !== null ? `${homeScore} - ${awayScore}` : "")
     : "";
   const statusDisplay = liveDisplay(status);
+  const code = countryCode?.trim();
+  const resolvedCountry = code ? resolveCountryCode(code) : undefined;
   return {
     id,
     matchId: id,
@@ -204,6 +207,8 @@ function mapMatch(match: UnknownRecord, league: string, date: string): Fixture |
     date,
     time,
     league,
+    ...(code ? { countryCode: code.toUpperCase() } : {}),
+    ...(resolvedCountry ? { location: resolvedCountry.country } : {}),
     homeTeam,
     awayTeam,
     ...(fotMobTeamImageUrl(match.home.id) ? { homeImageUrl: fotMobTeamImageUrl(match.home.id) } : {}),
@@ -307,9 +312,10 @@ function fixturesFromFotMobResponse(response: unknown, date: string): Fixture[] 
     if (!isRecord(league) || typeof league.name !== "string" || !Array.isArray(league.matches)) {
       throw new Error("API returned an invalid league in the matches response.");
     }
+    const countryCode = typeof league.ccode === "string" ? league.ccode : undefined;
     for (const match of league.matches) {
       if (!isRecord(match)) throw new Error(`API returned invalid match data for ${league.name}.`);
-      const fixture = mapMatch(match, league.name, date);
+      const fixture = mapMatch(match, league.name, date, countryCode);
       if (!fixture) throw new Error(`API returned invalid match data for ${league.name}.`);
       fixtures.push(fixture);
     }

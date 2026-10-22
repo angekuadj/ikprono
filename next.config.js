@@ -8,6 +8,11 @@ const nextConfig = {
         hostname: 'images.fotmob.com',
         pathname: '/image_resources/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'a.espncdn.com',
+        pathname: '/**',
+      },
     ],
     unoptimized: false,
   },

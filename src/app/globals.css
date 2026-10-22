@@ -1164,6 +1164,21 @@ body {
   font-size: 0.74rem;
 }
 
+.site-footer-attribution {
+  margin-top: 0.5rem;
+}
+
+.site-footer-data-source-link {
+  color: #7f8d83;
+  font-size: 0.74rem;
+  text-decoration: none;
+  transition: color 150ms ease;
+}
+
+.site-footer-data-source-link:hover {
+  color: #86efac;
+}
+
 /* Landing page */
 .home-page {
   width: min(100% - 2.5rem, 82rem);
@@ -3270,6 +3285,14 @@ html[data-theme="light"] .site-footer p,
 html[data-theme="light"] .site-footer a,
 html[data-theme="light"] .site-menu-link {
   color: #52525b;
+}
+
+html[data-theme="light"] .site-footer-data-source-link {
+  color: #52525b;
+}
+
+html[data-theme="light"] .site-footer-data-source-link:hover {
+  color: #22c55e;
 }
 
 html[data-theme="light"] .profile-heading,

@@ -118,11 +118,17 @@ export default function LiveMatchHeader({
     );
   };
 
+  const sportLabel = currentFixture.sport === "basketball"
+    ? "Basketball"
+    : currentFixture.sport === "tennis"
+      ? "Tennis"
+      : "Football";
+
   return (
     <section className="match-scoreboard mt-5 rounded-2xl border border-gray-800 bg-gray-900 p-5 sm:p-8">
       <div className="match-scoreboard-meta">
         <div className="min-w-0">
-          <p className="match-sport-label">Football <span aria-hidden="true">·</span> {fixture.league}</p>
+          <p className="match-sport-label">{sportLabel} <span aria-hidden="true">·</span> {fixture.league}</p>
           <p className="mt-1 text-sm text-gray-400">{matchDate} · {fixture.time}</p>
         </div>
         <span className={`match-status ${isLiveStatus(currentFixture.status) ? "is-live" : ""}`}>

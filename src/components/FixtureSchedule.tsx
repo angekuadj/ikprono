@@ -180,11 +180,13 @@ export default function FixtureSchedule({
   groupByLocation = false,
   predictionTools = false,
   showOdds = false,
+  initialSport = "all",
 }: {
   pageTitle?: string;
   groupByLocation?: boolean;
   predictionTools?: boolean;
   showOdds?: boolean;
+  initialSport?: SportFilter;
 }) {
   const { language, text } = useLanguage();
   const { addNotification } = useNotifications();
@@ -192,7 +194,7 @@ export default function FixtureSchedule({
   const [anchorDate, setAnchorDate] = useState("");
   const manualDateSelection = useRef(false);
   const [dateInitialized, setDateInitialized] = useState(false);
-  const [sportFilter, setSportFilter] = useState<SportFilter>("all");
+  const [sportFilter, setSportFilter] = useState<SportFilter>(initialSport);
   const [locationFilter, setLocationFilter] = useState("");
   const [competitionFilter, setCompetitionFilter] = useState("");
   const [competitionMenuOpen, setCompetitionMenuOpen] = useState(false);
@@ -556,7 +558,7 @@ export default function FixtureSchedule({
     basketball: "Basketball",
     tennis: "Tennis",
   };
-  const availableSports: SportFilter[] = ["all", "football"];
+  const availableSports: SportFilter[] = ["all", "football", "basketball"];
   const periodLabels: Record<Period, string> = {
     day: text("Jour", "Day"),
     week: text("Semaine", "Week"),

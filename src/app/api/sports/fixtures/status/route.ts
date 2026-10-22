@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadFixturesFromFotMobByIds } from "@/lib/fotmob";
+import { loadEspnBasketballFixturesByIds, parseEspnFixtureId } from "@/lib/espn";
 import type { Fixture } from "@/lib/fixtures";
 
 export const dynamic = "force-dynamic";
@@ -18,27 +19,40 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const fotMobIds = ids.filter(id => parseEspnFixtureId(id) === null);
+  const espnIds = ids.filter(id => parseEspnFixtureId(id) !== null);
+
   const fixtures: Fixture[] = [];
   let unavailableCount = 0;
-  for (let start = 0; start < ids.length; start += 5) {
-    const batch = ids.slice(start, start + 5);
-    const results = await Promise.allSettled(
-      batch.map(async id => {
-        const matches = await loadFixturesFromFotMobByIds([id]);
-        if (matches.length !== 1) {
-          throw new Error(`FotMob did not return an updated fixture for ${id}.`);
+
+  if (fotMobIds.length > 0) {
+    for (let start = 0; start < fotMobIds.length; start += 5) {
+      const batch = fotMobIds.slice(start, start + 5);
+      const results = await Promise.allSettled(
+        batch.map(async id => {
+          const matches = await loadFixturesFromFotMobByIds([id]);
+          if (matches.length !== 1) {
+            throw new Error(`FotMob did not return an updated fixture for ${id}.`);
+          }
+          return matches[0];
+        })
+      );
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          fixtures.push(result.value);
+        } else {
+          unavailableCount += 1;
+          console.error(`Could not refresh fixture ${batch[index]}.`, result.reason);
         }
-        return matches[0];
-      })
-    );
-    results.forEach((result, index) => {
-      if (result.status === "fulfilled") {
-        fixtures.push(result.value);
-      } else {
-        unavailableCount += 1;
-        console.error(`Could not refresh fixture ${batch[index]}.`, result.reason);
-      }
-    });
+      });
+    }
+  }
+
+  if (espnIds.length > 0) {
+    const espnFixtures = await loadEspnBasketballFixturesByIds(espnIds);
+    const refreshedIds = new Set(espnFixtures.map(fixture => fixture.id));
+    fixtures.push(...espnFixtures);
+    unavailableCount += espnIds.filter(id => !refreshedIds.has(id)).length;
   }
 
   return NextResponse.json({

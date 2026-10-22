@@ -19,7 +19,7 @@ import {
   isPinnedCompetition,
 } from "@/lib/competitionPriority";
 import { TV_DAILY_PRICE_FCFA } from "@/lib/subscription";
-import type { Fixture } from "@/lib/fixtures";
+import type { Fixture, FixtureSport } from "@/lib/fixtures";
 
 interface MatchoraLiveMatch {
   id: string;
@@ -62,6 +62,7 @@ export default function LiveFixtures() {
   const { language, text } = useLanguage();
   const { entitlements, isAuthenticated, isLoading: authLoading } = useAuth();
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
+  const [sportFilter, setSportFilter] = useState<FixtureSport>("football");
   const [liveFilter, setLiveFilter] = useState<"all" | "watchable">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [collapsedCompetitionGroups, setCollapsedCompetitionGroups] = useState<Set<string>>(() => new Set());
@@ -107,7 +108,7 @@ export default function LiveFixtures() {
     const controller = new AbortController();
     if (!hasLoadedFixtures.current) setLoading(true);
 
-    fetch(`/api/sports/fixtures/live`, { signal: controller.signal, cache: "no-store" })
+    fetch(`/api/live/${sportFilter}`, { signal: controller.signal, cache: "no-store" })
       .then(async response => {
         const payload = await response.json() as {
           fixtures?: Fixture[];
@@ -116,9 +117,11 @@ export default function LiveFixtures() {
           liveAvailable?: boolean;
           cachedAt?: string;
         };
-        if (!response.ok && !(response.status === 503 && payload.liveAvailable === false && Array.isArray(payload.fixtures))) {
+
+        if (!response.ok) {
           throw new Error(payload.error || "Unable to load live fixtures.");
         }
+
         if (!Array.isArray(payload.fixtures)) {
           throw new Error("The live fixtures service returned an invalid response.");
         }
@@ -141,7 +144,7 @@ export default function LiveFixtures() {
       });
 
     return () => controller.abort();
-  }, [refreshKey]);
+  }, [refreshKey, sportFilter]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -361,6 +364,24 @@ export default function LiveFixtures() {
                 {loading ? text("Actualisation…", "Refreshing…") : text("Actualiser", "Refresh")}
               </button>
             </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2" aria-label={text("Filtrer par sport", "Filter by sport")}>
+            <button
+              type="button"
+              onClick={() => setSportFilter("football")}
+              aria-pressed={sportFilter === "football"}
+              className={`rounded-lg px-4 py-2 text-sm font-semibold ${sportFilter === "football" ? "bg-green-600 text-white" : "border border-gray-700 bg-gray-900 text-gray-300"}`}
+            >
+              Football
+            </button>
+            <button
+              type="button"
+              onClick={() => setSportFilter("basketball")}
+              aria-pressed={sportFilter === "basketball"}
+              className={`rounded-lg px-4 py-2 text-sm font-semibold ${sportFilter === "basketball" ? "bg-green-600 text-white" : "border border-gray-700 bg-gray-900 text-gray-300"}`}
+            >
+              Basketball
+            </button>
           </div>
           <label className="relative mt-4 block">
             <span className="sr-only">{text("Rechercher une équipe ou une compétition", "Search for a team or competition")}</span>

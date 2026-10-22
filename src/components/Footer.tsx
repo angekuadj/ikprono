@@ -84,6 +84,16 @@ export default function Footer() {
               "Fixture data is provided by third-party sports services."
             )}
           </p>
+          <p className="site-footer-attribution">
+            <a
+              href="https://www.espn.com/"
+              target="_blank"
+              rel="dofollow noopener noreferrer"
+              className="site-footer-data-source-link"
+            >
+              Powered by ESPN
+            </a>
+          </p>
         </div>
       </div>
     </footer>

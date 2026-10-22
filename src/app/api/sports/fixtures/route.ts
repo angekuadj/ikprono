@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Fixture, FixtureOption, FixtureSport } from "@/lib/fixtures";
 import { FotMobDataUnavailableError, loadFotMobDay } from "@/lib/fotmob";
+import { EspnDataUnavailableError, loadEspnBasketballFixtures } from "@/lib/espn";
 
 export const dynamic = "force-dynamic";
 
@@ -49,14 +50,22 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (selectedSport !== "all" && selectedSport !== "football") {
-    return NextResponse.json({ error: "Unsupported sport. Match data is available for football only." }, { status: 400 });
+  if (selectedSport !== "all" && selectedSport !== "football" && selectedSport !== "basketball") {
+    return NextResponse.json({ error: "Unsupported sport. Match data is available for football and basketball only." }, { status: 400 });
   }
 
   try {
     if (to < from) {
       return NextResponse.json({ error: "The end date must be on or after the start date." }, { status: 400 });
     }
+
+    // Basketball via ESPN
+    if (selectedSport === "basketball") {
+      const fixtures = await loadEspnBasketballFixtures(from, to);
+      return NextResponse.json({ fixtures, errors: {}, source: "espn" });
+    }
+
+    // Handle football via FotMob
     const first = new Date(`${from}T00:00:00.000Z`);
     const last = new Date(`${to}T00:00:00.000Z`);
     const dayCount = Math.round((last.getTime() - first.getTime()) / 86_400_000) + 1;
@@ -110,7 +119,9 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to load fixtures.";
-    const code = error instanceof FotMobDataUnavailableError ? error.code : undefined;
+    const code = error instanceof FotMobDataUnavailableError || error instanceof EspnDataUnavailableError
+      ? error.code
+      : undefined;
     return NextResponse.json(
       { error: message, ...(code ? { code } : {}) },
       { status: 502 }

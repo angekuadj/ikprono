@@ -16,6 +16,12 @@ export interface FixtureStanding {
   goalsAgainst: number;
   goalDifference: number;
   points: number;
+  /** Taux de victoire (0-1), renseigné pour les classements de basket. */
+  winPercentage?: number;
+  /** Nombre de matchs de retard sur la tête de la division. */
+  gamesBehind?: number;
+  /** Série en cours, exprimée en nombre de victoires/défaites (ex. 3 ou -2). */
+  streak?: number;
 }
 
 export interface LiveFixtureStatistics {
@@ -32,6 +38,8 @@ export interface Fixture {
   time: string;
   league: string;
   location?: string;
+  /** Code pays ISO (ex. « FRA », « KSA ») fourni par la source de données. */
+  countryCode?: string;
   competition?: string;
   homeTeam: string;
   awayTeam: string;

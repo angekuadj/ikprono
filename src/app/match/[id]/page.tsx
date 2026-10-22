@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { loadFotMobDetails } from "@/lib/fotmob";
+import { loadEspnBasketballSummary, parseEspnFixtureId } from "@/lib/espn";
 import MatchStatisticsClient from "./MatchStatisticsClient";
+import BasketballMatchStatisticsClient from "./BasketballMatchStatisticsClient";
 import FavoriteFixtureButton from "@/components/FavoriteFixtureButton";
 import LiveMatchHeader from "@/components/LiveMatchHeader";
 import MatchPushAlerts from "@/components/MatchPushAlerts";
@@ -9,8 +11,12 @@ import MatchPushAlerts from "@/components/MatchPushAlerts";
 export const dynamic = "force-dynamic";
 
 export default async function MatchDetailsPage({ params }: { params: { id: string } }) {
-  if (!/^\d{1,20}$/.test(params.id)) notFound();
-  const { fixture } = await loadFotMobDetails(params.id);
+  const espnTarget = parseEspnFixtureId(params.id);
+  if (!espnTarget && !/^\d{1,20}$/.test(params.id)) notFound();
+
+  const fixture = espnTarget
+    ? (await loadEspnBasketballSummary(params.id)).fixture
+    : (await loadFotMobDetails(params.id)).fixture;
   if (!fixture.date) notFound();
 
   const matchDate = new Date(`${fixture.date}T12:00:00.000Z`).toLocaleDateString("fr-FR", {
@@ -23,7 +29,7 @@ export default async function MatchDetailsPage({ params }: { params: { id: strin
   return (
     <div className="match-center min-h-screen bg-black px-4 py-7 text-white sm:px-6 lg:px-8">
       <div className="match-center-content mx-auto max-w-6xl">
-        <nav className="match-breadcrumbs" aria-label="Fil d’Ariane">
+        <nav className="match-breadcrumbs" aria-label="Fil d’ariane">
           <Link href="/predictions" className="match-back-link">
             ← Retour aux rencontres
           </Link>
@@ -37,7 +43,12 @@ export default async function MatchDetailsPage({ params }: { params: { id: strin
         </div>
 
         <MatchPushAlerts fixture={fixture} />
-        <MatchStatisticsClient fixtureId={params.id} />
+
+        {espnTarget ? (
+          <BasketballMatchStatisticsClient fixtureId={params.id} />
+        ) : (
+          <MatchStatisticsClient fixtureId={params.id} />
+        )}
       </div>
     </div>
   );

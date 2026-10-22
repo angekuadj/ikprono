@@ -33,7 +33,8 @@ export default function Navigation() {
 
   const primaryLinks: NavigationLink[] = [
     { href: "/ai-search", label: text("Calendrier", "Calendar") },
-    { href: "/predictions", label: text("Rencontres", "Fixtures") },
+    { href: "/predictions", label: text("Football", "Football") },
+    { href: "/basket-fixtures", label: text("Basketball", "Basketball") },
     { href: "/live", label: text("En direct", "Live") },
     { href: "/combinations", label: text("Combinaisons", "Combinations") },
   ];

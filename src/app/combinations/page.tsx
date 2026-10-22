@@ -319,7 +319,7 @@ export default function CombinationsPage() {
             signal: controller.signal,
             cache: "no-store",
           }),
-          fetch("/api/sports/fixtures/live", {
+          fetch(`/api/sports/fixtures/live?sport=football`, {
             signal: controller.signal,
             cache: "no-store",
           }),
