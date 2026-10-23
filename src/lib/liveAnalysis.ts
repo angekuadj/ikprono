@@ -1,5 +1,6 @@
 import type { CouponPick } from "@/lib/coupons";
 import type { Fixture } from "@/lib/fixtures";
+import { liveRecommendationKey } from "@/lib/liveRecommendationKey";
 import {
   evaluateLivePick,
   expectedRemaining,
@@ -39,6 +40,9 @@ export interface LiveMatchAnalysis {
   fixtureId: string;
   homeTeam: string;
   awayTeam: string;
+  /** Compétition / ligue de la rencontre (utile à la recherche). */
+  league: string;
+  competition: string;
   /** Score en direct (« 2 - 1 »). */
   score: string;
   minute: number;
@@ -48,7 +52,23 @@ export interface LiveMatchAnalysis {
   expectedGoalsRemaining: number;
   insights: BilingualText[];
   recommendations: LiveEventRecommendation[];
+  /** D'autres événements restent disponibles pour une nouvelle analyse. */
+  hasMoreRecommendations: boolean;
 }
+
+export interface LiveAnalysisOptions {
+  /**
+   * Clés des événements déjà proposés (`market:selection`, voir
+   * {@link liveRecommendationKey}) : leurs familles sont écartées pour
+   * proposer une analyse réellement différente.
+   */
+  excludeKeys?: readonly string[];
+  /** Nombre maximum de recommandations retournées (5 par défaut). */
+  limit?: number;
+}
+
+/** Nombre de recommandations affichées par défaut et par match. */
+export const LIVE_ANALYSIS_RECOMMENDATION_LIMIT = 5;
 
 /* -------------------------------------------------------------------------- */
 /* Utilitaires                                                                */
@@ -306,7 +326,19 @@ function buildInsights(
 /* Analyse principale                                                         */
 /* -------------------------------------------------------------------------- */
 
-export function analyzeLiveMatch(fixture: Fixture, state: LiveMatchState): LiveMatchAnalysis {
+/** Famille d'événement à partir d'une clé `market:selection`. */
+function familyFromRecommendationKey(key: string): string {
+  const separator = key.indexOf(":");
+  if (separator <= 0) return key;
+  const market = key.slice(0, separator) as CouponPick["market"];
+  return recommendationFamily(market, key.slice(separator + 1));
+}
+
+export function analyzeLiveMatch(
+  fixture: Fixture,
+  state: LiveMatchState,
+  options: LiveAnalysisOptions = {}
+): LiveMatchAnalysis {
   const totalGoals = state.homeGoals + state.awayGoals;
   const goalsPace = state.minute > 0 ? (totalGoals / state.minute) * 90 : PRIOR_GOALS_PER_90;
   const tempo: LiveMatchAnalysis["tempo"] =
@@ -316,7 +348,16 @@ export function analyzeLiveMatch(fixture: Fixture, state: LiveMatchState): LiveM
         ? "closed"
         : "balanced";
 
+  // Les familles déjà proposées sont écartées : « d'autres analyses » ne
+  // rejoue donc pas les mêmes angles de marché (ni leurs lignes voisines).
+  const excludedFamilies = new Set((options.excludeKeys ?? []).map(familyFromRecommendationKey));
+  const requestedLimit = options.limit ?? LIVE_ANALYSIS_RECOMMENDATION_LIMIT;
+  const limit = requestedLimit > 0
+    ? Math.floor(requestedLimit)
+    : LIVE_ANALYSIS_RECOMMENDATION_LIMIT;
+
   const scored = candidatePicks(state)
+    .filter(pick => !excludedFamilies.has(recommendationFamily(pick.market, String(pick.selection))))
     .map(pick => ({ pick, status: evaluateLivePick(pick, state, 0) }))
     .filter(candidate => candidate.status === "open")
     .map(candidate => ({
@@ -334,7 +375,8 @@ export function analyzeLiveMatch(fixture: Fixture, state: LiveMatchState): LiveM
     if (!bestByFamily.has(family)) bestByFamily.set(family, candidate);
   }
 
-  const recommendations = [...bestByFamily.values()].slice(0, 5).map(({ pick, probability }): LiveEventRecommendation => {
+  const available = [...bestByFamily.values()];
+  const recommendations = available.slice(0, limit).map(({ pick, probability }): LiveEventRecommendation => {
     const selection = String(pick.selection);
     return {
       market: pick.market,
@@ -349,6 +391,8 @@ export function analyzeLiveMatch(fixture: Fixture, state: LiveMatchState): LiveM
     fixtureId: fixture.id,
     homeTeam: fixture.homeTeam,
     awayTeam: fixture.awayTeam,
+    league: fixture.league,
+    competition: fixture.competition ?? "",
     score: fixture.score ?? `${state.homeGoals} - ${state.awayGoals}`,
     minute: state.minute,
     remainingMinutes: state.remainingMinutes,
@@ -356,5 +400,6 @@ export function analyzeLiveMatch(fixture: Fixture, state: LiveMatchState): LiveM
     expectedGoalsRemaining: expectedRemaining(PRIOR_GOALS_PER_90, totalGoals, state),
     insights: buildInsights(fixture, state, tempo),
     recommendations,
+    hasMoreRecommendations: available.length > limit,
   };
 }

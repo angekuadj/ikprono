@@ -12,6 +12,7 @@ import { readGeneratedCombinations, writeGeneratedCombinations } from "@/lib/gen
 import { couponPickLabel, formatTheoreticalOdds, uniqueGeneratedCoupons, type GeneratedCoupon, type GeneratedStatisticCoupon, type GeneratedScorerCoupon, type CouponPick, type StatisticMarket } from "@/lib/coupons";
 import type { Fixture, FixtureResponse } from "@/lib/fixtures";
 import type { LiveMatchAnalysis } from "@/lib/liveAnalysis";
+import { liveRecommendationKey } from "@/lib/liveRecommendationKey";
 import {
   COMBINATION_DAILY_LIMIT,
   COMBINATIONS_MONTHLY_PRICE_FCFA,
@@ -44,6 +45,8 @@ import {
 const MAX_FIXTURES = 20;
 const DEFAULT_LOOKAHEAD_DAYS = 7;
 const PAGE_SIZE = 12;
+/** Nombre maximal de matchs en direct analysés en une fois (borne serveur). */
+const MAX_LIVE_ANALYSIS_FIXTURES = 60;
 
 /**
  * Statuts considérés comme « en direct » par les API (`fotmob.ts` produit
@@ -78,6 +81,46 @@ function fixtureSearchText(fixture: Fixture): string {
     fixture.date,
     fixture.time,
   ].join(" "));
+}
+
+/** Clés des événements déjà affichés, par rencontre. */
+function buildAiExclusions(analyses: LiveMatchAnalysis[]): Record<string, string[]> {
+  const exclusions: Record<string, string[]> = {};
+  for (const analysis of analyses) {
+    const keys = analysis.recommendations.map(
+      recommendation => liveRecommendationKey(recommendation.market, recommendation.selection)
+    );
+    if (keys.length > 0) exclusions[analysis.fixtureId] = keys;
+  }
+  return exclusions;
+}
+
+/** Ajoute les nouvelles recommandations aux analyses déjà affichées. */
+function mergeAiAnalyses(
+  existing: LiveMatchAnalysis[],
+  incoming: LiveMatchAnalysis[]
+): LiveMatchAnalysis[] {
+  const byFixture = new Map(existing.map(analysis => [analysis.fixtureId, analysis]));
+  for (const analysis of incoming) {
+    const previous = byFixture.get(analysis.fixtureId);
+    if (!previous) {
+      byFixture.set(analysis.fixtureId, analysis);
+      continue;
+    }
+    const known = new Set(previous.recommendations.map(
+      recommendation => liveRecommendationKey(recommendation.market, recommendation.selection)
+    ));
+    byFixture.set(analysis.fixtureId, {
+      ...analysis,
+      recommendations: [
+        ...previous.recommendations,
+        ...analysis.recommendations.filter(
+          recommendation => !known.has(liveRecommendationKey(recommendation.market, recommendation.selection))
+        ),
+      ],
+    });
+  }
+  return [...byFixture.values()];
 }
 
 const STATISTIC_MARKETS: { id: StatisticMarket; label: string; labelEn: string; description: string; descriptionEn: string }[] = [
@@ -167,6 +210,9 @@ export default function CombinationsPage() {
   const [aiAnalyses, setAiAnalyses] = useState<LiveMatchAnalysis[]>([]);
   const [aiAnalysing, setAiAnalysing] = useState(false);
   const [aiError, setAiError] = useState("");
+  const [aiNotice, setAiNotice] = useState("");
+  const [aiHasMore, setAiHasMore] = useState(false);
+  const [aiSearch, setAiSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -387,6 +433,18 @@ export default function CombinationsPage() {
   const fixturesForCombination = selectedFixtures.length > 0
     ? selectedFixtures
     : relevantFixtures.slice(0, requestedCount);
+  const aiSearchQuery = normalizeSearchText(aiSearch);
+  const visibleAiAnalyses = useMemo(
+    () => aiSearchQuery
+      ? aiAnalyses.filter(analysis => normalizeSearchText([
+        analysis.homeTeam,
+        analysis.awayTeam,
+        analysis.league,
+        analysis.competition,
+      ].join(" ")).includes(aiSearchQuery))
+      : aiAnalyses,
+    [aiAnalyses, aiSearchQuery]
+  );
 
   const clearGeneratedOutputs = () => {
     setActionError("");
@@ -474,24 +532,32 @@ export default function CombinationsPage() {
     }
   };
 
-  /** Analyse IA (moteur expert local) des matchs en direct sélectionnés. */
-  const analyseLiveWithAI = async () => {
-    const liveIds = fixturesForCombination
+  /** Analyse IA (moteur expert local) de TOUS les matchs en direct. */
+  const analyseLiveWithAI = async (more = false) => {
+    const liveIds = fixtures
       .filter(fixture => isLiveFixtureStatus(fixture.status))
       .map(fixture => fixture.id)
-      .slice(0, 8);
+      .slice(0, MAX_LIVE_ANALYSIS_FIXTURES);
     if (liveIds.length === 0) {
       setAiAnalyses([]);
+      setAiHasMore(false);
+      setAiNotice("");
       setAiError(text(
-        "Sélectionnez au moins un match en direct pour lancer l'analyse IA.",
-        "Select at least one live match to start the AI analysis."
+        "Aucun match en direct n’est disponible pour le moment.",
+        "No live match is available right now."
       ));
       return;
     }
+    const requestMore = more && aiAnalyses.length > 0;
+    const exclusions = requestMore ? buildAiExclusions(aiAnalyses) : undefined;
     setAiAnalysing(true);
     setAiError("");
+    setAiNotice("");
     try {
-      const response = await postJson("/api/live/analysis", { fixtureIds: liveIds });
+      const response = await postJson("/api/live/analysis", {
+        fixtureIds: liveIds,
+        ...(exclusions ? { excludeRecommendations: exclusions } : {}),
+      });
       const payload = await response.json() as { analyses?: LiveMatchAnalysis[]; error?: string };
       if (!response.ok || !Array.isArray(payload.analyses) || payload.analyses.length === 0) {
         throw new Error(payload.error || text(
@@ -499,7 +565,24 @@ export default function CombinationsPage() {
           "Analysis unavailable right now."
         ));
       }
-      setAiAnalyses(payload.analyses);
+      if (requestMore) {
+        const additions = payload.analyses.reduce(
+          (total, analysis) => total + analysis.recommendations.length,
+          0
+        );
+        setAiAnalyses(mergeAiAnalyses(aiAnalyses, payload.analyses));
+        setAiHasMore(payload.analyses.some(analysis => analysis.hasMoreRecommendations));
+        if (additions === 0) {
+          setAiNotice(text(
+            "Toutes les analyses disponibles ont déjà été proposées pour ces matchs.",
+            "All available analyses have already been suggested for these fixtures."
+          ));
+        }
+      } else {
+        setAiAnalyses(payload.analyses);
+        setAiHasMore(payload.analyses.some(analysis => analysis.hasMoreRecommendations));
+        setAiSearch("");
+      }
     } catch (error) {
       setAiError(error instanceof Error
         ? error.message
@@ -1788,25 +1871,80 @@ export default function CombinationsPage() {
                 <span aria-hidden="true">🧠</span>
                 {text("Analyse IA — matchs en direct", "AI analysis — live matches")}
               </h2>
-              <button
-                type="button"
-                onClick={() => setAiAnalyses([])}
-                className="rounded-lg border border-gray-700 px-3 py-1.5 text-xs font-semibold text-gray-300 hover:border-purple-600"
-              >
-                {text("Masquer", "Hide")}
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                {aiHasMore && (
+                  <button
+                    type="button"
+                    onClick={() => void analyseLiveWithAI(true)}
+                    disabled={aiAnalysing || generating}
+                    className="rounded-lg border border-purple-700 bg-purple-950/40 px-3 py-1.5 text-xs font-semibold text-purple-200 hover:border-purple-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {aiAnalysing
+                      ? text("Analyse en cours…", "Analysing…")
+                      : text("Proposer d’autres analyses", "Suggest other analyses")}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAiAnalyses([]);
+                    setAiHasMore(false);
+                    setAiNotice("");
+                    setAiSearch("");
+                  }}
+                  className="rounded-lg border border-gray-700 px-3 py-1.5 text-xs font-semibold text-gray-300 hover:border-purple-600"
+                >
+                  {text("Masquer", "Hide")}
+                </button>
+              </div>
             </div>
             <p className="mt-1 text-xs text-gray-400">
               {text(
-                "Moteur expert local : croise score, temps restant, rythme et statistiques en direct. Seuls les événements encore ouverts sont proposés (jamais déjà gagnés ni perdus).",
-                "Local expert engine: cross-checks score, remaining time, pace and live stats. Only still-open events are suggested (never already won or lost)."
+                "Moteur expert local : tous les matchs en direct sont analysés (score, temps restant, rythme et statistiques). Seuls les événements encore ouverts sont proposés (jamais déjà gagnés ni perdus).",
+                "Local expert engine: every live match is analysed (score, remaining time, pace and stats). Only still-open events are suggested (never already won or lost)."
+              )}
+              {" "}
+              {text(
+                "Utilisez « Proposer d’autres analyses » pour explorer d’autres angles de marché.",
+                "Use “Suggest other analyses” to explore other market angles."
               )}
             </p>
             {aiError && (
               <p role="alert" className="mt-3 rounded-lg border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">{aiError}</p>
             )}
+            {aiNotice && (
+              <p role="status" className="mt-3 rounded-lg border border-purple-800 bg-purple-950/30 p-3 text-sm text-purple-200">{aiNotice}</p>
+            )}
+            {aiAnalyses.length > 0 && (
+              <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
+                <label className="min-w-[16rem] flex-1 text-xs text-gray-400">
+                  {text("Rechercher une rencontre", "Search a fixture")}
+                  <input
+                    type="search"
+                    value={aiSearch}
+                    onChange={event => setAiSearch(event.target.value)}
+                    placeholder={text("Équipe, compétition ou ligue", "Team, competition or league")}
+                    className="mt-1 block w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white placeholder:text-gray-500"
+                  />
+                </label>
+                <span className="pb-2 text-xs text-gray-500">
+                  {text(
+                    `${visibleAiAnalyses.length} / ${aiAnalyses.length} rencontre(s)`,
+                    `${visibleAiAnalyses.length} / ${aiAnalyses.length} fixture(s)`
+                  )}
+                </span>
+              </div>
+            )}
+            {aiSearchQuery && visibleAiAnalyses.length === 0 && (
+              <p className="mt-3 rounded-lg border border-gray-800 bg-gray-950 p-3 text-sm text-gray-400">
+                {text(
+                  `Aucune rencontre ne correspond à « ${aiSearch.trim()} ».`,
+                  `No fixture matches “${aiSearch.trim()}”.`
+                )}
+              </p>
+            )}
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
-              {aiAnalyses.map(analysis => {
+              {visibleAiAnalyses.map(analysis => {
                 const expectedGoals = analysis.expectedGoalsRemaining.toFixed(1).replace(".", ",");
                 const expectedLabel = analysis.expectedGoalsRemaining < 2
                   ? text("but attendu d'ici la fin", "goal expected until full time")
@@ -1814,7 +1952,10 @@ export default function CombinationsPage() {
                 return (
                   <article key={analysis.fixtureId} className="flex flex-col rounded-xl border border-gray-800 bg-gray-950/70 p-4">
                     <header className="flex items-start justify-between gap-3">
-                      <h3 className="text-sm font-bold leading-snug text-white">{`${analysis.homeTeam} — ${analysis.awayTeam}`}</h3>
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-bold leading-snug text-white">{`${analysis.homeTeam} — ${analysis.awayTeam}`}</h3>
+                        <p className="mt-0.5 text-[11px] text-gray-500">{analysis.competition || analysis.league}</p>
+                      </div>
                       <div className="flex shrink-0 items-center gap-1.5">
                         <span className="rounded-md border border-green-700 bg-green-950/50 px-2 py-1 text-xs font-bold text-green-300">{analysis.score}</span>
                         <span className="rounded-md border border-gray-700 bg-gray-900 px-2 py-1 text-xs font-semibold text-gray-300">{`${analysis.minute}'`}</span>
