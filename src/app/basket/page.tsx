@@ -29,7 +29,7 @@ import {
   type SavedSelection,
 } from "@/lib/savedSelections";
 import { useFixtureStatuses } from "@/hooks/useFixtureStatuses";
-import { formatTheoreticalOdds, uniqueGeneratedCoupons, type GeneratedCoupon, type CouponPick, type CouponFixturePrediction } from "@/lib/coupons";
+import { couponPickLabel, formatTheoreticalOdds, uniqueGeneratedCoupons, type GeneratedCoupon, type CouponPick, type CouponFixturePrediction } from "@/lib/coupons";
 import type { Fixture } from "@/lib/fixtures";
 import {
   isFixtureFinished,
@@ -392,60 +392,8 @@ export default function BasketPage() {
   };
 
   const getCouponPickLabel = (pick: CouponPick) => {
-    if (!pick.selection) return text("Historique insuffisant", "Insufficient history");
-    const labels: Record<NonNullable<CouponPick["selection"]>, string> = {
-      home: text("Victoire domicile (1)", "Home win (1)"),
-      draw: text("Match nul (N)", "Draw (N)"),
-      away: text("Victoire extérieur (2)", "Away win (2)"),
-      "home-or-draw": text("Domicile ou nul (1X)", "Home or draw (1X)"),
-      "away-or-draw": text("Extérieur ou nul (X2)", "Away or draw (X2)"),
-      "either-win": text("Victoire d’une équipe (12)", "Either team to win (12)"),
-      "over-0.5": text("Plus de 0,5 but", "Over 0.5 goals"),
-      "over-1.5": text("Plus de 1,5 buts", "Over 1.5 goals"),
-      "over-2.5": text("Plus de 2,5 buts", "Over 2.5 goals"),
-      "over-3.5": text("Plus de 3,5 buts", "Over 3.5 goals"),
-      "under-0.5": text("Moins de 0,5 but", "Under 0.5 goals"),
-      "under-1.5": text("Moins de 1,5 buts", "Under 1.5 goals"),
-      "under-2.5": text("Moins de 2,5 buts", "Under 2.5 goals"),
-      "under-3.5": text("Moins de 3,5 buts", "Under 3.5 goals"),
-      "home-1.5": text("Domicile -1.5", "Home -1.5"),
-      "away-1.5": text("Extérieur -1.5", "Away -1.5"),
-      "home-2.5": text("Domicile -2.5", "Home -2.5"),
-      "away-2.5": text("Extérieur -2.5", "Away -2.5"),
-      "home+1.5": text("Domicile +1.5", "Home +1.5"),
-      "away+1.5": text("Extérieur +1.5", "Away +1.5"),
-      "home+2.5": text("Domicile +2.5", "Home +2.5"),
-      "away+2.5": text("Extérieur +2.5", "Away +2.5"),
-      "home-over-0.5": text("Domicile plus de 0,5 but", "Home over 0.5 goals"),
-      "home-over-1.5": text("Domicile plus de 1,5 but", "Home over 1.5 goals"),
-      "home-over-2.5": text("Domicile plus de 2,5 buts", "Home over 2.5 goals"),
-      "away-over-0.5": text("Extérieur plus de 0,5 but", "Away over 0.5 goals"),
-      "away-over-1.5": text("Extérieur plus de 1,5 but", "Away over 1.5 goals"),
-      "away-over-2.5": text("Extérieur plus de 2,5 buts", "Away over 2.5 goals"),
-      "home-under-0.5": text("Domicile moins de 0,5 but", "Home under 0.5 goals"),
-      "home-under-1.5": text("Domicile moins de 1,5 but", "Home under 1.5 goals"),
-      "home-under-2.5": text("Domicile moins de 2,5 buts", "Home under 2.5 goals"),
-      "away-under-0.5": text("Extérieur moins de 0,5 but", "Away under 0.5 goals"),
-      "away-under-1.5": text("Extérieur moins de 1,5 but", "Away under 1.5 goals"),
-      "away-under-2.5": text("Extérieur moins de 2,5 buts", "Away under 2.5 goals"),
-      "home-0-1": text("Domicile entre 0 et 1 but", "Home 0 to 1 goals"),
-      "home-1-3": text("Domicile entre 1 et 3 buts", "Home 1 to 3 goals"),
-      "away-0-1": text("Extérieur entre 0 et 1 but", "Away 0 to 1 goals"),
-      "away-1-3": text("Extérieur entre 1 et 3 buts", "Away 1 to 3 goals"),
-      scorer: text("Buteur (n'importe quand)", "Anytime scorer"),
-      assist: text("Passeur décisif (n'importe quand)", "Anytime assist"),
-      "home-scorer": text("Buteur domicile (n'importe quand)", "Home scorer (anytime)"),
-      "away-scorer": text("Buteur extérieur (n'importe quand)", "Away scorer (anytime)"),
-      "home-assist": text("Passeur décisif domicile (n'importe quand)", "Home assist (anytime)"),
-      "away-assist": text("Passeur décisif extérieur (n'importe quand)", "Away assist (anytime)"),
-      "over-5.5": text("Plus de 5,5 corners", "Over 5.5 corners"),
-      "over-8.5": text("Plus de 8,5 corners", "Over 8.5 corners"),
-      "over-10.5": text("Plus de 10,5 corners", "Over 10.5 corners"),
-    };
-    const label = labels[pick.selection];
-    return pick.market === "scorer" && pick.playerName
-      ? `${label} : ${pick.playerName}`
-      : label;
+    const label = couponPickLabel(pick);
+    return text(label.fr, label.en);
   };
 
   const fixtureStatusLabel = (fixture: Fixture | undefined) => {

@@ -67,14 +67,26 @@ export function settleCouponPick(
       case "over-1.5": return homeGoals + awayGoals >= 2;
       case "over-2.5": return homeGoals + awayGoals >= 3;
       case "over-3.5": return homeGoals + awayGoals >= 4;
+      case "over-4.5": return homeGoals + awayGoals >= 5;
       case "under-0.5": return homeGoals + awayGoals === 0;
       case "under-1.5": return homeGoals + awayGoals <= 1;
       case "under-2.5": return homeGoals + awayGoals <= 2;
       case "under-3.5": return homeGoals + awayGoals <= 3;
+      case "under-4.5": return homeGoals + awayGoals <= 4;
+      case "btts-yes": return homeGoals > 0 && awayGoals > 0;
+      case "btts-no": return homeGoals === 0 || awayGoals === 0;
+      case "home-over-0.5": return homeGoals >= 1;
       case "home-over-1.5": return homeGoals >= 2;
+      case "home-over-2.5": return homeGoals >= 3;
+      case "away-over-0.5": return awayGoals >= 1;
       case "away-over-1.5": return awayGoals >= 2;
+      case "away-over-2.5": return awayGoals >= 3;
+      case "home-under-0.5": return homeGoals === 0;
       case "home-under-1.5": return homeGoals <= 1;
+      case "home-under-2.5": return homeGoals <= 2;
+      case "away-under-0.5": return awayGoals === 0;
       case "away-under-1.5": return awayGoals <= 1;
+      case "away-under-2.5": return awayGoals <= 2;
       case "home-0-1": return homeGoals >= 0 && homeGoals <= 1;
       case "home-1-3": return homeGoals >= 1 && homeGoals <= 3;
       case "away-0-1": return awayGoals >= 0 && awayGoals <= 1;
@@ -86,18 +98,31 @@ export function settleCouponPick(
   if (pick.market === "handicap") {
     const goalDiff = homeGoals - awayGoals;
     switch (pick.selection) {
+      case "home-0.5": return goalDiff >= 1;
+      case "away-0.5": return goalDiff <= -1;
       case "home-1.5": return goalDiff >= 2;
       case "away-1.5": return goalDiff <= -2;
       case "home-2.5": return goalDiff >= 3;
       case "away-2.5": return goalDiff <= -3;
+      case "home+0.5": return goalDiff >= 0;
+      case "away+0.5": return goalDiff <= 0;
       case "home+1.5": return goalDiff >= -1;
       case "away+1.5": return goalDiff <= 1;
+      case "home+2.5": return goalDiff >= -2;
+      case "away+2.5": return goalDiff <= 2;
       default: return null;
     }
   }
 
   if (pick.market === "corners") {
-    return null;
+    // Les corners ne figurent pas dans le score : on utilise les statistiques
+    // actualisées de la rencontre quand elles sont disponibles.
+    const total = fixture?.liveStatistics?.corners;
+    if (total === null || total === undefined) return null;
+    const parsed = /^(over|under)-(\d+(?:\.\d+)?)$/.exec(pick.selection);
+    if (!parsed) return null;
+    const line = Number(parsed[2]);
+    return parsed[1] === "over" ? total > line : total < line;
   }
 
   return null;

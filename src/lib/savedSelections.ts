@@ -1,4 +1,4 @@
-import type { CouponSelection, GeneratedCoupon } from "@/lib/coupons";
+import { COUPON_SELECTIONS, type GeneratedCoupon } from "@/lib/coupons";
 import type { Fixture } from "@/lib/fixtures";
 import type { MarketSelection } from "@/lib/marketEstimates";
 import { isMarketSelection } from "@/lib/marketSelections";
@@ -12,55 +12,7 @@ export interface SavedSelection {
   marketPicks?: Record<string, MarketSelection[]>;
 }
 
-const couponSelections: Record<CouponSelection, true> = {
-  home: true,
-  draw: true,
-  away: true,
-  "home-or-draw": true,
-  "away-or-draw": true,
-  "either-win": true,
-  "over-0.5": true,
-  "over-1.5": true,
-  "over-2.5": true,
-  "over-3.5": true,
-  "over-5.5": true,
-  "over-8.5": true,
-  "over-10.5": true,
-  "under-0.5": true,
-  "under-1.5": true,
-  "under-2.5": true,
-  "under-3.5": true,
-  "home-1.5": true,
-  "away-1.5": true,
-  "home-2.5": true,
-  "away-2.5": true,
-  "home+1.5": true,
-  "away+1.5": true,
-  "home+2.5": true,
-  "away+2.5": true,
-  "home-over-0.5": true,
-  "home-over-1.5": true,
-  "home-over-2.5": true,
-  "away-over-0.5": true,
-  "away-over-1.5": true,
-  "away-over-2.5": true,
-  "home-under-0.5": true,
-  "home-under-1.5": true,
-  "home-under-2.5": true,
-  "away-under-0.5": true,
-  "away-under-1.5": true,
-  "away-under-2.5": true,
-  "home-0-1": true,
-  "home-1-3": true,
-  "away-0-1": true,
-  "away-1-3": true,
-  scorer: true,
-  assist: true,
-  "home-scorer": true,
-  "away-scorer": true,
-  "home-assist": true,
-  "away-assist": true,
-};
+const couponSelections = new Set<string>(COUPON_SELECTIONS);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -99,7 +51,7 @@ export function isGeneratedCoupon(value: unknown): value is GeneratedCoupon {
       (pick.market === "result" || pick.market === "goals" || pick.market === "corners" || pick.market === "handicap" || pick.market === "scorer" || pick.market === "assist") &&
       (pick.selection === null || (
         typeof pick.selection === "string" &&
-        Object.prototype.hasOwnProperty.call(couponSelections, pick.selection)
+        couponSelections.has(pick.selection)
       )) &&
       (pick.historicalRate === null || typeof pick.historicalRate === "number") &&
       typeof pick.sampleSize === "number" &&

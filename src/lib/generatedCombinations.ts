@@ -51,8 +51,9 @@ export function readGeneratedCombinations(): StoredGeneratedCombination[] {
   }
   const valid = parsed.filter(isStoredGeneratedCombination);
   if (valid.length !== parsed.length) {
+    // Ne jamais réécrire le stockage ici : une lecture (badge, tiroir panier…)
+    // ne doit pas supprimer silencieusement une combinaison tout juste ajoutée.
     console.warn(`${parsed.length - valid.length} combinaison(s) invalide(s) ignorée(s)`);
-    writeGeneratedCombinations(valid);
   }
   return valid;
 }
