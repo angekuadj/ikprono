@@ -50,3 +50,12 @@ subscription. It sends notifications for later changes (kick-off, goals, cards,
 and full time). If delivery fails, inspect the GitHub Actions run logs and
 verify that the service account, Firestore, FCM Web Push key, and check secret
 all belong to the configured Firebase/site deployment.
+
+
+Puis choisissez l'offre TV à ${TV_DAILY_PRICE_FCFA} FCFA/jour.
+
+${TV_DAILY_PRICE_FCFA} XOF/day to watch every match.
+
+
+
+connecter : Prenez l’offre TV à ${TV_DAILY_PRICE_FCFA} FCFA/jour pour regarder tous les matchs.

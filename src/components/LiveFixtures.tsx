@@ -398,15 +398,16 @@ export default function LiveFixtures() {
           </label>
         </section>
 
+
         {!authLoading && !entitlements.hasTvAccess && (
           <p role="status" className="mb-5 rounded-lg border border-amber-700/60 bg-amber-950/40 p-4 text-sm text-amber-200">
             {isAuthenticated
               ? text(
-                `Votre accès aux vidéos en direct est limité aux matchs suivis dans votre panier. Prenez l’offre TV à ${TV_DAILY_PRICE_FCFA} FCFA/jour pour regarder tous les matchs.`,
-                `Your live video access is limited to matches tracked in your basket. Get the TV plan at ${TV_DAILY_PRICE_FCFA} XOF/day to watch every match.`
+                `Votre accès aux vidéos en direct est limité aux matchs suivis dans votre panier. `,
+                `Your live video access is limited to matches tracked in your basket. Get the TV plan at `
               )
               : text(
-                `Connectez-vous pour regarder les vidéos en direct (phase d'essai en cours : accès complet offert). Puis choisissez l'offre TV à ${TV_DAILY_PRICE_FCFA} FCFA/jour.`,
+                `Connectez-vous pour regarder les vidéos en direct (phase d'essai en cours : accès complet offert). `,
                 `Sign in to watch live videos (free trial phase: full access included). Then choose the TV plan at ${TV_DAILY_PRICE_FCFA} XOF/day.`
               )}
             {" "}
