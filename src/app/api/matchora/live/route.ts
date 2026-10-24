@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 
@@ -100,7 +100,8 @@ async function loadLiveMatches(baseUrl: string): Promise<MatchoraLiveMatch[]> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 4_500);
   try {
-    const response = await fetch(`${baseUrl}/api/v1/live`, {
+    const { fetchThroughProxy } = await import("@/lib/server/matchoraProxy");
+    const response = await fetchThroughProxy(`${baseUrl}/api/v1/live`, {
       headers: {
         Accept: "application/json",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -109,7 +110,7 @@ async function loadLiveMatches(baseUrl: string): Promise<MatchoraLiveMatch[]> {
       },
       cache: "no-store",
       signal: controller.signal,
-    });
+    } as RequestInit);
     if (!response.ok) {
       throw new Error(`Matchora returned HTTP ${response.status}.`);
     }
@@ -147,7 +148,7 @@ async function loadLiveMatches(baseUrl: string): Promise<MatchoraLiveMatch[]> {
         minute: typeof event.minute === "string" ? event.minute : null,
         score: typeof event.score === "string" ? event.score : null,
         kickoff: event.kickoff,
-        embedUrl: `${baseUrl}/embed/match/${encodeURIComponent(event.id)}`,
+        embedUrl: `/api/matchora/proxy?url=${encodeURIComponent(`${baseUrl}/embed/match/${encodeURIComponent(event.id)}`)}`,
       }];
     });
   } finally {
@@ -155,7 +156,7 @@ async function loadLiveMatches(baseUrl: string): Promise<MatchoraLiveMatch[]> {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const baseUrls = matchoraBaseUrls();
   const results = await Promise.allSettled(
     baseUrls.map(async baseUrl => ({
@@ -169,14 +170,24 @@ export async function GET() {
       result.status === "fulfilled" && result.value.matches.length > 0
   );
   if (success) {
-    return NextResponse.json({ matches: success.value.matches, source: success.value.baseUrl }, {
+    const proxiedMatches = success.value.matches.map(m => ({
+      ...m,
+      embedUrl: `/api/matchora/proxy?url=${encodeURIComponent(`${success.value.baseUrl}/embed/match/${encodeURIComponent(m.id)}`)}`,
+      originalEmbedUrl: `${success.value.baseUrl}/embed/match/${encodeURIComponent(m.id)}`,
+    }));
+    return NextResponse.json({ matches: proxiedMatches, source: success.value.baseUrl }, {
       headers: { "Cache-Control": "no-store" },
     });
   }
 
   const cached = loadCachedMatches();
   if (cached.length > 0) {
-    return NextResponse.json({ matches: cached, source: "cache" }, {
+    const proxiedCached = cached.map(m => ({
+      ...m,
+      embedUrl: `/api/matchora/proxy?url=${encodeURIComponent(`https://matchora.to/embed/match/${encodeURIComponent(m.id)}`)}`,
+      originalEmbedUrl: `https://matchora.to/embed/match/${encodeURIComponent(m.id)}`,
+    }));
+    return NextResponse.json({ matches: proxiedCached, source: "cache" }, {
       headers: { "Cache-Control": "no-store" },
     });
   }

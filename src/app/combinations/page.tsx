@@ -598,6 +598,10 @@ export default function CombinationsPage() {
     setGenerating(true);
     setActionError("");
     setCoupons([]);
+    const exclusions = Array.from(new Set([
+      ...excludeFixtureIds,
+      ...(safeCoupon?.matches.map(match => match.fixtureId) ?? []),
+    ]));
     try {
       const response = await postJson("/api/coupons/suggest", {
         mode: "auto",
@@ -605,7 +609,7 @@ export default function CombinationsPage() {
         to: endDate,
         count: requestedCount,
         riskLevel: selectedRiskLevel,
-        excludeFixtureIds,
+        excludeFixtureIds: exclusions,
         includeLive: false,
         randomSelection: true,
       });
@@ -644,6 +648,10 @@ export default function CombinationsPage() {
     if (remaining === 0) return;
     setGenerating(true);
     setActionError("");
+    const exclusions = Array.from(new Set([
+      ...excludeFixtureIds,
+      ...(statisticCoupon?.matches.map(match => match.fixtureId) ?? []),
+    ]));
     try {
       if (statisticMarket === "scorers") {
         await generateScorerCombination(excludeFixtureIds);
@@ -657,7 +665,7 @@ export default function CombinationsPage() {
         count: statisticCount,
         riskLevel: selectedRiskLevel,
         market: statisticMarket,
-        excludeFixtureIds,
+        excludeFixtureIds: exclusions,
         includeLive: liveOnly,
         randomSelection: true,
       });
@@ -691,13 +699,17 @@ export default function CombinationsPage() {
     if (remainingQuota === 0) return;
     setGenerating(true);
     setActionError("");
+    const exclusions = Array.from(new Set([
+      ...excludeFixtureIds,
+      ...(scorerCoupon?.matches.map(match => match.fixtureId) ?? []),
+    ]));
     try {
       const response = await postJson("/api/coupons/suggest", {
         mode: "scorer",
         from: startDate,
         to: endDate,
         count: statisticCount,
-        excludeFixtureIds,
+        excludeFixtureIds: exclusions,
         includeLive: liveOnly,
         randomSelection: true,
       });
@@ -2371,6 +2383,7 @@ export default function CombinationsPage() {
                   onClick={() => void generateScorerCombination(scorerCoupon.matches.map(match => match.fixtureId))}
                   disabled={authLoading || !canGenerateCombination || generating}
                   className="mt-5 rounded-lg border border-green-700 px-4 py-2 text-sm font-semibold text-green-200 hover:bg-green-950/50 disabled:cursor-wait disabled:opacity-50"
+                  title={text("Évite les rencontres déjà proposées pour cette combinaison.", "Avoids matches already suggested for this combination.")}
                 >
                   {generating ? text("Génération…", "Generating…") : text("Proposer une autre", "Suggest another")}
                 </button>
@@ -2456,6 +2469,7 @@ export default function CombinationsPage() {
                   onClick={() => void generateStatisticCombination(riskLevel, statisticCoupon.matches.map(match => match.fixtureId))}
                   disabled={authLoading || !canGenerateCombination || generating}
                   className="mt-5 rounded-lg border border-green-700 px-4 py-2 text-sm font-semibold text-green-200 hover:bg-green-950/50 disabled:cursor-wait disabled:opacity-50"
+                  title={text("Évite les rencontres déjà proposées pour cette combinaison. Tirage aléatoire.", "Avoids matches already suggested for this combination. Random draw.")}
                 >
                   {generating ? text("Génération…", "Generating…") : text("Proposer une autre", "Suggest another")}
                 </button>
