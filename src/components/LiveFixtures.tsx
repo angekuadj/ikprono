@@ -76,6 +76,7 @@ export default function LiveFixtures() {
   const [basketCount, setBasketCount] = useState(0);
   const [basketError, setBasketError] = useState("");
   const [matchoraMatches, setMatchoraMatches] = useState<MatchoraLiveMatch[]>([]);
+  const [matchoraError, setMatchoraError] = useState("");
   const [selectedMatchoraMatch, setSelectedMatchoraMatch] = useState<MatchoraLiveMatch | null>(null);
   const [visibleLiveIncidents, setVisibleLiveIncidents] = useState<Record<string, {
     key: string;
@@ -157,15 +158,22 @@ export default function LiveFixtures() {
           throw new Error(payload.error || "Impossible de vérifier les matchs disponibles sur Matchora.");
         }
         setMatchoraMatches(payload.matches);
+        setMatchoraError("");
       })
       .catch(error => {
         if (controller.signal.aborted) return;
         console.error("Could not refresh watchable Matchora matches.", error);
         setMatchoraMatches([]);
+        setMatchoraError(error instanceof Error
+          ? error.message
+          : text(
+            "Le lecteur vidéo en direct est temporairement indisponible.",
+            "The live video player is temporarily unavailable."
+          ));
       });
 
     return () => controller.abort();
-  }, [refreshKey]);
+  }, [refreshKey, text]);
 
   useEffect(() => {
     if (!selectedMatchoraMatch) return;
@@ -430,12 +438,31 @@ export default function LiveFixtures() {
           </p>
         )}
 
+        {matchoraError && (
+          <p role="status" className="mb-5 rounded-lg border border-amber-700/60 bg-amber-950/40 p-4 text-sm text-amber-200">
+            {text(
+              "Le lecteur vidéo en direct est temporairement indisponible. Vous pouvez réessayer plus tard ou ouvrir Matchora dans un nouvel onglet.",
+              "The live video player is temporarily unavailable. Try again later or open Matchora in a new tab."
+            )}{" "}
+            <a
+              href="https://matchora.pro/football"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold underline hover:text-amber-100"
+            >
+              {text("Ouvrir Matchora ↗", "Open Matchora ↗")}
+            </a>
+          </p>
+        )}
+
         {liveFilter === "watchable" ? (
           filteredMatchoraMatches.length === 0 ? (
             <p className="py-12 text-center text-gray-400">
-              {matchoraMatches.length === 0
-                ? text("Aucun match en direct avec un lecteur disponible pour le moment.", "No live matches with an available stream right now.")
-                : text("Aucun match ne correspond à votre recherche.", "No matches match your search.")}
+              {matchoraError
+                ? text("Le lecteur vidéo est temporairement indisponible.", "The video player is temporarily unavailable.")
+                : matchoraMatches.length === 0
+                  ? text("Aucun match en direct avec un lecteur disponible pour le moment.", "No live matches with an available stream right now.")
+                  : text("Aucun match ne correspond à votre recherche.", "No matches match your search.")}
             </p>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -674,14 +701,24 @@ export default function LiveFixtures() {
               src={selectedMatchoraMatch.embedUrl}
               title={`${selectedMatchoraMatch.homeTeam} - ${selectedMatchoraMatch.awayTeam}`}
               className="aspect-video w-full bg-black"
-              allow="autoplay; fullscreen"
+              allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
               allowFullScreen
               loading="lazy"
               referrerPolicy="no-referrer"
             />
-            <p className="px-4 py-2 text-xs text-gray-500">
-              {text("Lecteur fourni par Matchora.", "Player provided by Matchora.")}
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2">
+              <p className="text-xs text-gray-500">
+                {text("Lecteur fourni par Matchora.", "Player provided by Matchora.")}
+              </p>
+              <a
+                href={selectedMatchoraMatch.embedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-semibold text-red-300 underline hover:text-red-200"
+              >
+                {text("Ouvrir dans un nouvel onglet ↗", "Open in a new tab ↗")}
+              </a>
+            </div>
           </div>
         </div>
       )}

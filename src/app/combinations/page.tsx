@@ -607,7 +607,7 @@ export default function CombinationsPage() {
         riskLevel: selectedRiskLevel,
         excludeFixtureIds,
         includeLive: false,
-        randomSelection,
+        randomSelection: true,
       });
       const payload = await response.json() as { coupon?: GeneratedCoupon; error?: string; code?: string; entitlements?: ServerEntitlements };
       if (response.status === 402) {
@@ -659,7 +659,7 @@ export default function CombinationsPage() {
         market: statisticMarket,
         excludeFixtureIds,
         includeLive: liveOnly,
-        randomSelection,
+        randomSelection: true,
       });
       const payload = await response.json() as { coupon?: GeneratedStatisticCoupon; error?: string; code?: string; entitlements?: ServerEntitlements };
       if (response.status === 402) {
@@ -699,7 +699,7 @@ export default function CombinationsPage() {
         count: statisticCount,
         excludeFixtureIds,
         includeLive: liveOnly,
-        randomSelection,
+        randomSelection: true,
       });
       const payload = await response.json() as { coupon?: GeneratedScorerCoupon; error?: string; code?: string; entitlements?: ServerEntitlements };
       if (response.status === 402) {
@@ -1599,6 +1599,9 @@ export default function CombinationsPage() {
               />
               {text("Sélection aléatoire", "Random selection")}
             </label>
+            <span className="rounded-lg border border-purple-800 bg-purple-950/40 px-3 py-2 text-xs font-medium text-purple-200">
+              {text("« Proposer une autre » utilise un tirage aléatoire", "« Suggest another » uses random selection")}
+            </span>
           </div>
           <div className="combination-auto-actions flex flex-wrap items-center justify-end gap-2 sm:col-span-2">
             <button
@@ -1843,6 +1846,7 @@ export default function CombinationsPage() {
                 onClick={() => void generateAutoCombination(riskLevel, safeCoupon.matches.map(match => match.fixtureId))}
                 disabled={authLoading || !canGenerateCombination || generating}
                 className="rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-500 disabled:cursor-wait disabled:opacity-50"
+                title={text("Évite les rencontres déjà proposées pour cette combinaison.", "Avoids matches already suggested for this combination.")}
               >
                 {generating
                   ? text("Recherche…", "Generating…")
